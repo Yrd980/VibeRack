@@ -12,6 +12,7 @@
 /build
 /captures
 /log
+/docs/issues.md
 .externalNativeBuild
 .cxx
 local.properties

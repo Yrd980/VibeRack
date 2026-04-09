@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.ui.LocationPickerDialog
+import com.example.lcsc_android_erp.core.ui.LocationPickerOption
 import com.example.lcsc_android_erp.core.ui.performCopyFeedback
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
 import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
@@ -77,13 +79,13 @@ fun MaterialInboundDialog(
     locationPickerEnabled: Boolean = true,
     selectedLocationLabelOverride: String? = null,
     leadingActionText: String? = null,
-    onLeadingAction: (() -> Unit)? = null
+    onLeadingAction: (() -> Unit)? = null,
+    onViewExistingStock: (() -> Unit)? = null
 ) {
     var showLocationPicker by remember(title, selectedLocationCode, availableLocations) { mutableStateOf(false) }
     var pendingLocationCode by remember(title, selectedLocationCode, availableLocations) {
         mutableStateOf(selectedLocationCode)
     }
-    val groupedLocations = remember(availableLocations) { materialInboundGroupLocations(availableLocations) }
     val selectedLocationLabel = selectedLocationLabelOverride
         ?: availableLocations.firstOrNull { it.code == selectedLocationCode }?.let {
             materialInboundFormatLocationLabel(it.code, it.displayName)
@@ -122,7 +124,12 @@ fun MaterialInboundDialog(
                         component?.let { currentComponent ->
                             existingStockLocations
                                 .takeIf { it.isNotEmpty() }
-                                ?.let { ExistingStockReminderCard(existingStockLocations = it) }
+                                ?.let {
+                                    ExistingStockReminderCard(
+                                        existingStockLocations = it,
+                                        onViewItem = onViewExistingStock
+                                    )
+                                }
                             MaterialInboundComponentDetail(component = currentComponent)
                             if (quantityEditable) {
                                 OutlinedTextField(
@@ -185,55 +192,31 @@ fun MaterialInboundDialog(
     )
 
     if (showLocationPicker) {
-        AlertDialog(
-            onDismissRequest = { showLocationPicker = false },
-            modifier = Modifier.fillMaxWidth(),
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-            title = { Text(text = stringResource(R.string.inbound_pick_location)) },
-            text = {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 560.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(groupedLocations, key = { it.first }) { (letter, locations) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Text(
-                                text = letter,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(24.dp)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                locations.forEach { location ->
-                                    MaterialInboundLocationCard(
-                                        location = location,
-                                        selected = location.code == pendingLocationCode,
-                                        onClick = {
-                                            pendingLocationCode = location.code
-                                            onLocationSelected(location.code)
-                                            showLocationPicker = false
-                                        },
-                                        modifier = Modifier.width(128.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+        LocationPickerDialog(
+            title = stringResource(R.string.inbound_pick_location),
+            options = availableLocations.map { location ->
+                LocationPickerOption(
+                    code = location.code,
+                    displayName = location.displayName,
+                    colorHex = location.colorHex
+                )
             },
-            dismissButton = null,
-            confirmButton = {}
+            selectedCode = pendingLocationCode,
+            currentOption = availableLocations
+                .firstOrNull { it.code == selectedLocationCode }
+                ?.let { location ->
+                    LocationPickerOption(
+                        code = location.code,
+                        displayName = location.displayName,
+                        colorHex = location.colorHex
+                    )
+                },
+            onSelect = { code ->
+                pendingLocationCode = code
+                onLocationSelected(code)
+                showLocationPicker = false
+            },
+            onDismiss = { showLocationPicker = false }
         )
     }
 }
@@ -473,86 +456,11 @@ private fun MaterialInboundMessageCard(text: String) {
     }
 }
 
-@Composable
-private fun MaterialInboundLocationCard(
-    location: StorageLocation,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        onClick = onClick,
-        modifier = modifier,
-        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
-    ) {
-        val backgroundColor = materialInboundLocationColor(location.colorHex)
-        val contentColor = if (backgroundColor.luminance() > 0.6f) Color.Black else Color.White
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(backgroundColor)
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = location.displayName?.takeIf { it.isNotBlank() } ?: location.code,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = contentColor
-            )
-            Text(
-                text = location.code,
-                style = MaterialTheme.typography.bodySmall,
-                color = contentColor.copy(alpha = 0.88f)
-            )
-        }
-    }
-}
-
-private fun materialInboundGroupLocations(
-    locations: List<StorageLocation>
-): List<Pair<String, List<StorageLocation>>> {
-    return locations
-        .sortedWith(
-            compareBy<StorageLocation>(
-                { materialInboundRowIndex(it.code) },
-                { materialInboundColumnIndex(it.code) },
-                { it.code }
-            )
-        )
-        .groupBy { materialInboundRowLabel(it.code) }
-        .toList()
-        .sortedBy { it.first }
-}
-
-private fun materialInboundRowLabel(code: String): String {
-    return code.takeWhile { it.isLetter() }.ifBlank { "#" }
-}
-
-private fun materialInboundRowIndex(code: String): Int {
-    return code.firstOrNull()?.uppercaseChar()?.code ?: Int.MAX_VALUE
-}
-
-private fun materialInboundColumnIndex(code: String): Int {
-    return code.dropWhile { it.isLetter() }.toIntOrNull() ?: Int.MAX_VALUE
-}
-
 private fun materialInboundFormatLocationLabel(code: String, displayName: String?): String {
     val normalizedName = displayName?.trim().orEmpty()
     return if (normalizedName.isNotEmpty() && normalizedName != code) {
         "$code:$normalizedName"
     } else {
         code
-    }
-}
-
-@Composable
-private fun materialInboundLocationColor(colorHex: String?): Color {
-    val fallback = MaterialTheme.colorScheme.surfaceVariant
-    return try {
-        if (colorHex.isNullOrBlank()) fallback else Color(android.graphics.Color.parseColor(colorHex))
-    } catch (_: IllegalArgumentException) {
-        fallback
     }
 }

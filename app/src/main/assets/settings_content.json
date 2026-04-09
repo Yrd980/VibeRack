@@ -12,7 +12,7 @@
     "importInventoryTitle": "导入库存",
     "importInventorySummary": "从 Excel 文件导入并覆盖当前库存",
     "aboutBody": "LCSC Android ERP 用于在 Android 设备上完成立创物料扫码、入库和库存管理。",
-    "stackBody": "Android 原生 Kotlin + Compose，依赖通过应用级容器管理，本地业务库使用 Room + SQLite，设置存储使用 DataStore，网络层预留 Retrofit + OkHttp。\n作者: BrokenClient@foxmail.com"
+    "stackBody": "Android 原生 Kotlin + Compose，依赖通过应用级容器管理，本地业务库使用 Room + SQLite，设置存储使用 DataStore。\n作者: BrokenClient@foxmail.com\nQQ群: 1098077458"
   },
   "en": {
     "title": "Settings",
@@ -27,6 +27,6 @@
     "importInventoryTitle": "Import Inventory",
     "importInventorySummary": "Import from an Excel file and overwrite current inventory",
     "aboutBody": "LCSC Android ERP is used on Android devices for LCSC material scanning, inbound processing, and inventory management.",
-    "stackBody": "Native Android Kotlin + Compose, with dependencies managed through an application-level container. Room + SQLite is used for local business data, DataStore stores settings, and the network layer is reserved for Retrofit + OkHttp.\nAuthor: BrokenClient@foxmail.com"
+    "stackBody": "Native Android Kotlin + Compose, with dependencies managed through an application-level container. Room + SQLite is used for local business data, DataStore stores settings.\nAuthor: BrokenClient@foxmail.com\nQQ group: 1098077458"
   }
 }

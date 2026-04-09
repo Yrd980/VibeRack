@@ -80,9 +80,10 @@
     <string name="inbound_scan_invalid_qr">当前二维码不是可识别的立创入库标签格式。</string>
     <string name="inbound_scan_component_not_found">已识别二维码，但未从立创商城查询到料号 %1$s 的物料信息。</string>
     <string name="inbound_existing_stock_title">仓库中已存在该物料</string>
-    <string name="inbound_existing_stock_body">已检测到该料号已在以下仓位存在，你可以继续选择仓位并填写增加数量。</string>
+    <string name="inbound_existing_stock_body">你可以增加其数量</string>
     <string name="inbound_existing_stock_item">%1$s · 当前数量 %2$d</string>
     <string name="inbound_existing_stock_badge">库存已有</string>
+    <string name="inbound_existing_stock_view_item">查看物料</string>
     <string name="common_confirm">确认</string>
     <string name="common_cancel">取消</string>
     <string name="common_close">关闭</string>
@@ -92,6 +93,7 @@
     <string name="common_save">保存</string>
     <string name="common_remove">移除</string>
     <string name="common_copied">已复制：%1$s</string>
+    <string name="common_network_unavailable">当前无网络连接，请检查网络后重试。</string>
     <string name="search_title">物料搜索</string>
     <string name="search_mode_manual">手动搜索</string>
     <string name="search_mode_bom">BOM搜索</string>
@@ -157,6 +159,7 @@
     <string name="inventory_add_location_label">库位编码</string>
     <string name="inventory_add_location_hint">例如 A1、C3。当前仅允许 1 个字母 + 1 个数字（1-9）。</string>
     <string name="inventory_cell_count">%1$d 种物料</string>
+    <string name="inventory_cell_summary">%1$s:%2$d种物料</string>
     <string name="inventory_item_quantity">库存数量：%1$s</string>
     <string name="inventory_quantity_label">库存数量</string>
     <string name="inventory_location_code">仓库编号</string>
@@ -263,7 +266,7 @@
     <string name="printer_no_bonded_devices">未找到已配对设备，请先在系统蓝牙中完成配对。</string>
     <string name="printer_unknown_device">未知设备</string>
     <string name="printer_connect_address_required">请选择要连接的打印机。</string>
-    <string name="printer_not_connected">打印机未连接，请先在打印机页面连接 Q5。</string>
+    <string name="printer_not_connected">打印机未连接，请先在打印机页面进行连接。</string>
     <string name="printer_print_in_progress">正在发送打印任务…</string>
     <string name="printer_print_label">打印标签</string>
     <string name="printer_print_success">打印任务已发送。</string>

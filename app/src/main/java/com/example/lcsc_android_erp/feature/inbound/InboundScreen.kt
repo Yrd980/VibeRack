@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -91,6 +92,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun InboundRoute(
+    onViewInventoryItem: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val appContainer = (LocalContext.current.applicationContext as LcscApplication).appContainer
@@ -106,6 +108,7 @@ fun InboundRoute(
         onContinueScanning = viewModel::clearScanResult,
         onManualSearch = viewModel::searchManual,
         onConfirmInbound = viewModel::confirmInbound,
+        onViewInventoryItem = onViewInventoryItem,
     )
 }
 
@@ -117,6 +120,7 @@ fun InboundScreen(
     onContinueScanning: () -> Unit,
     onManualSearch: (String) -> Unit,
     onConfirmInbound: (ComponentDetail, Int, String, String, String?) -> Unit,
+    onViewInventoryItem: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -188,7 +192,7 @@ fun InboundScreen(
                 title = context.getString(R.string.inbound_scan_dialog_title),
                 component = component,
                 initialQuantity = payload?.quantity ?: 1,
-                quantityEditable = false,
+                quantityEditable = true,
                 initialLocation = suggestInboundLocationCode(
                     category = component.category,
                     availableLocations = uiState.locations,
@@ -390,6 +394,11 @@ fun InboundScreen(
             onConfirm = { quantity, locationCode ->
                 state.onConfirm(quantity, locationCode)
                 dialogState = null
+            },
+            onViewExistingStock = { locationCode, partNumber ->
+                state.onCancel()
+                dialogState = null
+                onViewInventoryItem(locationCode, partNumber)
             }
         )
     }
@@ -918,12 +927,16 @@ private fun inboundComponentSecondarySummary(component: ComponentDetail): String
 private fun InboundConfirmDialog(
     state: InboundDialogState,
     onDismiss: () -> Unit,
-    onConfirm: (Int, String) -> Unit
+    onConfirm: (Int, String) -> Unit,
+    onViewExistingStock: (String, String) -> Unit
 ) {
     var quantityText by remember(state) {
         mutableStateOf(
             if (state.quantityEditable) {
-                ""
+                state.initialQuantity
+                    .takeIf { it > 0 }
+                    ?.toString()
+                    .orEmpty()
             } else {
                 state.initialQuantity.coerceAtLeast(1).toString()
             }
@@ -968,7 +981,11 @@ private fun InboundConfirmDialog(
             }
         },
         confirmEnabled = confirmedQuantity != null,
-        confirmText = stringResource(R.string.common_confirm)
+        confirmText = stringResource(R.string.common_confirm),
+        onViewExistingStock = {
+            val targetLocation = state.existingStockLocations.firstOrNull() ?: return@MaterialInboundDialog
+            onViewExistingStock(targetLocation.locationCode, state.component.partNumber)
+        }
     )
 }
 
@@ -1006,9 +1023,14 @@ private fun InboundLocationCard(
 
 @Composable
 fun ExistingStockReminderCard(
-    existingStockLocations: List<ExistingStockLocation>
+    existingStockLocations: List<ExistingStockLocation>,
+    onViewItem: (() -> Unit)? = null
 ) {
-    Card {
+    Card(
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = Color(0xFFFFF3C4)
+        )
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1021,17 +1043,42 @@ fun ExistingStockReminderCard(
             Text(
                 text = stringResource(R.string.inbound_existing_stock_body),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color(0xFF6B4F00)
             )
             existingStockLocations.forEach { stock ->
-                Text(
-                    text = stringResource(
-                        R.string.inbound_existing_stock_item,
-                        formatLocationLabel(stock.locationCode, stock.locationDisplayName),
-                        stock.quantity
-                    ),
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.inbound_existing_stock_item,
+                            formatLocationLabel(stock.locationCode, stock.locationDisplayName),
+                            stock.quantity
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF4A3600),
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (onViewItem != null) {
+                        Text(
+                            text = stringResource(R.string.inbound_existing_stock_view_item),
+                            modifier = Modifier
+                                .height(20.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .combinedClickable(
+                                    onClick = onViewItem,
+                                    onLongClick = onViewItem
+                                )
+                                .padding(horizontal = 8.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
         }
     }

@@ -29,7 +29,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -39,6 +41,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -91,6 +94,8 @@ import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.printer.PrinterConnectionState
 import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
+import com.example.lcsc_android_erp.core.ui.LocationPickerDialog
+import com.example.lcsc_android_erp.core.ui.LocationPickerOption
 import com.example.lcsc_android_erp.core.ui.performCopyFeedback
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
 import com.example.lcsc_android_erp.domain.model.LocationInventoryItem
@@ -112,6 +117,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun InventoryRoute(
+    openRequest: InventoryOpenRequest? = null,
+    openRequestSignal: Int = 0,
     resetToOverviewSignal: Int = 0,
     modifier: Modifier = Modifier
 ) {
@@ -123,6 +130,12 @@ fun InventoryRoute(
 
     LaunchedEffect(resetToOverviewSignal) {
         viewModel.dismissLocationDetail()
+    }
+
+    LaunchedEffect(openRequestSignal) {
+        openRequest?.let { request ->
+            viewModel.openInventoryItem(request.locationCode, request.partNumber)
+        }
     }
 
     InventoryScreen(
@@ -145,7 +158,9 @@ fun InventoryRoute(
         onTransferInventoryItem = viewModel::transferInventoryItem,
         onDeleteInventoryItem = viewModel::deleteInventoryItem,
         onTransferInventoryItems = viewModel::transferInventoryItems,
-        onDeleteInventoryItems = viewModel::deleteInventoryItems
+        onDeleteInventoryItems = viewModel::deleteInventoryItems,
+        onOpenInventoryItem = viewModel::openInventoryItem,
+        onOpenInventoryItemHandled = viewModel::clearPendingOpenRequest
     )
 }
 
@@ -170,6 +185,8 @@ fun InventoryScreen(
     onDeleteInventoryItem: (Long, (String?) -> Unit) -> Unit,
     onTransferInventoryItems: (List<Long>, String, (String?) -> Unit) -> Unit,
     onDeleteInventoryItems: (List<Long>, (String?) -> Unit) -> Unit,
+    onOpenInventoryItem: (String, String) -> Unit,
+    onOpenInventoryItemHandled: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var addLocationDialogVisible by remember { mutableStateOf(false) }
@@ -195,52 +212,53 @@ fun InventoryScreen(
 
     if (uiState.selectedLocation == null) {
         Box(modifier = modifier.fillMaxSize()) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    Text(
-                        text = stringResource(R.string.inventory_title),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                items(rows, key = { it.first }) { (letter, cells) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item {
                         Text(
-                            text = letter.toString(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.width(24.dp)
+                            text = stringResource(R.string.inventory_title),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    items(rows, key = { it.first }) { (letter, cells) ->
                         Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            cells.forEach { cell ->
-                                StockLocationCard(
-                                    cell = cell,
-                                    onClick = { onLocationSelected(cell) },
-                                    onLongClick = {
-                                        settingsTargetCell = cell
-                                        onOpenLocationSettings(cell.id)
-                                    }
-                                )
+                            Text(
+                                text = letter.toString(),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.width(16.dp)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                cells.forEach { cell ->
+                                    StockLocationCard(
+                                        cell = cell,
+                                        onClick = { onLocationSelected(cell) },
+                                        onLongClick = {
+                                            settingsTargetCell = cell
+                                            onOpenLocationSettings(cell.id)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-
             FloatingActionButton(
                 onClick = { addLocationDialogVisible = true },
                 modifier = Modifier
@@ -254,25 +272,29 @@ fun InventoryScreen(
             }
         }
     } else {
-        InventoryLocationDetailScreen(
-            uiState = uiState,
-            cell = uiState.selectedLocation,
-            items = uiState.selectedLocationItems,
-            q5PrinterManager = q5PrinterManager,
-            onBack = onDismissLocationDetail,
-            onSave = onUpdateLocation,
-            onClearUpdateLocationError = onClearUpdateLocationError,
-            onDeleteLocation = onDeleteLocation,
-            onForceDeleteLocation = onForceDeleteLocation,
-            onLookupScannedComponent = onLookupScannedComponent,
-            onAddScannedInbound = onAddScannedInbound,
-            onUpdateInventoryItemQuantity = onUpdateInventoryItemQuantity,
-            onTransferInventoryItem = onTransferInventoryItem,
-            onDeleteInventoryItem = onDeleteInventoryItem,
-            onTransferInventoryItems = onTransferInventoryItems,
-            onDeleteInventoryItems = onDeleteInventoryItems,
-            modifier = modifier
-        )
+        Column(modifier = modifier.fillMaxSize()) {
+            InventoryLocationDetailScreen(
+                uiState = uiState,
+                cell = uiState.selectedLocation,
+                items = uiState.selectedLocationItems,
+                q5PrinterManager = q5PrinterManager,
+                onBack = onDismissLocationDetail,
+                onSave = onUpdateLocation,
+                onClearUpdateLocationError = onClearUpdateLocationError,
+                onDeleteLocation = onDeleteLocation,
+                onForceDeleteLocation = onForceDeleteLocation,
+                onLookupScannedComponent = onLookupScannedComponent,
+                onAddScannedInbound = onAddScannedInbound,
+                onUpdateInventoryItemQuantity = onUpdateInventoryItemQuantity,
+                onTransferInventoryItem = onTransferInventoryItem,
+                onDeleteInventoryItem = onDeleteInventoryItem,
+                onTransferInventoryItems = onTransferInventoryItems,
+                onDeleteInventoryItems = onDeleteInventoryItems,
+                onOpenInventoryItem = onOpenInventoryItem,
+                onOpenInventoryItemHandled = onOpenInventoryItemHandled,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 
     if (addLocationDialogVisible) {
@@ -346,7 +368,7 @@ private fun AddLocationDialog(
     var displayName by remember { mutableStateOf("") }
     var colorHex by remember { mutableStateOf("") }
     var showColorWheelDialog by remember { mutableStateOf(false) }
-    val quickColors = listOf("#FFE082", "#C8E6C9", "#B3E5FC", "#F8BBD0", "#D1C4E9")
+    val quickColors = listOf("", "#C8E6C9", "#B3E5FC", "#F8BBD0", "#D1C4E9")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -448,16 +470,15 @@ private fun StockLocationCard(
 
     Card(
         modifier = Modifier
-            .width(120.dp)
+            .widthIn(min = 120.dp)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
-            )
+            ),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(backgroundColor)
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -466,20 +487,18 @@ private fun StockLocationCard(
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = contentColor,
+                softWrap = false,
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.small)
                     .background(contentColor.copy(alpha = 0.14f))
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
             Text(
-                text = cell.code,
+                text = stringResource(R.string.inventory_cell_summary, cell.code, cell.inventoryItemCount),
                 style = MaterialTheme.typography.bodySmall,
-                color = secondaryContentColor
-            )
-            Text(
-                text = stringResource(R.string.inventory_cell_count, cell.inventoryItemCount),
-                style = MaterialTheme.typography.bodySmall,
-                color = secondaryContentColor
+                color = secondaryContentColor,
+                softWrap = false,
+                modifier = Modifier.wrapContentWidth()
             )
         }
     }
@@ -497,7 +516,8 @@ private fun SelectableLocationCard(
 
     Card(
         onClick = onClick,
-        modifier = Modifier.width(120.dp),
+        modifier = Modifier.widthIn(min = 120.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
         border = if (selected) {
             BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         } else {
@@ -506,8 +526,6 @@ private fun SelectableLocationCard(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(backgroundColor)
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -516,20 +534,18 @@ private fun SelectableLocationCard(
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = contentColor,
+                softWrap = false,
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.small)
                     .background(contentColor.copy(alpha = 0.14f))
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
             Text(
-                text = cell.code,
+                text = stringResource(R.string.inventory_cell_summary, cell.code, cell.inventoryItemCount),
                 style = MaterialTheme.typography.bodySmall,
-                color = secondaryContentColor
-            )
-            Text(
-                text = stringResource(R.string.inventory_cell_count, cell.inventoryItemCount),
-                style = MaterialTheme.typography.bodySmall,
-                color = secondaryContentColor
+                color = secondaryContentColor,
+                softWrap = false,
+                modifier = Modifier.wrapContentWidth()
             )
         }
     }
@@ -553,6 +569,8 @@ private fun InventoryLocationDetailScreen(
     onDeleteInventoryItem: (Long, (String?) -> Unit) -> Unit,
     onTransferInventoryItems: (List<Long>, String, (String?) -> Unit) -> Unit,
     onDeleteInventoryItems: (List<Long>, (String?) -> Unit) -> Unit,
+    onOpenInventoryItem: (String, String) -> Unit,
+    onOpenInventoryItemHandled: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -592,6 +610,20 @@ private fun InventoryLocationDetailScreen(
         if (selectedItem?.inventoryItemId !in validIds) {
             selectedItem = null
         }
+    }
+
+    LaunchedEffect(uiState.pendingOpenRequest, cell.code, items) {
+        val request = uiState.pendingOpenRequest ?: return@LaunchedEffect
+        if (!request.locationCode.equals(cell.code, ignoreCase = true)) {
+            return@LaunchedEffect
+        }
+        val matchedItem = items.firstOrNull {
+            it.partNumber.equals(request.partNumber, ignoreCase = true)
+        } ?: return@LaunchedEffect
+        selectedItemIds = emptySet()
+        batchActionError = null
+        selectedItem = matchedItem
+        onOpenInventoryItemHandled()
     }
 
     LaunchedEffect(showPrintLabelDialog, cell.id, items.size) {
@@ -853,6 +885,10 @@ private fun InventoryLocationDetailScreen(
                 onAddScannedInbound(component, quantity, cell.code, rawPayload) {
                     showScanAddDialog = false
                 }
+            },
+            onViewExistingStock = { locationCode, partNumber ->
+                showScanAddDialog = false
+                onOpenInventoryItem(locationCode, partNumber)
             }
         )
     }
@@ -870,88 +906,43 @@ private fun InventoryLocationDetailScreen(
     }
 
     if (showBatchTransferPicker) {
-        AlertDialog(
-            onDismissRequest = { showBatchTransferPicker = false },
-            modifier = Modifier.fillMaxWidth(),
-            title = { Text(text = stringResource(R.string.inventory_select_target_location)) },
-            text = {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 560.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(targetLocationRows, key = { it.first }) { (letter, cells) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Text(
-                                text = letter,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(24.dp)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                cells.forEach { option ->
-                                    SelectableLocationCard(
-                                        cell = option,
-                                        selected = option.code == selectedBatchTransferLocationCode,
-                                        onClick = { selectedBatchTransferLocationCode = option.code }
-                                    )
-                                }
-                            }
-                        }
+        LocationPickerDialog(
+            title = stringResource(R.string.inventory_select_target_location),
+            options = targetLocationOptions.map { option ->
+                LocationPickerOption(
+                    code = option.code,
+                    displayName = option.displayName,
+                    colorHex = option.colorHex
+                )
+            },
+            selectedCode = selectedBatchTransferLocationCode,
+            currentOption = LocationPickerOption(
+                code = cell.code,
+                displayName = cell.displayName,
+                colorHex = cell.colorHex
+            ),
+            onSelect = { code ->
+                selectedBatchTransferLocationCode = code
+                batchActionError = null
+                if (selectedItemIds.isEmpty() || code.isBlank() || code == cell.code) {
+                    return@LocationPickerDialog
+                }
+                batchSubmitting = true
+                onTransferInventoryItems(selectedItemIds.toList(), code) { error ->
+                    batchSubmitting = false
+                    batchActionError = error
+                    if (error == null) {
+                        showBatchTransferPicker = false
+                        selectedItemIds = emptySet()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.inventory_batch_transfer_completed),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = { showBatchTransferPicker = false },
-                        enabled = !batchSubmitting
-                    ) {
-                        Text(text = stringResource(R.string.common_cancel))
-                    }
-                    TextButton(
-                        onClick = {
-                            batchActionError = null
-                            val targetCode = selectedBatchTransferLocationCode
-                            if (targetCode.isBlank()) {
-                                batchActionError = context.getString(R.string.inventory_select_target_location_error)
-                                return@TextButton
-                            }
-                            batchSubmitting = true
-                            onTransferInventoryItems(selectedItemIds.toList(), targetCode) { error ->
-                                batchSubmitting = false
-                                batchActionError = error
-                                if (error == null) {
-                                    showBatchTransferPicker = false
-                                    selectedItemIds = emptySet()
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.inventory_batch_transfer_completed),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        },
-                        enabled = !batchSubmitting &&
-                            selectedItemIds.isNotEmpty() &&
-                            selectedBatchTransferLocationCode.isNotBlank() &&
-                            selectedBatchTransferLocationCode != cell.code
-                    ) {
-                        Text(text = stringResource(R.string.inventory_batch_transfer_confirm))
-                    }
-                }
-            },
-            confirmButton = {}
+            onDismiss = { showBatchTransferPicker = false }
         )
     }
 
@@ -1142,7 +1133,8 @@ private fun LocationScanAddDialog(
     locationCode: String,
     onDismiss: () -> Unit,
     onLookupScannedComponent: (String, (InventoryScanLookupResult) -> Unit) -> Unit,
-    onConfirmInbound: (ComponentDetail, Int, String?) -> Unit
+    onConfirmInbound: (ComponentDetail, Int, String?) -> Unit,
+    onViewExistingStock: (String, String) -> Unit
 ) {
     val context = LocalContext.current
     var hasCameraPermission by rememberSaveable {
@@ -1162,6 +1154,14 @@ private fun LocationScanAddDialog(
     var lookupInProgress by remember { mutableStateOf(false) }
     var scanErrorMessage by remember { mutableStateOf<String?>(null) }
     var scanResult by remember { mutableStateOf<InventoryScanLookupResult?>(null) }
+    var quantityText by remember(scanResult?.rawPayload, scanResult?.quantity) {
+        mutableStateOf(
+            scanResult?.quantity
+                ?.takeIf { it > 0 }
+                ?.toString()
+                .orEmpty()
+        )
+    }
 
     if (lookupInProgress || scanResult != null || scanErrorMessage != null) {
         MaterialInboundDialog(
@@ -1171,33 +1171,32 @@ private fun LocationScanAddDialog(
             loadingText = stringResource(R.string.inbound_component_loading),
             errorMessage = scanErrorMessage,
             existingStockLocations = scanResult?.existingStockLocations.orEmpty(),
-            quantityText = (scanResult?.quantity ?: 0).toString(),
-            quantityEditable = false,
+            quantityText = quantityText,
+            quantityEditable = true,
             quantityLabel = stringResource(R.string.inbound_quantity_label),
-            onQuantityChange = {},
+            onQuantityChange = { quantityText = it.filter(Char::isDigit) },
             selectedLocationCode = locationCode,
             availableLocations = emptyList(),
             onLocationSelected = {},
             onDismiss = onDismiss,
             onConfirm = {
                 scanResult?.component?.let { component ->
-                    onConfirmInbound(component, scanResult?.quantity ?: 0, scanResult?.rawPayload)
+                    onConfirmInbound(
+                        component,
+                        quantityText.toIntOrNull() ?: 0,
+                        scanResult?.rawPayload
+                    )
                 }
             },
             confirmEnabled = scanResult?.component != null && !lookupInProgress,
             confirmText = stringResource(R.string.common_confirm),
             locationPickerEnabled = false,
             selectedLocationLabelOverride = locationCode,
-            leadingActionText = if (lookupInProgress.not() && (scanResult != null || scanErrorMessage != null)) {
-                stringResource(R.string.inbound_continue_scan)
-            } else {
-                null
-            },
-            onLeadingAction = {
-                scannerPaused = false
-                lookupInProgress = false
-                scanErrorMessage = null
-                scanResult = null
+            onViewExistingStock = {
+                val component = scanResult?.component ?: return@MaterialInboundDialog
+                val targetLocation = scanResult?.existingStockLocations?.firstOrNull()
+                    ?: return@MaterialInboundDialog
+                onViewExistingStock(targetLocation.locationCode, component.partNumber)
             }
         )
     } else {
@@ -1354,7 +1353,7 @@ private fun LocationSettingsDialog(
     var showColorWheelDialog by remember(cell.id) { mutableStateOf(false) }
     var deleteSubmitted by remember(cell.id) { mutableStateOf(false) }
     var deleteBlockedMessage by remember(cell.id) { mutableStateOf<String?>(null) }
-    val quickColors = listOf("#FFE082", "#C8E6C9", "#B3E5FC", "#F8BBD0", "#D1C4E9")
+    val quickColors = listOf("", "#C8E6C9", "#B3E5FC", "#F8BBD0", "#D1C4E9")
     val specificationSortOptions = remember(availableSecondaryAttributes, sortPriorities) {
         buildList {
             availableSecondaryAttributes
@@ -1784,450 +1783,6 @@ private fun LocationInventoryItemCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun InventoryItemManageDialog(
-    item: LocationInventoryItem,
-    currentLocation: StockLocationCell,
-    availableLocations: List<StockLocationCell>,
-    onUpdateQuantity: (Long, Int, (String?) -> Unit) -> Unit,
-    onTransfer: (Long, String, (String?) -> Unit) -> Unit,
-    onDelete: (Long, (String?) -> Unit) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val density = LocalDensity.current
-    val imageModel = item.imageLocalPath
-        ?.takeIf { it.isNotBlank() }
-        ?.let(::File)
-        ?.takeIf { it.exists() && it.length() > 0L }
-        ?: item.imageUrl?.takeIf { it.isNotBlank() }
-    val dialogScrollState = rememberScrollState()
-    val targetLocationOptions = availableLocations
-    val targetLocationRows = groupLocationRows(targetLocationOptions)
-    var quantityText by remember(item.inventoryItemId) { mutableStateOf(item.quantity.toString()) }
-    var showTransferPicker by remember(item.inventoryItemId) { mutableStateOf(false) }
-    var selectedTransferLocationCode by remember(item.inventoryItemId) {
-        mutableStateOf(
-            targetLocationOptions
-                .firstOrNull { it.id == currentLocation.id }
-                ?.code
-                ?: targetLocationOptions.firstOrNull()?.code
-                ?: currentLocation.code
-        )
-    }
-    var actionError by remember(item.inventoryItemId) { mutableStateOf<String?>(null) }
-    var isSubmitting by remember(item.inventoryItemId) { mutableStateOf(false) }
-    var firstPropertyHeightPx by remember(item.inventoryItemId) { mutableStateOf(0) }
-    val firstPropertyRows = listOf(
-        stringResource(R.string.inbound_component_number) to item.partNumber,
-        stringResource(R.string.inbound_component_brand) to (item.brand ?: stringResource(R.string.inbound_field_empty)),
-        stringResource(R.string.inbound_component_package) to (item.packageName ?: stringResource(R.string.inbound_field_empty)),
-        stringResource(R.string.inbound_component_category) to (item.category ?: stringResource(R.string.inbound_field_empty))
-    )
-    val secondPropertyRows = buildList {
-        add(stringResource(R.string.inbound_component_name) to (item.name ?: stringResource(R.string.inbound_field_empty)))
-        item.specifications.forEach { (key, value) ->
-            val normalizedKey = key.trim()
-            val normalizedValue = value.trim()
-            if (normalizedKey.isNotEmpty() && normalizedValue.isNotEmpty()) {
-                add(normalizedKey to normalizedValue)
-            }
-        }
-        item.description?.takeIf { it.isNotBlank() }?.let {
-            add(stringResource(R.string.inbound_component_description) to it)
-        }
-        add(
-            stringResource(R.string.inventory_current_location) to (
-                currentLocation.displayName?.takeIf { it.isNotBlank() && it != currentLocation.code }
-                    ?.let { "${currentLocation.code}:${it}" }
-                    ?: currentLocation.code
-                )
-        )
-        add(stringResource(R.string.inventory_inbound_time) to formatDateTime(item.lastInboundAt))
-        add(stringResource(R.string.inventory_quantity_label) to displayQuantity(item.quantity))
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(),
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        title = {
-            Text(text = item.name ?: item.mpn ?: item.partNumber)
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 640.dp)
-                    .verticalScroll(dialogScrollState),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    InventoryItemDetailImageCard(
-                        imageModel = imageModel,
-                        contentDescription = item.name,
-                        fallbackText = item.partNumber,
-                        imageHeight = with(density) {
-                            if (firstPropertyHeightPx > 0) {
-                                firstPropertyHeightPx.toDp()
-                            } else {
-                                168.dp
-                            }
-                        }
-                    )
-                    InventoryFirstPropertyCard(
-                        rows = firstPropertyRows,
-                        modifier = Modifier
-                            .weight(1f)
-                            .onSizeChanged { size -> firstPropertyHeightPx = size.height }
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp)
-                        .clip(MaterialTheme.shapes.small)
-                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                )
-                InventoryInfoSection(
-                    rows = secondPropertyRows
-                )
-                OutlinedTextField(
-                    value = quantityText,
-                    onValueChange = { quantityText = it.filter(Char::isDigit) },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(text = stringResource(R.string.inventory_edit_quantity)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-                Button(
-                    onClick = {
-                        actionError = null
-                        val quantity = quantityText.toIntOrNull()
-                        if (quantity == null) {
-                            actionError = context.getString(R.string.inventory_edit_quantity_error)
-                            return@Button
-                        }
-                        isSubmitting = true
-                        onUpdateQuantity(item.inventoryItemId, quantity) { error ->
-                            isSubmitting = false
-                            actionError = error
-                            if (error == null) {
-                                onDismiss()
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSubmitting
-                ) {
-                    Text(text = stringResource(R.string.inventory_save_quantity))
-                }
-                actionError?.let {
-                    Text(
-                        text = it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(
-                    onClick = onDismiss,
-                    enabled = !isSubmitting
-                ) {
-                    Text(text = stringResource(R.string.common_close))
-                }
-                TextButton(
-                    onClick = {
-                        actionError = null
-                        if (targetLocationOptions.isEmpty()) {
-                            actionError = context.getString(R.string.inventory_no_available_locations)
-                            return@TextButton
-                        }
-                        showTransferPicker = true
-                    },
-                    enabled = !isSubmitting && targetLocationOptions.isNotEmpty()
-                ) {
-                    Text(text = stringResource(R.string.inventory_transfer_location))
-                }
-                TextButton(
-                    onClick = {
-                        actionError = null
-                        isSubmitting = true
-                        onDelete(item.inventoryItemId) { error ->
-                            isSubmitting = false
-                            actionError = error
-                            if (error == null) {
-                                onDismiss()
-                            }
-                        }
-                    },
-                    enabled = !isSubmitting
-                ) {
-                    Text(
-                        text = stringResource(R.string.inventory_delete_item),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-        },
-        confirmButton = {}
-    )
-
-    if (showTransferPicker) {
-        AlertDialog(
-            onDismissRequest = { showTransferPicker = false },
-            modifier = Modifier.fillMaxWidth(),
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-            title = { Text(text = stringResource(R.string.inventory_select_target_location)) },
-            text = {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 560.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(targetLocationRows, key = { it.first }) { (letter, cells) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Text(
-                                text = letter,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(24.dp)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                cells.forEach { cell ->
-                                    SelectableLocationCard(
-                                        cell = cell,
-                                        selected = cell.code == selectedTransferLocationCode,
-                                        onClick = { selectedTransferLocationCode = cell.code }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = { showTransferPicker = false },
-                        enabled = !isSubmitting
-                    ) {
-                        Text(text = stringResource(R.string.common_cancel))
-                    }
-                    TextButton(
-                        onClick = {
-                            actionError = null
-                            val targetCode = selectedTransferLocationCode
-                            if (targetCode.isBlank()) {
-                                actionError = context.getString(R.string.inventory_select_target_location_error)
-                                return@TextButton
-                            }
-                            isSubmitting = true
-                            onTransfer(item.inventoryItemId, targetCode) { error ->
-                                isSubmitting = false
-                                actionError = error
-                                if (error == null) {
-                                    showTransferPicker = false
-                                    onDismiss()
-                                }
-                            }
-                        },
-                        enabled = !isSubmitting &&
-                            selectedTransferLocationCode.isNotBlank() &&
-                            selectedTransferLocationCode != currentLocation.code
-                    ) {
-                        Text(text = stringResource(R.string.inventory_batch_transfer_confirm))
-                    }
-                }
-            },
-            confirmButton = {}
-        )
-    }
-}
-
-@Composable
-private fun InventoryItemDetailImageCard(
-    imageModel: Any?,
-    contentDescription: String?,
-    fallbackText: String,
-    imageHeight: androidx.compose.ui.unit.Dp
-) {
-    Card(
-        modifier = Modifier.width(168.dp)
-    ) {
-        if (imageModel != null) {
-            AsyncImage(
-                model = imageModel,
-                contentDescription = contentDescription,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(imageHeight)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Fit
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(imageHeight)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = fallbackText,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun InventoryFirstPropertyCard(
-    rows: List<Pair<String, String>>
-    ,
-    modifier: Modifier = Modifier
-) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            rows.forEachIndexed { index, (label, value) ->
-                InventoryFirstPropertyCell(
-                    label = label,
-                    value = value,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (index != rows.lastIndex) {
-                    HorizontalDivider()
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InventoryFirstPropertyCell(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-    val hapticFeedback = LocalHapticFeedback.current
-
-    Column(
-        modifier = modifier
-            .combinedClickable(
-                onClick = {},
-                onLongClick = {
-                    clipboardManager.setText(AnnotatedString(value))
-                    performCopyFeedback(context, hapticFeedback)
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.common_copied, value),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            )
-            .padding(horizontal = 12.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2
-        )
-    }
-}
-
-@Composable
-private fun InventoryInfoSection(
-    rows: List<Pair<String, String>>
-) {
-    Card {
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            rows.forEachIndexed { index, (label, value) ->
-                InventoryInfoRow(
-                    label = label,
-                    value = value,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                )
-                if (index != rows.lastIndex) {
-                    HorizontalDivider()
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InventoryInfoRow(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-    val hapticFeedback = LocalHapticFeedback.current
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = {},
-                onLongClick = {
-                    clipboardManager.setText(AnnotatedString(value))
-                    performCopyFeedback(context, hapticFeedback)
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.common_copied, value),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            ),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(76.dp)
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f)
-        )
     }
 }
 

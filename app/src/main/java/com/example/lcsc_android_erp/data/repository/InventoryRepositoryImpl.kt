@@ -34,7 +34,7 @@ class InventoryRepositoryImpl(
     private val storageLocationDao: StorageLocationDao,
     private val inventoryItemDao: InventoryItemDao,
     private val inventoryTransactionDao: InventoryTransactionDao,
-    private val componentImageStore: ComponentImageStore
+    private val componentEnrichmentManager: ComponentEnrichmentManager
 ) : InventoryRepository {
     private companion object {
         private val LOCATION_CODE_REGEX = Regex("^[A-Z][1-9]$")
@@ -167,13 +167,9 @@ class InventoryRepositoryImpl(
 
     override suspend fun addInbound(record: InboundRecord) {
         val inboundAt = record.inboundAt
-        val localImagePath = componentImageStore.persistImage(
-            partNumber = record.component.partNumber,
-            imageUrl = record.component.imageUrl
-        )
         database.withTransaction {
             val location = findOrCreateLocation(record.locationCode)
-            val componentId = upsertComponent(record, localImagePath)
+            val componentId = upsertComponent(record)
             val existingItem = inventoryItemDao.findByComponentAndLocation(componentId, location.id)
 
             if (existingItem == null) {
@@ -209,6 +205,7 @@ class InventoryRepositoryImpl(
                 )
             )
         }
+        componentEnrichmentManager.schedule(record.component.partNumber)
     }
 
     override suspend fun updateLocation(
@@ -414,42 +411,28 @@ class InventoryRepositoryImpl(
             )
     }
 
-    private suspend fun upsertComponent(record: InboundRecord, localImagePath: String?): Long {
-        val existing = componentDao.findByPartNumber(record.component.partNumber)
+    private suspend fun upsertComponent(record: InboundRecord): Long {
+        val normalizedPartNumber = record.component.partNumber.trim().uppercase()
+        val existing = componentDao.findByPartNumber(normalizedPartNumber)
         if (existing != null) {
-            val merged = existing.copy(
-                mpn = record.component.mpn ?: existing.mpn,
-                name = record.component.name ?: existing.name,
-                brand = record.component.brand ?: existing.brand,
-                packageName = record.component.packageName ?: existing.packageName,
-                category = record.component.category ?: existing.category,
-                specJson = if (record.component.specifications.isNotEmpty()) {
-                    JSONObject(record.component.specifications).toString()
-                } else {
-                    existing.specJson
-                },
-                description = record.component.description ?: existing.description,
-                sourceUrl = record.component.productUrl ?: existing.sourceUrl,
-                imageLocalPath = localImagePath ?: existing.imageLocalPath,
+            val updated = existing.copy(
+                partNumber = normalizedPartNumber,
+                brand = existing.brand ?: record.component.brand,
+                packageName = existing.packageName ?: record.component.packageName,
+                category = existing.category ?: record.component.category,
                 updatedAt = System.currentTimeMillis()
             )
-            if (merged != existing) {
-                componentDao.update(merged)
+            if (updated != existing) {
+                componentDao.update(updated)
             }
             return existing.id
         }
 
         val componentEntity = ComponentEntity(
-            partNumber = record.component.partNumber,
-            mpn = record.component.mpn,
-            name = record.component.name,
+            partNumber = normalizedPartNumber,
             brand = record.component.brand,
             packageName = record.component.packageName,
-            category = record.component.category,
-            specJson = JSONObject(record.component.specifications).toString(),
-            description = record.component.description,
-            sourceUrl = record.component.productUrl,
-            imageLocalPath = localImagePath
+            category = record.component.category
         )
 
         val insertId = componentDao.insert(componentEntity)
@@ -457,8 +440,8 @@ class InventoryRepositoryImpl(
             return insertId
         }
 
-        return componentDao.findByPartNumber(record.component.partNumber)?.id
-            ?: error("Failed to resolve component id for ${record.component.partNumber}")
+        return componentDao.findByPartNumber(normalizedPartNumber)?.id
+            ?: error("Failed to resolve component id for $normalizedPartNumber")
     }
 
     private fun parseSpecifications(specJson: String?): Map<String, String> {

@@ -7,7 +7,6 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,7 +47,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -58,25 +56,32 @@ import androidx.compose.ui.text.input.KeyboardType
 import java.io.File
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
 import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.ui.MaterialListCard
 import com.example.lcsc_android_erp.core.ui.performCopyFeedback
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
+import com.example.lcsc_android_erp.domain.model.LocationInventoryItem
+import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
+import com.example.lcsc_android_erp.domain.model.StockLocationCell
 import com.example.lcsc_android_erp.domain.model.StorageLocation
 import com.example.lcsc_android_erp.feature.inbound.ComponentDetailTable
 import com.example.lcsc_android_erp.feature.inbound.ExistingStockReminderCard
 import com.example.lcsc_android_erp.feature.inbound.MaterialInboundDialog
+import com.example.lcsc_android_erp.feature.inventory.InventoryItemManageDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun SearchRoute(modifier: Modifier = Modifier) {
+fun SearchRoute(
+    onViewInventoryItem: (String, String) -> Unit = { _, _ -> },
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val appContainer = (context.applicationContext as LcscApplication).appContainer
     val viewModel: SearchViewModel = viewModel(
@@ -95,9 +100,13 @@ fun SearchRoute(modifier: Modifier = Modifier) {
         onBindBomEntry = viewModel::bindBomEntry,
         onLookupBomDirectInbound = viewModel::lookupBomDirectInbound,
         onAddBomInbound = viewModel::addBomInbound,
+        onUpdateInventoryItemQuantity = viewModel::updateInventoryItemQuantity,
+        onTransferInventoryItem = viewModel::transferInventoryItem,
+        onDeleteInventoryItem = viewModel::deleteInventoryItem,
         onBomImportStarted = viewModel::startBomImport,
         onBomImportSuccess = viewModel::onBomImportSuccess,
         onBomImportFailed = viewModel::onBomImportFailed,
+        onViewInventoryItem = onViewInventoryItem,
         modifier = modifier
     )
 }
@@ -114,14 +123,20 @@ fun SearchScreen(
     onBindBomEntry: (BomSearchEntry, String) -> Unit,
     onLookupBomDirectInbound: (String, (BomDirectInboundLookupResult) -> Unit) -> Unit,
     onAddBomInbound: (ComponentDetail, Int, String, (String?) -> Unit) -> Unit,
+    onUpdateInventoryItemQuantity: (Long, Int, (String?) -> Unit) -> Unit,
+    onTransferInventoryItem: (Long, String, (String?) -> Unit) -> Unit,
+    onDeleteInventoryItem: (Long, (String?) -> Unit) -> Unit,
     onBomImportStarted: () -> Unit,
     onBomImportSuccess: (ParsedBomDocument) -> Unit,
     onBomImportFailed: (String) -> Unit,
+    onViewInventoryItem: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val resolver = context.contentResolver
     val scope = rememberCoroutineScope()
+    var selectedSearchResult by remember { mutableStateOf<SearchResultUiModel?>(null) }
+    var selectedSearchRecord by remember { mutableStateOf<SearchInventoryRecord?>(null) }
     var bindingTargetEntry by remember { mutableStateOf<BomSearchEntry?>(null) }
     var directInboundTargetEntry by remember { mutableStateOf<BomSearchEntry?>(null) }
     val bomPickerLauncher = rememberLauncherForActivityResult(
@@ -238,7 +253,14 @@ fun SearchScreen(
                     items(uiState.pagedResults, key = { it.partNumber + (it.mpn ?: "") }) { item ->
                         SearchResultCard(
                             item = item,
-                            showTotalQuantity = false
+                            showTotalQuantity = false,
+                            onClick = {
+                                if (item.records.size == 1) {
+                                    selectedSearchRecord = item.records.first()
+                                } else {
+                                    selectedSearchResult = item
+                                }
+                            }
                         )
                     }
                 }
@@ -353,6 +375,8 @@ fun SearchScreen(
                             row = row,
                             onIgnore = { onIgnoreBomEntry(row.entry) },
                             onBind = { bindingTargetEntry = row.entry },
+                            onResultClick = { record -> selectedSearchRecord = record },
+                            onResultGroupClick = { result -> selectedSearchResult = result },
                             onDirectInbound = {
                                 if (!row.entry.supplierPart.isNullOrBlank()) {
                                     directInboundTargetEntry = row.entry
@@ -363,6 +387,29 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    selectedSearchResult?.let { item ->
+        SearchRecordPickerDialog(
+            item = item,
+            onDismiss = { selectedSearchResult = null },
+            onSelect = { record ->
+                selectedSearchRecord = record
+                selectedSearchResult = null
+            }
+        )
+    }
+
+    selectedSearchRecord?.let { record ->
+        InventoryItemManageDialog(
+            item = record.toLocationInventoryItem(),
+            currentLocation = record.toStockLocationCell(),
+            availableLocations = uiState.locations.map(StorageLocation::toStockLocationCell),
+            onUpdateQuantity = onUpdateInventoryItemQuantity,
+            onTransfer = onTransferInventoryItem,
+            onDelete = onDeleteInventoryItem,
+            onDismiss = { selectedSearchRecord = null }
+        )
     }
 
     bindingTargetEntry?.let { entry ->
@@ -387,7 +434,11 @@ fun SearchScreen(
             onMatchUpdated = { partNumber ->
                 onBindBomEntry(entry, partNumber)
             },
-            onDismiss = { directInboundTargetEntry = null }
+            onDismiss = { directInboundTargetEntry = null },
+            onViewInventoryItem = { locationCode, partNumber ->
+                directInboundTargetEntry = null
+                onViewInventoryItem(locationCode, partNumber)
+            }
         )
     }
 }
@@ -424,6 +475,8 @@ private fun BomSearchRowCard(
     row: BomSearchRowUiModel,
     onIgnore: () -> Unit,
     onBind: () -> Unit,
+    onResultClick: (SearchInventoryRecord) -> Unit,
+    onResultGroupClick: (SearchResultUiModel) -> Unit,
     onDirectInbound: () -> Unit
 ) {
     Card {
@@ -477,7 +530,14 @@ private fun BomSearchRowCard(
                     row.matchedResults.forEach { result ->
                         SearchResultCard(
                             item = result,
-                            showTotalQuantity = false
+                            showTotalQuantity = false,
+                            onClick = {
+                                if (result.records.size == 1) {
+                                    onResultClick(result.records.first())
+                                } else {
+                                    onResultGroupClick(result)
+                                }
+                            }
                         )
                     }
                 }
@@ -494,7 +554,8 @@ private fun BomDirectInboundDialog(
     onLookup: (String, (BomDirectInboundLookupResult) -> Unit) -> Unit,
     onConfirmInbound: (ComponentDetail, Int, String, (String?) -> Unit) -> Unit,
     onMatchUpdated: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onViewInventoryItem: (String, String) -> Unit
 ) {
     val context = LocalContext.current
     var lookupResult by remember(entry) { mutableStateOf(BomDirectInboundLookupResult()) }
@@ -564,7 +625,13 @@ private fun BomDirectInboundDialog(
             }
         },
         confirmEnabled = !isSubmitting && !isLoading && lookupResult.component != null,
-        confirmText = stringResource(R.string.search_bom_direct_inbound_confirm)
+        confirmText = stringResource(R.string.search_bom_direct_inbound_confirm),
+        onViewExistingStock = {
+            val component = lookupResult.component ?: return@MaterialInboundDialog
+            val targetLocation = lookupResult.existingStockLocations.firstOrNull()
+                ?: return@MaterialInboundDialog
+            onViewInventoryItem(targetLocation.locationCode, component.partNumber)
+        }
     )
 }
 
@@ -751,7 +818,8 @@ private fun MessageCard(text: String) {
 @Composable
 private fun SearchResultCard(
     item: SearchResultUiModel,
-    showTotalQuantity: Boolean = false
+    showTotalQuantity: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
     val imageModel = item.imageLocalPath
         ?.takeIf { it.isNotBlank() }
@@ -768,12 +836,8 @@ private fun SearchResultCard(
         imageModel = imageModel,
         imageContentDescription = item.name ?: item.partNumber,
         placeholderText = item.partNumber,
+        onClick = onClick,
         detailContent = {
-            Text(
-                text = stringResource(R.string.search_part_number, item.partNumber),
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold
-            )
             if (showTotalQuantity) {
                 Text(
                     text = stringResource(R.string.search_total_quantity, displaySearchQuantity(item.totalQuantity)),
@@ -784,11 +848,6 @@ private fun SearchResultCard(
         },
         bottomContent = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = stringResource(R.string.search_locations),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 item.locations.forEach { location ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -804,18 +863,95 @@ private fun SearchResultCard(
                         Text(
                             text = formatSearchLocationLabel(location.code, location.displayName),
                             style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.width(128.dp)
+                            modifier = Modifier.weight(1f)
                         )
                         Text(
                             text = stringResource(R.string.search_location_quantity, displaySearchQuantity(location.quantity)),
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.End
                         )
                     }
                 }
             }
         }
     )
+}
+
+@Composable
+private fun SearchRecordPickerDialog(
+    item: SearchResultUiModel,
+    onDismiss: () -> Unit,
+    onSelect: (SearchInventoryRecord) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = item.name ?: item.mpn ?: item.partNumber) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.search_locations),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(item.records, key = { it.inventoryItemId }) { record ->
+                        SearchLocationRecordCard(
+                            record = record,
+                            selected = false,
+                            onClick = { onSelect(record) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.common_cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun SearchLocationRecordCard(
+    record: SearchInventoryRecord,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        border = if (selected) {
+            androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            null
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = formatSearchLocationLabel(record.locationCode, record.locationDisplayName),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = stringResource(R.string.search_location_quantity, displaySearchQuantity(record.quantity)),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
 }
 
 private fun searchResultSecondarySummary(item: SearchResultUiModel): String? {
@@ -876,4 +1012,49 @@ private fun formatSearchLocationLabel(code: String, displayName: String?): Strin
 @Composable
 private fun displaySearchQuantity(quantity: Int): String {
     return if (quantity == 0) stringResource(R.string.inventory_unknown_quantity) else quantity.toString()
+}
+
+private fun SearchInventoryRecord.toLocationInventoryItem(): LocationInventoryItem {
+    return LocationInventoryItem(
+        inventoryItemId = inventoryItemId,
+        componentId = componentId,
+        partNumber = partNumber,
+        mpn = mpn,
+        name = name,
+        brand = brand,
+        packageName = packageName,
+        category = category,
+        description = description,
+        specifications = specifications,
+        imageLocalPath = imageLocalPath,
+        imageUrl = null,
+        quantity = quantity,
+        lastInboundAt = 0L
+    )
+}
+
+private fun SearchInventoryRecord.toStockLocationCell(): StockLocationCell {
+    return StockLocationCell(
+        id = locationId,
+        code = locationCode,
+        displayName = locationDisplayName,
+        colorHex = locationColorHex,
+        sortMode = "",
+        remark = null,
+        inventoryItemCount = 0,
+        totalQuantity = quantity
+    )
+}
+
+private fun StorageLocation.toStockLocationCell(): StockLocationCell {
+    return StockLocationCell(
+        id = id,
+        code = code,
+        displayName = displayName,
+        colorHex = colorHex,
+        sortMode = sortMode,
+        remark = remark,
+        inventoryItemCount = 0,
+        totalQuantity = 0
+    )
 }

@@ -1,6 +1,7 @@
 package com.example.lcsc_android_erp.feature.search
 
 import android.content.Context
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,6 +10,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.lcsc_android_erp.core.AppContainer
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.network.isNetworkAvailable
 import com.example.lcsc_android_erp.domain.model.InboundRecord
 import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
@@ -206,6 +208,17 @@ class SearchViewModel(
             return
         }
 
+        if (!appContext.isNetworkAvailable()) {
+            val message = appContext.getString(R.string.common_network_unavailable)
+            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            onCompleted(
+                BomDirectInboundLookupResult(
+                    errorMessage = message
+                )
+            )
+            return
+        }
+
         viewModelScope.launch {
             val component = lcscCatalogRepository.lookupByPartNumber(normalizedPartNumber)
             if (component == null) {
@@ -259,6 +272,35 @@ class SearchViewModel(
 
     fun goToNextPage() {
         currentPage.update { page -> page + 1 }
+    }
+
+    fun updateInventoryItemQuantity(
+        inventoryItemId: Long,
+        quantity: Int,
+        onCompleted: (String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            onCompleted(inventoryRepository.updateInventoryItemQuantity(inventoryItemId, quantity))
+        }
+    }
+
+    fun transferInventoryItem(
+        inventoryItemId: Long,
+        targetLocationCode: String,
+        onCompleted: (String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            onCompleted(inventoryRepository.transferInventoryItem(inventoryItemId, targetLocationCode))
+        }
+    }
+
+    fun deleteInventoryItem(
+        inventoryItemId: Long,
+        onCompleted: (String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            onCompleted(inventoryRepository.deleteInventoryItem(inventoryItemId))
+        }
     }
 
     companion object {
@@ -340,7 +382,8 @@ class SearchViewModel(
                                 colorHex = record.locationColorHex,
                                 quantity = record.quantity
                             )
-                        }
+                        },
+                    records = group.sortedBy { it.locationCode }
                 )
             }
             .sortedWith(

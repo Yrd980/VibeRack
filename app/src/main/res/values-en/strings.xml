@@ -74,6 +74,11 @@
     <string name="inbound_component_specifications">Specifications</string>
     <string name="inbound_scan_invalid_qr">This QR code is not a supported LCSC inbound label.</string>
     <string name="inbound_scan_component_not_found">The QR code was recognized, but no LCSC component information was found for part number %1$s.</string>
+    <string name="inbound_existing_stock_title">Already in Stock</string>
+    <string name="inbound_existing_stock_body">You can increase its quantity.</string>
+    <string name="inbound_existing_stock_item">%1$s · Current Qty %2$d</string>
+    <string name="inbound_existing_stock_badge">In Stock</string>
+    <string name="inbound_existing_stock_view_item">View Item</string>
     <string name="common_confirm">Confirm</string>
     <string name="common_cancel">Cancel</string>
     <string name="common_close">Close</string>
@@ -83,6 +88,7 @@
     <string name="common_save">Save</string>
     <string name="common_remove">Remove</string>
     <string name="common_copied">Copied: %1$s</string>
+    <string name="common_network_unavailable">No network connection. Check your network and try again.</string>
     <string name="search_title">Component Search</string>
     <string name="search_mode_manual">Manual Search</string>
     <string name="search_mode_bom">BOM Search</string>
@@ -148,6 +154,7 @@
     <string name="inventory_add_location_label">Location Code</string>
     <string name="inventory_add_location_hint">For example A1 or C3. Only one letter + one digit (1-9) is currently allowed.</string>
     <string name="inventory_cell_count">%1$d item types</string>
+    <string name="inventory_cell_summary">%1$s: %2$d item types</string>
     <string name="inventory_item_quantity">Quantity: %1$s</string>
     <string name="inventory_quantity_label">Quantity</string>
     <string name="inventory_location_code">Location Code</string>
@@ -254,7 +261,7 @@
     <string name="printer_no_bonded_devices">No bonded device was found. Pair the printer in system Bluetooth settings first.</string>
     <string name="printer_unknown_device">Unknown Device</string>
     <string name="printer_connect_address_required">Select a printer before connecting.</string>
-    <string name="printer_not_connected">Printer not connected. Connect a Q5 printer on the Printer page first.</string>
+    <string name="printer_not_connected">Printer not connected. Connect a printer on the Printer page first.</string>
     <string name="printer_print_in_progress">Sending print job…</string>
     <string name="printer_print_label">Print Label</string>
     <string name="printer_print_success">Print job sent.</string>

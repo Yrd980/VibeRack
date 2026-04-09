@@ -1,5 +1,6 @@
 package com.example.lcsc_android_erp.data.repository
 
+import android.util.Log
 import com.example.lcsc_android_erp.data.remote.LcscCatalogRemoteDataSource
 import com.example.lcsc_android_erp.data.remote.optDoubleOrNull
 import com.example.lcsc_android_erp.data.remote.optIntOrNull
@@ -14,6 +15,10 @@ import org.jsoup.Jsoup
 class LcscCatalogRepositoryImpl(
     private val remoteDataSource: LcscCatalogRemoteDataSource
 ) : LcscCatalogRepository {
+    private companion object {
+        private const val TAG = "LcscCatalogParser"
+    }
+
     private enum class NameStrategy {
         ExactPartNumber,
         SearchResult
@@ -23,17 +28,19 @@ class LcscCatalogRepositoryImpl(
         return withContext(Dispatchers.IO) {
             val searchRecord = remoteDataSource.searchMatchedProduct(partNumber) ?: return@withContext null
             val product = searchRecord.optJSONObject("productVO") ?: return@withContext null
-            buildComponentDetail(
+            val detail = buildComponentDetail(
                 searchRecord = searchRecord,
                 product = product,
                 nameStrategy = NameStrategy.ExactPartNumber
             )
+            logParsedDetail(source = "lookupByPartNumber", keyword = partNumber, detail = detail)
+            detail
         }
     }
 
     override suspend fun searchByKeyword(keyword: String): List<ComponentDetail> {
         return withContext(Dispatchers.IO) {
-            remoteDataSource.searchProducts(keyword)
+            val results = remoteDataSource.searchProducts(keyword)
                 .mapNotNull { searchRecord ->
                     val product = searchRecord.optJSONObject("productVO") ?: return@mapNotNull null
                     buildComponentDetail(
@@ -42,6 +49,14 @@ class LcscCatalogRepositoryImpl(
                         nameStrategy = NameStrategy.SearchResult
                     )
                 }
+            results.take(10).forEachIndexed { index, detail ->
+                logParsedDetail(
+                    source = "searchByKeyword[$index]",
+                    keyword = keyword,
+                    detail = detail
+                )
+            }
+            results
         }
     }
 
@@ -162,5 +177,16 @@ class LcscCatalogRepositoryImpl(
             return "https://atta.szlcsc.com$filePath"
         }
         return null
+    }
+
+    private fun logParsedDetail(
+        source: String,
+        keyword: String,
+        detail: ComponentDetail
+    ) {
+        Log.d(
+            TAG,
+            "parsed[$source]: keyword=$keyword, partNumber=${detail.partNumber}, name=${detail.name}, brand=${detail.brand}, package=${detail.packageName}, category=${detail.category}, secondAttrCount=${detail.specifications.size}, imageUrl=${detail.imageUrl}"
+        )
     }
 }

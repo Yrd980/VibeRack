@@ -2,6 +2,7 @@ package com.example.lcsc_android_erp.feature.search
 
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
 import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
+import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
 import com.example.lcsc_android_erp.domain.model.StorageLocation
 
 data class SearchUiState(
@@ -45,7 +46,8 @@ data class SearchResultUiModel(
     val specifications: Map<String, String>,
     val imageLocalPath: String?,
     val totalQuantity: Int,
-    val locations: List<SearchResultLocationUiModel>
+    val locations: List<SearchResultLocationUiModel>,
+    val records: List<SearchInventoryRecord>
 )
 
 data class SearchResultLocationUiModel(

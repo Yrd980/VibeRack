@@ -2,6 +2,7 @@ package com.example.lcsc_android_erp.data.repository
 
 import android.content.Context
 import android.net.Uri
+import android.util.Base64
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import com.example.lcsc_android_erp.R
@@ -14,14 +15,18 @@ import com.example.lcsc_android_erp.core.database.entity.InventoryItemEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryTransactionEntity
 import com.example.lcsc_android_erp.core.database.entity.StorageLocationEntity
 import com.example.lcsc_android_erp.domain.model.StorageLocationSortMode
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.apache.poi.ss.usermodel.Cell
 import org.apache.poi.ss.usermodel.CellType
+import org.apache.poi.ss.usermodel.ClientAnchor
 import org.apache.poi.ss.usermodel.Row
+import org.apache.poi.ss.usermodel.Workbook
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import org.json.JSONObject
 
 class InventoryBackupManager(
     private val context: Context,
@@ -29,13 +34,32 @@ class InventoryBackupManager(
     private val storageLocationDao: StorageLocationDao,
     private val componentDao: ComponentDao,
     private val inventoryItemDao: InventoryItemDao,
-    private val inventoryTransactionDao: InventoryTransactionDao
+    private val inventoryTransactionDao: InventoryTransactionDao,
+    private val componentEnrichmentManager: ComponentEnrichmentManager,
+    private val componentImageStore: ComponentImageStore
 ) {
+    private data class ImportedComponentRow(
+        val entity: ComponentEntity,
+        val requiresEnrichment: Boolean
+    )
+
+    private data class ImportedComponentImage(
+        val fileName: String?,
+        val bytes: ByteArray
+    )
+
     suspend fun exportToUri(uri: Uri): String? = withContext(Dispatchers.IO) {
         runCatching {
             val workbook = XSSFWorkbook()
 
             val storageLocations = database.withTransaction { storageLocationDao.getAll() }
+            val initialComponents = database.withTransaction { componentDao.getAll() }
+            val missingDetails = initialComponents
+                .filter(::requiresExportEnrichment)
+                .map(ComponentEntity::partNumber)
+            if (missingDetails.isNotEmpty()) {
+                componentEnrichmentManager.enrichNow(missingDetails)
+            }
             val components = database.withTransaction { componentDao.getAll() }
             val inventoryItems = database.withTransaction { inventoryItemDao.getAll() }
             val inventoryTransactions = database.withTransaction { inventoryTransactionDao.getAll() }
@@ -66,6 +90,7 @@ class InventoryBackupManager(
             }
 
             workbook.createSheet("components").apply {
+                val imageColumnIndex = 12
                 writeRow(
                     0,
                     listOf(
@@ -79,13 +104,14 @@ class InventoryBackupManager(
                         "specJson",
                         "description",
                         "sourceUrl",
-                        "imageLocalPath",
-                        "updatedAt"
+                        "updatedAt",
+                        "imagePreview"
                     )
                 )
                 components.forEachIndexed { index, item ->
+                    val rowIndex = index + 1
                     writeRow(
-                        index + 1,
+                        rowIndex,
                         listOf(
                             item.id,
                             item.partNumber,
@@ -97,8 +123,34 @@ class InventoryBackupManager(
                             item.specJson,
                             item.description,
                             item.sourceUrl,
-                            item.imageLocalPath,
-                            item.updatedAt
+                            item.updatedAt,
+                            null
+                        )
+                    )
+                    insertComponentPreviewImage(
+                        workbook = workbook,
+                        rowIndex = rowIndex,
+                        imageColumnIndex = imageColumnIndex,
+                        imageLocalPath = item.imageLocalPath
+                    )
+                }
+                setColumnWidth(imageColumnIndex, 18 * 256)
+            }
+
+            workbook.createSheet("component_images").apply {
+                writeRow(0, listOf("partNumber", "fileName", "contentBase64"))
+                components.forEachIndexed { index, item ->
+                    val imageFile = item.imageLocalPath
+                        ?.let(::File)
+                        ?.takeIf { it.exists() && it.length() > 0L }
+                    writeRow(
+                        index + 1,
+                        listOf(
+                            item.partNumber,
+                            imageFile?.name,
+                            imageFile?.readBytes()?.let { bytes ->
+                                Base64.encodeToString(bytes, Base64.NO_WRAP)
+                            }
                         )
                     )
                 }
@@ -182,7 +234,9 @@ class InventoryBackupManager(
                 }
 
                 val storageLocations = wb.getSheet("storage_locations").toStorageLocations()
-                val components = wb.getSheet("components").toComponents()
+                val componentImages = wb.getSheet("component_images").toComponentImages()
+                val importedComponents = wb.getSheet("components").toComponents(componentImages)
+                val components = importedComponents.map { it.entity }
                 val inventoryItems = wb.getSheet("inventory_items").toInventoryItems()
                 val inventoryTransactions = wb.getSheet("inventory_transactions").toInventoryTransactions()
 
@@ -205,6 +259,11 @@ class InventoryBackupManager(
                         inventoryTransactionDao.insertAll(inventoryTransactions)
                     }
                 }
+                componentEnrichmentManager.scheduleAll(
+                    importedComponents
+                        .filter { it.requiresEnrichment }
+                        .map { it.entity.partNumber }
+                )
                 null
             }
         }.getOrElse { throwable ->
@@ -243,24 +302,108 @@ class InventoryBackupManager(
         }
     }
 
-    private fun org.apache.poi.ss.usermodel.Sheet?.toComponents(): List<ComponentEntity> {
+    private suspend fun org.apache.poi.ss.usermodel.Sheet?.toComponents(
+        componentImages: Map<String, ImportedComponentImage>
+    ): List<ImportedComponentRow> {
         val sheet = this ?: return emptyList()
         return sheet.dataRows().map { row ->
-            ComponentEntity(
-                id = row.long("id"),
-                partNumber = row.string("partNumber").orEmpty(),
-                mpn = row.stringOrNull("mpn"),
-                name = row.stringOrNull("name"),
-                brand = row.stringOrNull("brand"),
-                packageName = row.stringOrNull("packageName"),
-                category = row.stringOrNull("category"),
-                specJson = row.stringOrNull("specJson"),
-                description = row.stringOrNull("description"),
-                sourceUrl = row.stringOrNull("sourceUrl"),
-                imageLocalPath = row.stringOrNull("imageLocalPath"),
-                updatedAt = row.long("updatedAt")
+            val partNumber = row.string("partNumber").orEmpty().trim().uppercase()
+            val restoredImagePath = componentImages[partNumber]?.let { image ->
+                componentImageStore.persistImageBytes(
+                    partNumber = partNumber,
+                    sourceName = image.fileName,
+                    bytes = image.bytes
+                )
+            }
+            ImportedComponentRow(
+                entity = ComponentEntity(
+                    id = row.long("id"),
+                    partNumber = partNumber,
+                    mpn = row.stringOrNull("mpn"),
+                    name = row.stringOrNull("name"),
+                    brand = row.stringOrNull("brand"),
+                    packageName = row.stringOrNull("packageName"),
+                    category = row.stringOrNull("category"),
+                    specJson = row.stringOrNull("specJson"),
+                    description = row.stringOrNull("description"),
+                    sourceUrl = row.stringOrNull("sourceUrl"),
+                    imageLocalPath = restoredImagePath,
+                    updatedAt = row.long("updatedAt")
+                ),
+                requiresEnrichment = false
             )
         }
+    }
+
+    private fun org.apache.poi.ss.usermodel.Sheet?.toComponentImages(): Map<String, ImportedComponentImage> {
+        val sheet = this ?: return emptyMap()
+        return sheet.dataRows().mapNotNull { row ->
+            val partNumber = row.string("partNumber")?.trim()?.uppercase().orEmpty()
+            val contentBase64 = row.stringOrNull("contentBase64")
+            if (partNumber.isBlank() || contentBase64.isNullOrBlank()) {
+                null
+            } else {
+                val bytes = runCatching {
+                    Base64.decode(contentBase64, Base64.DEFAULT)
+                }.getOrNull() ?: return@mapNotNull null
+                partNumber to ImportedComponentImage(
+                    fileName = row.stringOrNull("fileName"),
+                    bytes = bytes
+                )
+            }
+        }.toMap()
+    }
+
+    private fun specificationCount(specJson: String?): Int {
+        if (specJson.isNullOrBlank()) {
+            return 0
+        }
+        return runCatching {
+            val json = JSONObject(specJson)
+            json.keys().asSequence()
+                .map { key -> json.optString(key).trim() }
+                .count { value -> value.isNotBlank() && value != "null" }
+        }.getOrDefault(0)
+    }
+
+    private fun requiresExportEnrichment(component: ComponentEntity): Boolean {
+        val hasImage = component.imageLocalPath
+            ?.let(::File)
+            ?.let { it.exists() && it.length() > 0L }
+            ?: false
+        return component.name.isNullOrBlank() ||
+            specificationCount(component.specJson) == 0 ||
+            !hasImage
+    }
+
+    private fun insertComponentPreviewImage(
+        workbook: Workbook,
+        rowIndex: Int,
+        imageColumnIndex: Int,
+        imageLocalPath: String?
+    ) {
+        val imageFile = imageLocalPath
+            ?.let(::File)
+            ?.takeIf { it.exists() && it.length() > 0L }
+            ?: return
+        val pictureType = when (imageFile.extension.lowercase()) {
+            "png" -> Workbook.PICTURE_TYPE_PNG
+            else -> Workbook.PICTURE_TYPE_JPEG
+        }
+        val bytes = runCatching { imageFile.readBytes() }.getOrNull() ?: return
+        val sheet = workbook.getSheet("components") ?: return
+        val drawing = sheet.createDrawingPatriarch()
+        val helper = workbook.creationHelper
+        val anchor = helper.createClientAnchor().apply {
+            setCol1(imageColumnIndex)
+            setRow1(rowIndex)
+            setCol2(imageColumnIndex + 1)
+            setRow2(rowIndex + 1)
+            anchorType = ClientAnchor.AnchorType.MOVE_AND_RESIZE
+        }
+        val pictureIndex = workbook.addPicture(bytes, pictureType)
+        drawing.createPicture(anchor, pictureIndex)
+        sheet.getRow(rowIndex)?.heightInPoints = 72f
     }
 
     private fun org.apache.poi.ss.usermodel.Sheet?.toInventoryItems(): List<InventoryItemEntity> {

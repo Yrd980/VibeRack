@@ -1,6 +1,7 @@
 package com.example.lcsc_android_erp.feature.inventory
 
 import android.content.Context
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -8,6 +9,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.lcsc_android_erp.core.AppContainer
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.network.isNetworkAvailable
 import com.example.lcsc_android_erp.domain.model.LocationInventoryItem
 import com.example.lcsc_android_erp.domain.model.StockLocationCell
 import com.example.lcsc_android_erp.domain.model.StorageLocationSortMode
@@ -19,8 +21,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -35,10 +37,10 @@ class InventoryViewModel(
     private val appContext: Context
 ) : ViewModel() {
     private val selectedLocation = MutableStateFlow<StockLocationCell?>(null)
+    private val pendingOpenRequest = MutableStateFlow<InventoryOpenRequest?>(null)
     private val settingsLocationId = MutableStateFlow<Long?>(null)
     private val addLocationError = MutableStateFlow<String?>(null)
     private val updateLocationError = MutableStateFlow<String?>(null)
-    private val imageUrlOverrides = MutableStateFlow<Map<String, String>>(emptyMap())
     private val selectedLocationItemsFlow = selectedLocation.flatMapLatest { location ->
         if (location == null) {
             flowOf(emptyList<LocationInventoryItem>())
@@ -59,38 +61,47 @@ class InventoryViewModel(
             inventoryRepository.observeLocationInventory(locationId)
         }
     }
-    private val baseUiStateFlow = combine(
+    private val locationUiStateFlow = combine(
         locationDataFlow,
         selectedLocation,
+        pendingOpenRequest,
         addLocationError,
-        updateLocationError,
-        selectedLocationItemsFlow
-    ) { locationData, selected, addError, updateError, items ->
+        updateLocationError
+    ) { locationData, selected, openRequest, addError, updateError ->
         val (cells, locations) = locationData
         InventoryUiState(
             cells = cells,
             locations = locations,
             selectedLocation = selected,
-            selectedLocationItems = sortLocationItems(
-                items = items,
-                sortMode = selected?.sortMode ?: StorageLocationSortMode.NONE
-            ),
+            pendingOpenRequest = openRequest,
             addLocationError = addError,
             updateLocationError = updateError
+        )
+    }
+    private val baseUiStateFlow = combine(
+        locationUiStateFlow,
+        selectedLocationItemsFlow
+    ) { locationState, items ->
+        InventoryUiState(
+            cells = locationState.cells,
+            locations = locationState.locations,
+            selectedLocation = locationState.selectedLocation,
+            selectedLocationItems = sortLocationItems(
+                items = items,
+                sortMode = locationState.selectedLocation?.sortMode ?: StorageLocationSortMode.NONE
+            ),
+            pendingOpenRequest = locationState.pendingOpenRequest,
+            addLocationError = locationState.addLocationError,
+            updateLocationError = locationState.updateLocationError
         )
     }
 
     val uiState: StateFlow<InventoryUiState> = combine(
         baseUiStateFlow,
-        imageUrlOverrides,
         settingsLocationItemsFlow
-    ) { baseState, imageOverrides, settingsItems ->
+    ) { baseState, settingsItems ->
         baseState.copy(
-            selectedLocationItems = baseState.selectedLocationItems.map { item ->
-                item.copy(
-                    imageUrl = item.imageUrl ?: imageOverrides[item.partNumber]
-                )
-            },
+            selectedLocationItems = baseState.selectedLocationItems,
             settingsLocationSortAttributes = supportedSpecificationKeys(settingsItems)
         )
     }.stateIn(
@@ -103,21 +114,6 @@ class InventoryViewModel(
         viewModelScope.launch {
             inventoryRepository.bootstrapDefaults()
         }
-        viewModelScope.launch {
-            selectedLocationItemsFlow.collectLatest { items ->
-                items.forEach { item ->
-                    if (!item.imageLocalPath.isNullOrBlank() || !item.imageUrl.isNullOrBlank() || imageUrlOverrides.value.containsKey(item.partNumber)) {
-                        return@forEach
-                    }
-                    val imageUrl = lcscCatalogRepository.lookupByPartNumber(item.partNumber)?.imageUrl
-                    if (!imageUrl.isNullOrBlank()) {
-                        imageUrlOverrides.update { current ->
-                            current + (item.partNumber to imageUrl)
-                        }
-                    }
-                }
-            }
-        }
     }
 
     fun onLocationSelected(location: StockLocationCell) {
@@ -126,6 +122,31 @@ class InventoryViewModel(
 
     fun dismissLocationDetail() {
         selectedLocation.value = null
+    }
+
+    fun openInventoryItem(locationCode: String, partNumber: String) {
+        val normalizedLocationCode = locationCode.trim().uppercase(Locale.ROOT)
+        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
+        if (normalizedLocationCode.isBlank() || normalizedPartNumber.isBlank()) {
+            return
+        }
+
+        viewModelScope.launch {
+            val targetLocation = inventoryRepository.observeStockLocationCells()
+                .first()
+                .firstOrNull { it.code.equals(normalizedLocationCode, ignoreCase = true) }
+                ?: return@launch
+
+            pendingOpenRequest.value = InventoryOpenRequest(
+                locationCode = targetLocation.code,
+                partNumber = normalizedPartNumber
+            )
+            selectedLocation.value = targetLocation
+        }
+    }
+
+    fun clearPendingOpenRequest() {
+        pendingOpenRequest.value = null
     }
 
     fun openLocationSettings(locationId: Long) {
@@ -300,6 +321,19 @@ class InventoryViewModel(
             onCompleted(
                 InventoryScanLookupResult(
                     errorMessage = appContext.getString(R.string.inventory_scan_invalid_qr)
+                )
+            )
+            return
+        }
+
+        if (!appContext.isNetworkAvailable()) {
+            val message = appContext.getString(R.string.common_network_unavailable)
+            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            onCompleted(
+                InventoryScanLookupResult(
+                    quantity = payload.quantity,
+                    rawPayload = payload.rawText,
+                    errorMessage = message
                 )
             )
             return

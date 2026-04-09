@@ -43,6 +43,24 @@ class ComponentImageStore(
         targetFile.takeIf { it.exists() && it.length() > 0L }?.absolutePath
     }
 
+    suspend fun persistImageBytes(
+        partNumber: String,
+        sourceName: String?,
+        bytes: ByteArray
+    ): String? = withContext(Dispatchers.IO) {
+        if (bytes.isEmpty()) {
+            return@withContext null
+        }
+        val targetFile = File(imageDir, buildFileName(partNumber, sourceName ?: "$partNumber.jpg"))
+        runCatching {
+            targetFile.outputStream().use { outputStream ->
+                outputStream.write(bytes)
+                outputStream.flush()
+            }
+        }.getOrNull()
+        targetFile.takeIf { it.exists() && it.length() > 0L }?.absolutePath
+    }
+
     private fun buildFileName(partNumber: String, imageUrl: String): String {
         val safePartNumber = partNumber.replace(Regex("[^A-Za-z0-9._-]"), "_")
         val extension = imageUrl

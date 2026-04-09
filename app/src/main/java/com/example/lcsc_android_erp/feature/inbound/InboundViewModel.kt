@@ -1,6 +1,7 @@
 package com.example.lcsc_android_erp.feature.inbound
 
 import android.content.Context
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,6 +10,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.lcsc_android_erp.core.AppContainer
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
+import com.example.lcsc_android_erp.core.network.isNetworkAvailable
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
 import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
 import com.example.lcsc_android_erp.domain.model.InboundRecord
@@ -75,6 +77,19 @@ class InboundViewModel(
             return
         }
 
+        if (!appContext.isNetworkAvailable()) {
+            val message = appContext.getString(R.string.common_network_unavailable)
+            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            inboundState.update {
+                it.copy(
+                    manualSearchResults = emptyList(),
+                    isSearchingManual = false,
+                    manualSearchError = message
+                )
+            }
+            return
+        }
+
         inboundState.update {
             it.copy(
                 isSearchingManual = true,
@@ -91,11 +106,14 @@ class InboundViewModel(
                 .associateWith { partNumber ->
                     inventoryRepository.findExistingStockLocations(partNumber)
                 }
+            val sortedResults = results.sortedByDescending { component ->
+                existingStocks[component.partNumber].isNullOrEmpty().not()
+            }
             inboundState.update {
                 it.copy(
-                    manualSearchResults = results,
+                    manualSearchResults = sortedResults,
                     isSearchingManual = false,
-                    manualSearchError = if (results.isEmpty()) {
+                    manualSearchError = if (sortedResults.isEmpty()) {
                         appContext.getString(R.string.inbound_manual_empty)
                     } else {
                         null
@@ -122,6 +140,22 @@ class InboundViewModel(
                     componentLookupError = null,
                     lastRawText = rawText,
                     parseError = appContext.getString(R.string.inbound_scan_invalid_qr)
+                )
+            }
+            return
+        }
+
+        if (!appContext.isNetworkAvailable()) {
+            val message = appContext.getString(R.string.common_network_unavailable)
+            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            inboundState.update {
+                it.copy(
+                    parsedPayload = payload,
+                    componentDetail = null,
+                    isLoadingComponent = false,
+                    componentLookupError = message,
+                    lastRawText = rawText,
+                    parseError = null
                 )
             }
             return

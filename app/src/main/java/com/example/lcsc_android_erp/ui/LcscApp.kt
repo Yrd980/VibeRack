@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.feature.home.HomeRoute
 import com.example.lcsc_android_erp.feature.inbound.InboundRoute
+import com.example.lcsc_android_erp.feature.inventory.InventoryOpenRequest
 import com.example.lcsc_android_erp.feature.inventory.InventoryRoute
 import com.example.lcsc_android_erp.feature.printer.PrinterRoute
 import com.example.lcsc_android_erp.feature.search.SearchRoute
@@ -43,6 +45,23 @@ fun LcscApp() {
     val currentDestination = backStackEntry?.destination
     val items = topLevelDestinations
     var inventoryResetToOverviewSignal by remember { mutableIntStateOf(0) }
+    var inventoryOpenRequestSignal by remember { mutableIntStateOf(0) }
+    var inventoryOpenRequest by remember { mutableStateOf<InventoryOpenRequest?>(null) }
+
+    val jumpToInventoryItem: (String, String) -> Unit = { locationCode, partNumber ->
+        inventoryOpenRequest = InventoryOpenRequest(
+            locationCode = locationCode,
+            partNumber = partNumber
+        )
+        inventoryOpenRequestSignal++
+        navController.navigate(Destination.Inventory.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -95,16 +114,20 @@ fun LcscApp() {
                 HomeRoute()
             }
             composable(Destination.Inbound.route) {
-                InboundRoute()
+                InboundRoute(onViewInventoryItem = jumpToInventoryItem)
             }
             composable(Destination.Search.route) {
-                SearchRoute()
+                SearchRoute(onViewInventoryItem = jumpToInventoryItem)
             }
             composable(Destination.Printer.route) {
                 PrinterRoute()
             }
             composable(Destination.Inventory.route) {
-                InventoryRoute(resetToOverviewSignal = inventoryResetToOverviewSignal)
+                InventoryRoute(
+                    openRequest = inventoryOpenRequest,
+                    openRequestSignal = inventoryOpenRequestSignal,
+                    resetToOverviewSignal = inventoryResetToOverviewSignal
+                )
             }
             composable(Destination.Settings.route) {
                 SettingsRoute()

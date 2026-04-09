@@ -2,6 +2,32 @@
 
 本文档基于当前代码现状整理应用内已经落地的弹窗类型，以及各自出现的场景。
 
+## 0. 当前复用骨架
+
+当前弹窗已经明确收敛为两层共享能力：
+
+### 0.1 物料详情骨架
+
+- 组件：`ComponentInfoDialog`
+- 文件：`app/src/main/java/com/example/lcsc_android_erp/core/ui/ComponentInfoDialog.kt`
+- 作用：统一承载物料图片、第一属性、第二属性、滚动布局、长按复制与震动反馈
+
+当前已接入：
+
+- `InventoryItemManageDialog`
+
+### 0.2 仓库选择统一弹窗
+
+- 组件：`LocationPickerDialog`
+- 文件：`app/src/main/java/com/example/lcsc_android_erp/core/ui/LocationPickerDialog.kt`
+- 作用：统一承载“选择仓库位置 / 选择目标仓库”的整套弹窗实现，不只是样式骨架
+
+当前已接入：
+
+- `MaterialInboundDialog` 内部的“选择仓库位置”
+- `InventoryItemManageDialog` 内部的“转移仓库”
+- 库位多选后的“批量转移”
+
 ## 1. 物料入库确认弹窗
 
 - 组件：`MaterialInboundDialog`
@@ -28,11 +54,13 @@
 
 ### 1.1 物料入库中的“选择仓库位置”子弹窗
 
-- 组件：`MaterialInboundDialog` 内部二级 `AlertDialog`
+- 组件：`LocationPickerDialog`
+- 文件：`app/src/main/java/com/example/lcsc_android_erp/core/ui/LocationPickerDialog.kt`
 - 出现场景：
   - 手动入库确认
   - 扫码入库确认
   - BOM 直接入库确认
+  - 仓库内扫码添加确认
 - 备注：
   - 仓库名称会根据背景色自动切换黑字/白字
   - 某一行仓库过多时支持横向滑动
@@ -96,24 +124,27 @@
 | 项目 | 内容 |
 | --- | --- |
 | 组件 | `InventoryItemManageDialog` |
-| 文件 | `app/src/main/java/com/example/lcsc_android_erp/feature/inventory/InventoryScreen.kt` |
-| 场景 | 点击库位详情中的某个物料 |
+| 文件 | `app/src/main/java/com/example/lcsc_android_erp/feature/inventory/InventoryItemManageDialog.kt` |
+| 场景 | 点击库位详情中的某个物料；点击搜索结果中的某一条具体库存记录 |
 | 作用 | 查看物料详情，修改数量，转移仓库，删除物料 |
-| 备注 | 内部可继续打开“选择目标仓库”子弹窗 |
+| 备注 | 弹窗主体复用 `ComponentInfoDialog`，内部继续复用 `LocationPickerDialog` |
 
 ### 6.1 单个物料转移仓库弹窗
 
-- 位置：`InventoryItemManageDialog` 内部
+- 组件：`LocationPickerDialog`
 - 场景：点击“转移仓库”
 - 作用：给当前物料选择目标仓库
+- 备注：与入库弹窗中的“选择仓库位置”完全复用同一实现
 
 ## 7. 库位多选批量操作弹窗
 
 ### 7.1 批量转移弹窗
 
-- 文件：`app/src/main/java/com/example/lcsc_android_erp/feature/inventory/InventoryScreen.kt`
+- 组件：`LocationPickerDialog`
+- 文件：`app/src/main/java/com/example/lcsc_android_erp/core/ui/LocationPickerDialog.kt`
 - 场景：库位详情页长按物料进入多选后，点击“批量转移”
 - 作用：给一组已选物料选择目标仓库
+- 备注：与单个物料“转移仓库”、入库弹窗“选择仓库位置”完全复用同一实现
 
 ### 7.2 批量删除确认弹窗
 
@@ -147,7 +178,7 @@
 
 1. 物料入库类：统一收敛到 `MaterialInboundDialog`
 2. 库位管理类：新增库位、仓库设置、颜色选择、删除确认
-3. 库位物料操作类：物料详情、转移仓库、批量转移、批量删除
+3. 库位物料操作类：统一收敛到 `InventoryItemManageDialog` + `LocationPickerDialog`
 4. BOM 辅助类：绑定本地物料
 5. 设置类：语言、关于、导入导出结果
 
@@ -156,3 +187,10 @@
 - 过去存在多套“物料入库确认”弹窗
 - 当前已统一收敛为 `MaterialInboundDialog`
 - 后续如果继续扩展入库方式，应优先复用这一套，而不是新增新的确认弹窗
+
+本轮新增的收敛是：
+
+- 过去“转移仓库 / 选择仓库位置 / 批量转移”存在多套仓库选择弹窗
+- 当前已统一收敛为 `LocationPickerDialog`
+- 过去搜索页和仓库页的物料管理存在两套实现
+- 当前已统一收敛为 `InventoryItemManageDialog`

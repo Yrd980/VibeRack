@@ -8,6 +8,7 @@ import androidx.room.Room
 import com.example.lcsc_android_erp.core.database.AppDatabase
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
+import com.example.lcsc_android_erp.data.repository.ComponentEnrichmentManager
 import com.example.lcsc_android_erp.data.remote.LcscCatalogRemoteDataSource
 import com.example.lcsc_android_erp.data.repository.ComponentImageStore
 import com.example.lcsc_android_erp.data.repository.InventoryBackupManager
@@ -51,6 +52,14 @@ class AppContainer(context: Context) {
         okHttpClient = okHttpClient
     )
 
+    val componentEnrichmentManager = ComponentEnrichmentManager(
+        componentDao = database.componentDao(),
+        lcscCatalogRepository = LcscCatalogRepositoryImpl(
+            remoteDataSource = LcscCatalogRemoteDataSource(okHttpClient)
+        ),
+        componentImageStore = componentImageStore
+    )
+
     val inventoryRepository: InventoryRepository = InventoryRepositoryImpl(
         context = appContext,
         database = database,
@@ -59,7 +68,7 @@ class AppContainer(context: Context) {
         storageLocationDao = database.storageLocationDao(),
         inventoryItemDao = database.inventoryItemDao(),
         inventoryTransactionDao = database.inventoryTransactionDao(),
-        componentImageStore = componentImageStore
+        componentEnrichmentManager = componentEnrichmentManager
     )
 
     val inventoryBackupManager = InventoryBackupManager(
@@ -68,7 +77,9 @@ class AppContainer(context: Context) {
         storageLocationDao = database.storageLocationDao(),
         componentDao = database.componentDao(),
         inventoryItemDao = database.inventoryItemDao(),
-        inventoryTransactionDao = database.inventoryTransactionDao()
+        inventoryTransactionDao = database.inventoryTransactionDao(),
+        componentEnrichmentManager = componentEnrichmentManager,
+        componentImageStore = componentImageStore
     )
 
     val lcscCatalogRepository: LcscCatalogRepository = LcscCatalogRepositoryImpl(
