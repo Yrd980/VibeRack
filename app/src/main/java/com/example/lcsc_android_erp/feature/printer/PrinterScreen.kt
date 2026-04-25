@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,17 +48,30 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.datastore.UserPreferences
+import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.core.printer.BondedPrinter
 import com.example.lcsc_android_erp.core.printer.PrinterConnectionState
 import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
+import kotlinx.coroutines.launch
 
 @Composable
 fun PrinterRoute(
     modifier: Modifier = Modifier
 ) {
     val appContainer = (LocalContext.current.applicationContext as LcscApplication).appContainer
+    val preferences by appContainer.userPreferencesRepository.preferences.collectAsStateWithLifecycle(
+        initialValue = UserPreferences()
+    )
+    val coroutineScope = rememberCoroutineScope()
     PrinterScreen(
         printerManager = appContainer.q5PrinterManager,
+        printerType = preferences.printerType,
+        onPrinterTypeChange = { printerType ->
+            coroutineScope.launch {
+                appContainer.userPreferencesRepository.setPrinterType(printerType)
+            }
+        },
         modifier = modifier
     )
 }
@@ -65,6 +79,8 @@ fun PrinterRoute(
 @Composable
 fun PrinterScreen(
     printerManager: Q5PrinterManager,
+    printerType: String,
+    onPrinterTypeChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -103,6 +119,18 @@ fun PrinterScreen(
         }
     }
 
+    val visiblePrinters = remember(state.bondedPrinters, printerType) {
+        when (printerType) {
+            UserPreferencesRepository.PRINTER_TYPE_DELI_Q5 -> state.bondedPrinters.filter { printer ->
+                printer.name.contains("Q5", ignoreCase = true) ||
+                    printer.name.contains("DELI", ignoreCase = true) ||
+                    printer.name.contains("得力", ignoreCase = true)
+            }
+
+            else -> state.bondedPrinters
+        }
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -125,6 +153,36 @@ fun PrinterScreen(
                     else -> state.connectionSummary
                 }
             )
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.printer_type_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    PrinterTypeOptionButton(
+                        text = stringResource(R.string.printer_type_auto),
+                        selected = printerType == UserPreferencesRepository.PRINTER_TYPE_AUTO,
+                        onClick = {
+                            onPrinterTypeChange(UserPreferencesRepository.PRINTER_TYPE_AUTO)
+                        }
+                    )
+                    PrinterTypeOptionButton(
+                        text = stringResource(R.string.printer_type_deli_q5),
+                        selected = printerType == UserPreferencesRepository.PRINTER_TYPE_DELI_Q5,
+                        onClick = {
+                            onPrinterTypeChange(UserPreferencesRepository.PRINTER_TYPE_DELI_Q5)
+                        }
+                    )
+                }
+            }
         }
         item {
             Row(
@@ -179,12 +237,18 @@ fun PrinterScreen(
                 fontWeight = FontWeight.SemiBold
             )
         }
-        if (state.bondedPrinters.isEmpty()) {
+        if (visiblePrinters.isEmpty()) {
             item {
-                StatusCard(body = stringResource(R.string.printer_no_bonded_devices))
+                StatusCard(
+                    body = if (printerType == UserPreferencesRepository.PRINTER_TYPE_DELI_Q5) {
+                        stringResource(R.string.printer_no_matching_devices)
+                    } else {
+                        stringResource(R.string.printer_no_bonded_devices)
+                    }
+                )
             }
         } else {
-            items(state.bondedPrinters, key = { it.address }) { printer ->
+            items(visiblePrinters, key = { it.address }) { printer ->
                 BondedPrinterCard(
                     printer = printer,
                     connectionState = state.connectionState,
@@ -244,6 +308,23 @@ fun PrinterScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PrinterTypeOptionButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    if (selected) {
+        Button(onClick = onClick) {
+            Text(text = text)
+        }
+    } else {
+        OutlinedButton(onClick = onClick) {
+            Text(text = text)
         }
     }
 }

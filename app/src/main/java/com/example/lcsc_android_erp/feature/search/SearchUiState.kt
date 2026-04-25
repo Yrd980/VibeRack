@@ -43,6 +43,7 @@ data class SearchResultUiModel(
     val packageName: String?,
     val category: String?,
     val description: String?,
+    val sourceUrl: String?,
     val specifications: Map<String, String>,
     val imageLocalPath: String?,
     val totalQuantity: Int,

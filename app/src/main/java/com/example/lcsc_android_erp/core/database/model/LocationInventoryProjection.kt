@@ -10,6 +10,7 @@ data class LocationInventoryProjection(
     val packageName: String?,
     val category: String?,
     val description: String?,
+    val sourceUrl: String?,
     val specJson: String?,
     val imageLocalPath: String?,
     val quantity: Int,

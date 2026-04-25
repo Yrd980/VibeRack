@@ -21,13 +21,14 @@
     <string name="inbound_title">Inbound Management</string>
     <string name="inbound_card_title">Next Implementation Step</string>
     <string name="inbound_card_body">The current version already integrates CameraX + ML Kit scanning and LCSC QR parsing. The next step is to continue filling in component lookup, location selection, and actual inventory writes.</string>
+    <string name="inbound_mode_search">Search Inbound</string>
     <string name="inbound_mode_manual">Manual Inbound</string>
     <string name="inbound_mode_scan">Scan Inbound</string>
     <string name="inbound_manual_keyword_label">Search Keyword</string>
     <string name="inbound_manual_keyword_placeholder">Enter part number, model, or keyword</string>
     <string name="inbound_manual_search_action">Search</string>
     <string name="inbound_manual_searching">Searching LCSC…</string>
-    <string name="inbound_manual_result_title">Manual Inbound Results</string>
+    <string name="inbound_manual_result_title">Search Inbound Results</string>
     <string name="inbound_manual_empty">No matching components were found.</string>
     <string name="inbound_manual_confirm_action">Select and Inbound</string>
     <string name="inbound_manual_print_qr">Print Material QR Code</string>
@@ -36,6 +37,17 @@
     <string name="inbound_manual_print_qr_saved">QR code saved to gallery: %1$s</string>
     <string name="inbound_manual_print_qr_failed">Failed to save QR code.</string>
     <string name="inbound_manual_dialog_title">Manual Inbound Confirmation</string>
+    <string name="inbound_manual_entry_dialog_title">Manual Inbound Confirmation</string>
+    <string name="inbound_manual_entry_part_number_required">Please enter the part number.</string>
+    <string name="inbound_manual_entry_specifications_label">Secondary Properties</string>
+    <string name="inbound_manual_entry_specifications_placeholder">One property per line, format: key=value</string>
+    <string name="inbound_manual_entry_image_url_label">Image URL</string>
+    <string name="inbound_manual_entry_pick_image_title">Select Material Image</string>
+    <string name="inbound_manual_entry_pick_image_body">You can take a photo with the system camera or choose an image from the gallery.</string>
+    <string name="inbound_manual_entry_take_photo">Camera</string>
+    <string name="inbound_manual_entry_pick_gallery">Gallery</string>
+    <string name="inbound_manual_entry_pick_image_hint">Tap to choose an image</string>
+    <string name="inbound_manual_entry_image_save_failed">Failed to save image.</string>
     <string name="inbound_scan_dialog_title">Scan Inbound Confirmation</string>
     <string name="inbound_flashlight_on">Turn off flashlight</string>
     <string name="inbound_flashlight_off">Turn on flashlight</string>
@@ -86,8 +98,12 @@
     <string name="common_force_delete">Force Delete</string>
     <string name="common_back">Back</string>
     <string name="common_save">Save</string>
+    <string name="common_edit">Edit</string>
     <string name="common_remove">Remove</string>
     <string name="common_copied">Copied: %1$s</string>
+    <string name="common_decrease">Decrease</string>
+    <string name="common_increase">Increase</string>
+    <string name="common_undo">Undo</string>
     <string name="common_network_unavailable">No network connection. Check your network and try again.</string>
     <string name="search_title">Component Search</string>
     <string name="search_mode_manual">Manual Search</string>
@@ -157,6 +173,9 @@
     <string name="inventory_cell_summary">%1$s: %2$d item types</string>
     <string name="inventory_item_quantity">Quantity: %1$s</string>
     <string name="inventory_quantity_label">Quantity</string>
+    <string name="inventory_source_label">Material Source</string>
+    <string name="inventory_open_source">Open source link</string>
+    <string name="inventory_open_source_failed">Unable to open source link</string>
     <string name="inventory_location_code">Location Code</string>
     <string name="inventory_location_code_hint">For example A1 or C3. The format is fixed to one letter + one digit.</string>
     <string name="inventory_location_name">Location Name</string>
@@ -244,6 +263,9 @@
     <string name="search_bom_direct_inbound_invalid_input">Enter a valid quantity and choose a location.</string>
     <string name="inbound_pick_location">Select Location</string>
     <string name="printer_title">Printer</string>
+    <string name="printer_type_title">Printer Type</string>
+    <string name="printer_type_auto">auto</string>
+    <string name="printer_type_deli_q5">Deli Q5</string>
     <string name="printer_connection_title">Connection Status</string>
     <string name="printer_status_idle">No printer connected.</string>
     <string name="printer_status_connecting">Connecting to %1$s…</string>
@@ -259,6 +281,7 @@
     <string name="printer_refresh">Refresh</string>
     <string name="printer_bonded_devices">Bonded Devices</string>
     <string name="printer_no_bonded_devices">No bonded device was found. Pair the printer in system Bluetooth settings first.</string>
+    <string name="printer_no_matching_devices">No bonded device matches the current printer type.</string>
     <string name="printer_unknown_device">Unknown Device</string>
     <string name="printer_connect_address_required">Select a printer before connecting.</string>
     <string name="printer_not_connected">Printer not connected. Connect a printer on the Printer page first.</string>

@@ -284,6 +284,16 @@ class SearchViewModel(
         }
     }
 
+    fun updateInventoryItemSource(
+        inventoryItemId: Long,
+        sourceUrl: String?,
+        onCompleted: (String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            onCompleted(inventoryRepository.updateInventoryItemSource(inventoryItemId, sourceUrl))
+        }
+    }
+
     fun transferInventoryItem(
         inventoryItemId: Long,
         targetLocationCode: String,
@@ -370,6 +380,7 @@ class SearchViewModel(
                     packageName = first.packageName,
                     category = first.category,
                     description = first.description,
+                    sourceUrl = first.sourceUrl,
                     specifications = first.specifications,
                     imageLocalPath = first.imageLocalPath,
                     totalQuantity = group.sumOf { it.quantity },

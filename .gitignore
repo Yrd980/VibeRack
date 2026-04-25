@@ -8,6 +8,7 @@
 /.idea/deploymentTargetSelector.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.kotlin
 .DS_Store
 /build
 /captures
@@ -21,3 +22,10 @@ local.properties
 *.p12
 *.pem
 *.der
+
+docs/update/
+h5/
+uni-appX/
+.backup/
+
+

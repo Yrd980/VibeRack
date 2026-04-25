@@ -22,6 +22,7 @@ import com.example.lcsc_android_erp.domain.model.StockLocationCell
 import com.example.lcsc_android_erp.domain.model.StorageLocation
 import com.example.lcsc_android_erp.domain.model.StorageLocationSortMode
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
+import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
@@ -34,7 +35,8 @@ class InventoryRepositoryImpl(
     private val storageLocationDao: StorageLocationDao,
     private val inventoryItemDao: InventoryItemDao,
     private val inventoryTransactionDao: InventoryTransactionDao,
-    private val componentEnrichmentManager: ComponentEnrichmentManager
+    private val componentEnrichmentManager: ComponentEnrichmentManager,
+    private val componentImageStore: ComponentImageStore
 ) : InventoryRepository {
     private companion object {
         private val LOCATION_CODE_REGEX = Regex("^[A-Z][1-9]$")
@@ -97,6 +99,7 @@ class InventoryRepositoryImpl(
                     packageName = item.packageName,
                     category = item.category,
                     description = item.description,
+                    sourceUrl = item.sourceUrl,
                     specifications = parseSpecifications(item.specJson),
                     imageLocalPath = item.imageLocalPath,
                     imageUrl = null,
@@ -120,6 +123,7 @@ class InventoryRepositoryImpl(
                     packageName = item.packageName,
                     category = item.category,
                     description = item.description,
+                    sourceUrl = item.sourceUrl,
                     specifications = parseSpecifications(item.specJson),
                     imageLocalPath = item.imageLocalPath,
                     quantity = item.quantity,
@@ -140,6 +144,25 @@ class InventoryRepositoryImpl(
                 quantity = item.quantity
             )
         }
+    }
+
+    override suspend fun getNextManualInboundPartNumber(): String {
+        val usedIndexes = buildSet {
+            inventoryTransactionDao.getManualInboundSourceRefs()
+                .asSequence()
+                .mapNotNull(::parseManualInboundIndex)
+                .forEach(::add)
+            componentDao.getManualInboundPartNumbers()
+                .asSequence()
+                .mapNotNull(::parseManualInboundIndex)
+                .forEach(::add)
+        }
+
+        var nextIndex = 1
+        while (nextIndex in usedIndexes) {
+            nextIndex += 1
+        }
+        return "C${nextIndex.toString().padStart(2, '0')}"
     }
 
     override suspend fun bootstrapDefaults() {
@@ -166,10 +189,11 @@ class InventoryRepositoryImpl(
     }
 
     override suspend fun addInbound(record: InboundRecord) {
-        val inboundAt = record.inboundAt
+        val preparedRecord = prepareInboundRecord(record)
+        val inboundAt = preparedRecord.inboundAt
         database.withTransaction {
-            val location = findOrCreateLocation(record.locationCode)
-            val componentId = upsertComponent(record)
+            val location = findOrCreateLocation(preparedRecord.locationCode)
+            val componentId = upsertComponent(preparedRecord)
             val existingItem = inventoryItemDao.findByComponentAndLocation(componentId, location.id)
 
             if (existingItem == null) {
@@ -197,15 +221,15 @@ class InventoryRepositoryImpl(
                     componentId = componentId,
                     locationId = location.id,
                     txnType = "INBOUND",
-                    quantityDelta = record.quantity,
-                    sourceType = record.sourceType,
-                    sourceRef = record.component.partNumber,
-                    rawPayload = record.rawPayload,
+                    quantityDelta = preparedRecord.quantity,
+                    sourceType = preparedRecord.sourceType,
+                    sourceRef = preparedRecord.component.partNumber,
+                    rawPayload = preparedRecord.rawPayload,
                     createdAt = inboundAt
                 )
             )
         }
-        componentEnrichmentManager.schedule(record.component.partNumber)
+        componentEnrichmentManager.schedule(preparedRecord.component.partNumber)
     }
 
     override suspend fun updateLocation(
@@ -312,6 +336,26 @@ class InventoryRepositoryImpl(
         }
     }
 
+    override suspend fun updateInventoryItemSource(inventoryItemId: Long, sourceUrl: String?): String? {
+        return database.withTransaction<String?> {
+            val item = inventoryItemDao.findById(inventoryItemId)
+                ?: return@withTransaction context.getString(R.string.inventory_error_item_not_found)
+            val component = componentDao.findById(item.componentId)
+                ?: return@withTransaction context.getString(R.string.inventory_error_item_not_found)
+            val normalizedSourceUrl = sourceUrl?.trim()?.takeIf { it.isNotEmpty() }
+            if (component.sourceUrl == normalizedSourceUrl) {
+                return@withTransaction null
+            }
+            componentDao.update(
+                component.copy(
+                    sourceUrl = normalizedSourceUrl,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+            null
+        }
+    }
+
     override suspend fun transferInventoryItem(inventoryItemId: Long, targetLocationCode: String): String? {
         val normalizedCode = targetLocationCode.trim().uppercase()
         if (normalizedCode.isBlank()) {
@@ -411,15 +455,45 @@ class InventoryRepositoryImpl(
             )
     }
 
+    private suspend fun prepareInboundRecord(record: InboundRecord): InboundRecord {
+        val existingLocalPath = record.component.imageLocalPath
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.takeIf { path ->
+                runCatching { File(path).exists() && File(path).length() > 0L }.getOrDefault(false)
+            }
+        if (existingLocalPath != null) {
+            return record
+        }
+        val persistedLocalPath = componentImageStore.persistImage(
+            partNumber = record.component.partNumber,
+            imageUrl = record.component.imageUrl
+        ) ?: return record
+        return record.copy(
+            component = record.component.copy(
+                imageLocalPath = persistedLocalPath
+            )
+        )
+    }
+
     private suspend fun upsertComponent(record: InboundRecord): Long {
         val normalizedPartNumber = record.component.partNumber.trim().uppercase()
         val existing = componentDao.findByPartNumber(normalizedPartNumber)
+        val specJson = record.component.specifications
+            .takeIf { it.isNotEmpty() }
+            ?.let { JSONObject(it).toString() }
         if (existing != null) {
             val updated = existing.copy(
                 partNumber = normalizedPartNumber,
+                mpn = existing.mpn ?: record.component.mpn,
+                name = existing.name ?: record.component.name,
                 brand = existing.brand ?: record.component.brand,
                 packageName = existing.packageName ?: record.component.packageName,
                 category = existing.category ?: record.component.category,
+                specJson = existing.specJson ?: specJson,
+                description = existing.description ?: record.component.description,
+                sourceUrl = existing.sourceUrl ?: record.component.productUrl,
+                imageLocalPath = existing.imageLocalPath ?: record.component.imageLocalPath,
                 updatedAt = System.currentTimeMillis()
             )
             if (updated != existing) {
@@ -430,9 +504,15 @@ class InventoryRepositoryImpl(
 
         val componentEntity = ComponentEntity(
             partNumber = normalizedPartNumber,
+            mpn = record.component.mpn,
+            name = record.component.name,
             brand = record.component.brand,
             packageName = record.component.packageName,
-            category = record.component.category
+            category = record.component.category,
+            specJson = specJson,
+            description = record.component.description,
+            sourceUrl = record.component.productUrl,
+            imageLocalPath = record.component.imageLocalPath
         )
 
         val insertId = componentDao.insert(componentEntity)
@@ -458,4 +538,13 @@ class InventoryRepositoryImpl(
             }
         }.getOrDefault(emptyMap())
     }
+}
+
+private fun parseManualInboundIndex(partNumber: String?): Int? {
+    return partNumber
+        ?.trim()
+        ?.uppercase()
+        ?.takeIf { it.matches(Regex("^C\\d+$")) }
+        ?.removePrefix("C")
+        ?.toIntOrNull()
 }

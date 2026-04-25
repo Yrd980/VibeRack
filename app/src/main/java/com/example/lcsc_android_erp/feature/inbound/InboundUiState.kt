@@ -6,6 +6,7 @@ import com.example.lcsc_android_erp.domain.model.StorageLocation
 
 data class InboundUiState(
     val defaultLocationCode: String? = null,
+    val nextManualInboundPartNumber: String = "C01",
     val locations: List<StorageLocation> = emptyList(),
     val recentManualSearches: List<String> = emptyList(),
     val manualSearchResults: List<ComponentDetail> = emptyList(),

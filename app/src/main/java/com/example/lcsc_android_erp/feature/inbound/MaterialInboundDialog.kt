@@ -12,17 +12,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -46,12 +48,20 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Edit
 import coil3.compose.AsyncImage
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.ui.LocationPickerDialog
 import com.example.lcsc_android_erp.core.ui.LocationPickerOption
+import com.example.lcsc_android_erp.core.ui.QuantityOutlinedTextField
 import com.example.lcsc_android_erp.core.ui.performCopyFeedback
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
 import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
@@ -69,6 +79,8 @@ fun MaterialInboundDialog(
     quantityEditable: Boolean,
     quantityLabel: String,
     onQuantityChange: (String) -> Unit,
+    quantityShowUndo: Boolean = false,
+    onQuantityUndo: (() -> Unit)? = null,
     selectedLocationCode: String,
     availableLocations: List<StorageLocation>,
     onLocationSelected: (String) -> Unit,
@@ -78,6 +90,7 @@ fun MaterialInboundDialog(
     confirmText: String,
     locationPickerEnabled: Boolean = true,
     selectedLocationLabelOverride: String? = null,
+    onEdit: (() -> Unit)? = null,
     leadingActionText: String? = null,
     onLeadingAction: (() -> Unit)? = null,
     onViewExistingStock: (() -> Unit)? = null
@@ -91,105 +104,186 @@ fun MaterialInboundDialog(
             materialInboundFormatLocationLabel(it.code, it.displayName)
         }
         ?: selectedLocationCode
+    val actionTextStyle = MaterialTheme.typography.labelLarge.copy(lineHeight = 16.sp)
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(),
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        title = { Text(text = title) },
-        text = {
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 560.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                when {
-                    isLoading -> {
-                        Card {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.height(20.dp))
-                                Text(text = loadingText)
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    when {
+                        isLoading -> {
+                            Card {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.height(20.dp))
+                                    Text(text = loadingText)
+                                }
                             }
                         }
-                    }
 
-                    else -> {
-                        errorMessage?.let { MaterialInboundMessageCard(text = it) }
-                        component?.let { currentComponent ->
-                            existingStockLocations
-                                .takeIf { it.isNotEmpty() }
-                                ?.let {
-                                    ExistingStockReminderCard(
-                                        existingStockLocations = it,
-                                        onViewItem = onViewExistingStock
+                        else -> {
+                            errorMessage?.let { MaterialInboundMessageCard(text = it) }
+                            component?.let { currentComponent ->
+                                existingStockLocations
+                                    .takeIf { it.isNotEmpty() }
+                                    ?.let {
+                                        ExistingStockReminderCard(
+                                            existingStockLocations = it,
+                                            onViewItem = onViewExistingStock
+                                        )
+                                    }
+                                MaterialInboundComponentDetail(component = currentComponent)
+                                if (quantityEditable) {
+                                    QuantityOutlinedTextField(
+                                        value = quantityText,
+                                        onValueChange = onQuantityChange,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = quantityLabel,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        onDecrease = {
+                                            val current = quantityText.toIntOrNull() ?: 0
+                                            onQuantityChange((current - 1).coerceAtLeast(0).toString())
+                                        },
+                                        decreaseContentDescription = stringResource(R.string.common_decrease),
+                                        onIncrease = {
+                                            val current = quantityText.toIntOrNull()
+                                            onQuantityChange(((current ?: 0) + 1).toString())
+                                        },
+                                        increaseContentDescription = stringResource(R.string.common_increase),
+                                        showUndo = quantityShowUndo,
+                                        onUndo = onQuantityUndo,
+                                        undoContentDescription = stringResource(R.string.common_undo)
+                                    )
+                                } else {
+                                    OutlinedTextField(
+                                        value = quantityText,
+                                        onValueChange = {},
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text(text = quantityLabel) },
+                                        readOnly = true
                                     )
                                 }
-                            MaterialInboundComponentDetail(component = currentComponent)
-                            if (quantityEditable) {
-                                OutlinedTextField(
-                                    value = quantityText,
-                                    onValueChange = onQuantityChange,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = { Text(text = quantityLabel) },
-                                    singleLine = true
-                                )
-                            } else {
-                                OutlinedTextField(
-                                    value = quantityText,
-                                    onValueChange = {},
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = { Text(text = quantityLabel) },
-                                    readOnly = true
-                                )
                             }
                         }
                     }
                 }
-            }
-        },
-        dismissButton = {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (selectedLocationLabel.isNotBlank()) {
-                    TextButton(
-                        onClick = {
-                            pendingLocationCode = selectedLocationCode
-                            showLocationPicker = true
-                        },
-                        enabled = locationPickerEnabled && availableLocations.isNotEmpty() && component != null && !isLoading
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    if (onEdit != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .size(40.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable(
+                                    enabled = component != null && !isLoading,
+                                    onClick = onEdit
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = stringResource(R.string.common_edit)
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = selectedLocationLabel)
+                        if (selectedLocationLabel.isNotBlank()) {
+                            TextButton(
+                                onClick = {
+                                    pendingLocationCode = selectedLocationCode
+                                    showLocationPicker = true
+                                },
+                                enabled = locationPickerEnabled && availableLocations.isNotEmpty() && component != null && !isLoading
+                            ) {
+                                Text(
+                                    text = selectedLocationLabel,
+                                    style = actionTextStyle
+                                )
+                            }
+                        }
+                        if (!leadingActionText.isNullOrBlank() && onLeadingAction != null) {
+                            TextButton(onClick = onLeadingAction) {
+                                Text(
+                                    text = leadingActionText,
+                                    style = actionTextStyle
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable(onClick = onDismiss),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = stringResource(R.string.common_cancel)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(
+                                    color = if (confirmEnabled && !isLoading && component != null) {
+                                        Color(0xFF2E7D32)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                )
+                                .clickable(
+                                    enabled = confirmEnabled && !isLoading && component != null,
+                                    onClick = onConfirm
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = confirmText,
+                                tint = if (confirmEnabled && !isLoading && component != null) {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
                     }
                 }
-                if (!leadingActionText.isNullOrBlank() && onLeadingAction != null) {
-                    TextButton(
-                        onClick = onLeadingAction
-                    ) {
-                        Text(text = leadingActionText)
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text(text = stringResource(R.string.common_cancel))
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                enabled = confirmEnabled && !isLoading && component != null
-            ) {
-                Text(text = confirmText)
             }
         }
-    )
+    }
 
     if (showLocationPicker) {
         LocationPickerDialog(

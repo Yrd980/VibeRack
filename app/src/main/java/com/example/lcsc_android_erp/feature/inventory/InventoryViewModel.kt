@@ -251,6 +251,16 @@ class InventoryViewModel(
         }
     }
 
+    fun updateInventoryItemSource(
+        inventoryItemId: Long,
+        sourceUrl: String?,
+        onCompleted: (String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            onCompleted(inventoryRepository.updateInventoryItemSource(inventoryItemId, sourceUrl))
+        }
+    }
+
     fun transferInventoryItem(
         inventoryItemId: Long,
         targetLocationCode: String,

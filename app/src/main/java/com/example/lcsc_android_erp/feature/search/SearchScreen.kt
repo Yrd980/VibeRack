@@ -101,6 +101,7 @@ fun SearchRoute(
         onLookupBomDirectInbound = viewModel::lookupBomDirectInbound,
         onAddBomInbound = viewModel::addBomInbound,
         onUpdateInventoryItemQuantity = viewModel::updateInventoryItemQuantity,
+        onUpdateInventoryItemSource = viewModel::updateInventoryItemSource,
         onTransferInventoryItem = viewModel::transferInventoryItem,
         onDeleteInventoryItem = viewModel::deleteInventoryItem,
         onBomImportStarted = viewModel::startBomImport,
@@ -124,6 +125,7 @@ fun SearchScreen(
     onLookupBomDirectInbound: (String, (BomDirectInboundLookupResult) -> Unit) -> Unit,
     onAddBomInbound: (ComponentDetail, Int, String, (String?) -> Unit) -> Unit,
     onUpdateInventoryItemQuantity: (Long, Int, (String?) -> Unit) -> Unit,
+    onUpdateInventoryItemSource: (Long, String?, (String?) -> Unit) -> Unit,
     onTransferInventoryItem: (Long, String, (String?) -> Unit) -> Unit,
     onDeleteInventoryItem: (Long, (String?) -> Unit) -> Unit,
     onBomImportStarted: () -> Unit,
@@ -406,6 +408,7 @@ fun SearchScreen(
             currentLocation = record.toStockLocationCell(),
             availableLocations = uiState.locations.map(StorageLocation::toStockLocationCell),
             onUpdateQuantity = onUpdateInventoryItemQuantity,
+            onUpdateSource = onUpdateInventoryItemSource,
             onTransfer = onTransferInventoryItem,
             onDelete = onDeleteInventoryItem,
             onDismiss = { selectedSearchRecord = null }
@@ -560,7 +563,8 @@ private fun BomDirectInboundDialog(
     val context = LocalContext.current
     var lookupResult by remember(entry) { mutableStateOf(BomDirectInboundLookupResult()) }
     var isLoading by remember(entry) { mutableStateOf(true) }
-    var quantityText by remember(entry) { mutableStateOf(entry.quantity?.toString() ?: "0") }
+    val initialQuantityText = remember(entry) { entry.quantity?.toString() ?: "0" }
+    var quantityText by remember(entry) { mutableStateOf(initialQuantityText) }
     var selectedLocationCode by remember(entry, locations, defaultLocationCode) {
         mutableStateOf(
             defaultLocationCode
@@ -593,6 +597,8 @@ private fun BomDirectInboundDialog(
         quantityEditable = true,
         quantityLabel = stringResource(R.string.search_bom_direct_inbound_quantity),
         onQuantityChange = { quantityText = it.filter(Char::isDigit) },
+        quantityShowUndo = quantityText != initialQuantityText,
+        onQuantityUndo = { quantityText = initialQuantityText },
         selectedLocationCode = selectedLocationCode,
         availableLocations = locations,
         onLocationSelected = { selectedLocationCode = it },
@@ -732,6 +738,7 @@ private fun BomBindingCandidateCard(
             ?: result.partNumber,
         subtitle = listOfNotNull(result.brand, result.packageName, result.category).joinToString(" · "),
         secondarySummary = secondarySummary,
+        sourceText = result.sourceUrl,
         imageModel = imageModel,
         imageContentDescription = result.name ?: result.partNumber,
         placeholderText = result.partNumber,
@@ -833,6 +840,7 @@ private fun SearchResultCard(
             ?: item.partNumber,
         subtitle = listOfNotNull(item.brand, item.packageName, item.category).joinToString(" · "),
         secondarySummary = secondarySummary,
+        sourceText = item.sourceUrl,
         imageModel = imageModel,
         imageContentDescription = item.name ?: item.partNumber,
         placeholderText = item.partNumber,
@@ -1025,6 +1033,7 @@ private fun SearchInventoryRecord.toLocationInventoryItem(): LocationInventoryIt
         packageName = packageName,
         category = category,
         description = description,
+        sourceUrl = sourceUrl,
         specifications = specifications,
         imageLocalPath = imageLocalPath,
         imageUrl = null,

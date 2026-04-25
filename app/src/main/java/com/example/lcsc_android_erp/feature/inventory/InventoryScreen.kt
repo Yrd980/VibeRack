@@ -77,6 +77,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -155,6 +156,7 @@ fun InventoryRoute(
         onLookupScannedComponent = viewModel::lookupScannedComponent,
         onAddScannedInbound = viewModel::addScannedInbound,
         onUpdateInventoryItemQuantity = viewModel::updateInventoryItemQuantity,
+        onUpdateInventoryItemSource = viewModel::updateInventoryItemSource,
         onTransferInventoryItem = viewModel::transferInventoryItem,
         onDeleteInventoryItem = viewModel::deleteInventoryItem,
         onTransferInventoryItems = viewModel::transferInventoryItems,
@@ -181,6 +183,7 @@ fun InventoryScreen(
     onLookupScannedComponent: (String, (InventoryScanLookupResult) -> Unit) -> Unit,
     onAddScannedInbound: (ComponentDetail, Int, String, String?, () -> Unit) -> Unit,
     onUpdateInventoryItemQuantity: (Long, Int, (String?) -> Unit) -> Unit,
+    onUpdateInventoryItemSource: (Long, String?, (String?) -> Unit) -> Unit,
     onTransferInventoryItem: (Long, String, (String?) -> Unit) -> Unit,
     onDeleteInventoryItem: (Long, (String?) -> Unit) -> Unit,
     onTransferInventoryItems: (List<Long>, String, (String?) -> Unit) -> Unit,
@@ -286,6 +289,7 @@ fun InventoryScreen(
                 onLookupScannedComponent = onLookupScannedComponent,
                 onAddScannedInbound = onAddScannedInbound,
                 onUpdateInventoryItemQuantity = onUpdateInventoryItemQuantity,
+                onUpdateInventoryItemSource = onUpdateInventoryItemSource,
                 onTransferInventoryItem = onTransferInventoryItem,
                 onDeleteInventoryItem = onDeleteInventoryItem,
                 onTransferInventoryItems = onTransferInventoryItems,
@@ -565,6 +569,7 @@ private fun InventoryLocationDetailScreen(
     onLookupScannedComponent: (String, (InventoryScanLookupResult) -> Unit) -> Unit,
     onAddScannedInbound: (ComponentDetail, Int, String, String?, () -> Unit) -> Unit,
     onUpdateInventoryItemQuantity: (Long, Int, (String?) -> Unit) -> Unit,
+    onUpdateInventoryItemSource: (Long, String?, (String?) -> Unit) -> Unit,
     onTransferInventoryItem: (Long, String, (String?) -> Unit) -> Unit,
     onDeleteInventoryItem: (Long, (String?) -> Unit) -> Unit,
     onTransferInventoryItems: (List<Long>, String, (String?) -> Unit) -> Unit,
@@ -899,6 +904,7 @@ private fun InventoryLocationDetailScreen(
             currentLocation = cell,
             availableLocations = uiState.cells,
             onUpdateQuantity = onUpdateInventoryItemQuantity,
+            onUpdateSource = onUpdateInventoryItemSource,
             onTransfer = onTransferInventoryItem,
             onDelete = onDeleteInventoryItem,
             onDismiss = { selectedItem = null }
@@ -1154,13 +1160,14 @@ private fun LocationScanAddDialog(
     var lookupInProgress by remember { mutableStateOf(false) }
     var scanErrorMessage by remember { mutableStateOf<String?>(null) }
     var scanResult by remember { mutableStateOf<InventoryScanLookupResult?>(null) }
+    val initialQuantityText = remember(scanResult?.rawPayload, scanResult?.quantity) {
+        scanResult?.quantity
+            ?.takeIf { it > 0 }
+            ?.toString()
+            .orEmpty()
+    }
     var quantityText by remember(scanResult?.rawPayload, scanResult?.quantity) {
-        mutableStateOf(
-            scanResult?.quantity
-                ?.takeIf { it > 0 }
-                ?.toString()
-                .orEmpty()
-        )
+        mutableStateOf(initialQuantityText)
     }
 
     if (lookupInProgress || scanResult != null || scanErrorMessage != null) {
@@ -1175,6 +1182,8 @@ private fun LocationScanAddDialog(
             quantityEditable = true,
             quantityLabel = stringResource(R.string.inbound_quantity_label),
             onQuantityChange = { quantityText = it.filter(Char::isDigit) },
+            quantityShowUndo = quantityText != initialQuantityText,
+            onQuantityUndo = { quantityText = initialQuantityText },
             selectedLocationCode = locationCode,
             availableLocations = emptyList(),
             onLocationSelected = {},
@@ -1710,6 +1719,7 @@ private fun LocationInventoryItemCard(
         ?.takeIf { it.exists() && it.length() > 0L }
         ?: item.imageUrl?.takeIf { it.isNotBlank() }
     val secondarySummary = locationItemSecondarySummary(item)
+    val hasTaobaoSource = remember(item.sourceUrl) { inventoryCardHasTaobaoSource(item.sourceUrl) }
 
     Card(
         border = if (selected) {
@@ -1728,29 +1738,41 @@ private fun LocationInventoryItemCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (imageModel != null) {
-                    AsyncImage(
-                        model = imageModel,
-                        contentDescription = item.name,
-                        modifier = Modifier
-                            .size(84.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(84.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "x${displayQuantity(item.quantity)}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center
+                Box {
+                    if (imageModel != null) {
+                        AsyncImage(
+                            model = imageModel,
+                            contentDescription = item.name,
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "x${displayQuantity(item.quantity)}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    if (hasTaobaoSource) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .offset { IntOffset(x = -4.dp.roundToPx(), y = -4.dp.roundToPx()) }
+                                .size(14.dp)
+                                .clip(MaterialTheme.shapes.extraLarge)
+                                .background(Color(0xFFFF6A00))
                         )
                     }
                 }
@@ -1784,6 +1806,11 @@ private fun LocationInventoryItemCard(
             }
         }
     }
+}
+
+private fun inventoryCardHasTaobaoSource(sourceText: String?): Boolean {
+    val normalized = sourceText?.trim()?.lowercase().orEmpty()
+    return !normalized.startsWith("https://item.szlcsc.com")
 }
 
 private fun supportedSortAttributes(

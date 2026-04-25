@@ -19,6 +19,16 @@ interface InventoryTransactionDao {
 
     @Query(
         """
+        SELECT source_ref FROM inventory_txn
+        WHERE source_type = 'MANUAL_INPUT'
+          AND source_ref GLOB 'C[0-9][0-9]*'
+        ORDER BY id ASC
+        """
+    )
+    suspend fun getManualInboundSourceRefs(): List<String>
+
+    @Query(
+        """
         DELETE FROM inventory_txn
         WHERE location_id = :locationId
         """

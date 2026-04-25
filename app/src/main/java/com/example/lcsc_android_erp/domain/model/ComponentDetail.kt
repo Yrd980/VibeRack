@@ -12,6 +12,7 @@ data class ComponentDetail(
     val price: Double?,
     val productUrl: String?,
     val datasheetUrl: String?,
+    val imageLocalPath: String? = null,
     val imageUrl: String?,
     val specifications: Map<String, String>
 )

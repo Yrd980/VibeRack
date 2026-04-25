@@ -101,9 +101,9 @@ object LocationLabelExporter {
         }
         val codePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#111827")
-            textSize = 520f
+            textSize = 460f
             textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         }
         val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#111827")
@@ -164,9 +164,19 @@ object LocationLabelExporter {
             22f,
             mediaBackgroundPaint
         )
+        val codeText = cell.code.trim().ifBlank { "-" }
+        val codeInset = 36f
+        codePaint.textSize = fitSingleLineTextSize(
+            paint = codePaint,
+            text = codeText,
+            maxWidth = (mediaSize - codeInset * 2f).coerceAtLeast(1f),
+            maxHeight = (mediaSize - codeInset * 2f).coerceAtLeast(1f),
+            minSize = 120f,
+            maxSize = 460f
+        )
         val codeBaseline = mediaTop + mediaSize / 2f - (codePaint.descent() + codePaint.ascent()) / 2f
         canvas.drawText(
-            cell.code,
+            codeText,
             mediaLeft + mediaSize / 2f,
             codeBaseline,
             codePaint
@@ -211,5 +221,35 @@ object LocationLabelExporter {
         layout.draw(canvas)
         canvas.restore()
         return layout.height.toFloat()
+    }
+
+    private fun fitSingleLineTextSize(
+        paint: TextPaint,
+        text: String,
+        maxWidth: Float,
+        maxHeight: Float,
+        minSize: Float,
+        maxSize: Float
+    ): Float {
+        if (text.isBlank()) {
+            return minSize
+        }
+
+        var low = minSize
+        var high = maxSize
+        var best = minSize
+        repeat(24) {
+            val mid = (low + high) / 2f
+            paint.textSize = mid
+            val width = paint.measureText(text)
+            val height = paint.fontMetrics.let { it.descent - it.ascent }
+            if (width <= maxWidth && height <= maxHeight) {
+                best = mid
+                low = mid
+            } else {
+                high = mid
+            }
+        }
+        return best
     }
 }

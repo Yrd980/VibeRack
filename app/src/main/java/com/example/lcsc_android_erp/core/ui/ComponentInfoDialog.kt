@@ -69,6 +69,7 @@ fun ComponentInfoDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 640.dp)
+                    .clearFocusOnTapOutside()
                     .verticalScroll(dialogScrollState),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

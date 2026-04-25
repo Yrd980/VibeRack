@@ -68,7 +68,8 @@ class AppContainer(context: Context) {
         storageLocationDao = database.storageLocationDao(),
         inventoryItemDao = database.inventoryItemDao(),
         inventoryTransactionDao = database.inventoryTransactionDao(),
-        componentEnrichmentManager = componentEnrichmentManager
+        componentEnrichmentManager = componentEnrichmentManager,
+        componentImageStore = componentImageStore
     )
 
     val inventoryBackupManager = InventoryBackupManager(

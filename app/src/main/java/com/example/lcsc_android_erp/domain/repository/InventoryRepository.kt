@@ -16,6 +16,7 @@ interface InventoryRepository {
     fun observeLocationInventory(locationId: Long): Flow<List<LocationInventoryItem>>
     fun observeSearchInventoryRecords(): Flow<List<SearchInventoryRecord>>
     suspend fun findExistingStockLocations(partNumber: String): List<ExistingStockLocation>
+    suspend fun getNextManualInboundPartNumber(): String
     suspend fun bootstrapDefaults()
     suspend fun addInbound(record: InboundRecord)
     suspend fun addStorageLocation(code: String, displayName: String?, colorHex: String?): Boolean
@@ -23,6 +24,7 @@ interface InventoryRepository {
     suspend fun deleteLocation(locationId: Long): String?
     suspend fun forceDeleteLocation(locationId: Long): String?
     suspend fun updateInventoryItemQuantity(inventoryItemId: Long, quantity: Int): String?
+    suspend fun updateInventoryItemSource(inventoryItemId: Long, sourceUrl: String?): String?
     suspend fun transferInventoryItem(inventoryItemId: Long, targetLocationCode: String): String?
     suspend fun deleteInventoryItem(inventoryItemId: Long): String?
 }

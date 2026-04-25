@@ -10,6 +10,7 @@ data class LocationInventoryItem(
     val packageName: String?,
     val category: String?,
     val description: String? = null,
+    val sourceUrl: String? = null,
     val specifications: Map<String, String> = emptyMap(),
     val imageLocalPath: String? = null,
     val imageUrl: String? = null,

@@ -1,14 +1,19 @@
 package com.example.lcsc_android_erp.feature.inventory
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,12 +30,15 @@ import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.ui.ComponentInfoDialog
 import com.example.lcsc_android_erp.core.ui.LocationPickerDialog
 import com.example.lcsc_android_erp.core.ui.LocationPickerOption
+import com.example.lcsc_android_erp.core.ui.QuantityOutlinedTextField
+import com.example.lcsc_android_erp.core.ui.SourceOutlinedTextField
 import com.example.lcsc_android_erp.domain.model.LocationInventoryItem
 import com.example.lcsc_android_erp.domain.model.StockLocationCell
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.core.net.toUri
 
 @Composable
 fun InventoryItemManageDialog(
@@ -38,17 +46,21 @@ fun InventoryItemManageDialog(
     currentLocation: StockLocationCell,
     availableLocations: List<StockLocationCell>,
     onUpdateQuantity: (Long, Int, (String?) -> Unit) -> Unit,
+    onUpdateSource: (Long, String?, (String?) -> Unit) -> Unit,
     onTransfer: (Long, String, (String?) -> Unit) -> Unit,
     onDelete: (Long, (String?) -> Unit) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val originalQuantityText = item.quantity.toString()
+    val originalSourceText = item.sourceUrl.orEmpty()
     val imageModel = item.imageLocalPath
         ?.takeIf { it.isNotBlank() }
         ?.let(::File)
         ?.takeIf { it.exists() && it.length() > 0L }
         ?: item.imageUrl?.takeIf { it.isNotBlank() }
-    var quantityText by remember(item.inventoryItemId) { mutableStateOf(item.quantity.toString()) }
+    var quantityText by remember(item.inventoryItemId) { mutableStateOf(originalQuantityText) }
+    var sourceText by remember(item.inventoryItemId) { mutableStateOf(originalSourceText) }
     var showTransferPicker by remember(item.inventoryItemId) { mutableStateOf(false) }
     var selectedTransferLocationCode by remember(item.inventoryItemId, currentLocation.code) {
         mutableStateOf(
@@ -61,6 +73,9 @@ fun InventoryItemManageDialog(
     }
     var actionError by remember(item.inventoryItemId) { mutableStateOf<String?>(null) }
     var isSubmitting by remember(item.inventoryItemId) { mutableStateOf(false) }
+    val quantityChanged = quantityText != originalQuantityText
+    val sourceChanged = sourceText != originalSourceText
+    val openableSourceUrl = remember(sourceText) { extractOpenableSourceUrl(sourceText) }
     val firstPropertyRows = listOf(
         stringResource(R.string.inbound_component_number) to item.partNumber,
         stringResource(R.string.inbound_component_brand) to (item.brand ?: stringResource(R.string.inbound_field_empty)),
@@ -101,7 +116,34 @@ fun InventoryItemManageDialog(
         dismissButtons = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(
-                    onClick = onDismiss,
+                    onClick = {
+                        actionError = null
+                        val quantity = quantityText.toIntOrNull()
+                        val normalizedSourceText = sourceText.trim().takeIf { it.isNotEmpty() }
+                        when {
+                            !quantityChanged && !sourceChanged -> onDismiss()
+                            quantity == null -> {
+                                actionError = context.getString(R.string.inventory_edit_quantity_error)
+                            }
+                            else -> {
+                                isSubmitting = true
+                                onUpdateQuantity(item.inventoryItemId, quantity) { error ->
+                                    if (error != null) {
+                                        isSubmitting = false
+                                        actionError = error
+                                        return@onUpdateQuantity
+                                    }
+                                    onUpdateSource(item.inventoryItemId, normalizedSourceText) { sourceError ->
+                                        isSubmitting = false
+                                        actionError = sourceError
+                                        if (sourceError == null) {
+                                            onDismiss()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     enabled = !isSubmitting
                 ) {
                     Text(text = stringResource(R.string.common_close))
@@ -141,35 +183,68 @@ fun InventoryItemManageDialog(
             }
         }
     ) {
-        OutlinedTextField(
+        QuantityOutlinedTextField(
             value = quantityText,
-            onValueChange = { quantityText = it.filter(Char::isDigit) },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(text = stringResource(R.string.inventory_edit_quantity)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-        Button(
-            onClick = {
+            onValueChange = {
+                quantityText = it.filter(Char::isDigit)
                 actionError = null
-                val quantity = quantityText.toIntOrNull()
-                if (quantity == null) {
-                    actionError = context.getString(R.string.inventory_edit_quantity_error)
-                    return@Button
-                }
-                isSubmitting = true
-                onUpdateQuantity(item.inventoryItemId, quantity) { error ->
-                    isSubmitting = false
-                    actionError = error
-                    if (error == null) {
-                        onDismiss()
-                    }
-                }
             },
             modifier = Modifier.fillMaxWidth(),
+            label = stringResource(R.string.inventory_edit_quantity),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            onDecrease = {
+                val current = quantityText.toIntOrNull() ?: 0
+                quantityText = (current - 1).coerceAtLeast(0).toString()
+                actionError = null
+            },
+            decreaseContentDescription = stringResource(R.string.common_decrease),
+            onIncrease = {
+                val current = quantityText.toIntOrNull() ?: 0
+                quantityText = (current + 1).toString()
+                actionError = null
+            },
+            increaseContentDescription = stringResource(R.string.common_increase),
+            showUndo = quantityChanged,
+            onUndo = {
+                quantityText = originalQuantityText
+                actionError = null
+            },
+            undoContentDescription = stringResource(R.string.common_undo),
             enabled = !isSubmitting
-        ) {
-            Text(text = stringResource(R.string.inventory_save_quantity))
-        }
+        )
+        SourceOutlinedTextField(
+            value = sourceText,
+            onValueChange = {
+                sourceText = it
+                actionError = null
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = stringResource(R.string.inventory_source_label),
+            showUndo = sourceChanged,
+            onUndo = {
+                sourceText = originalSourceText
+                actionError = null
+            },
+            undoContentDescription = stringResource(R.string.common_undo),
+            onValueBlurTransform = ::normalizeSourceValue,
+            showOpen = openableSourceUrl != null,
+            onOpen = {
+                if (openableSourceUrl == null) {
+                    return@SourceOutlinedTextField
+                }
+                runCatching {
+                    openSourceUrl(context, openableSourceUrl)
+                }.onFailure {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.inventory_open_source_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            openContentDescription = stringResource(R.string.inventory_open_source),
+            enabled = !isSubmitting
+        )
         actionError?.let {
             Text(
                 text = it,
@@ -225,4 +300,33 @@ private fun formatManageDateTime(timestamp: Long): String {
         return "-"
     }
     return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+}
+
+private fun extractOpenableSourceUrl(value: String): String? {
+    val normalized = value.trim()
+    if (normalized.isEmpty()) {
+        return null
+    }
+    val urlRegex = Regex("""(?i)\bhttps?://[^\s"”」】]+""")
+    return urlRegex.find(normalized)?.value?.trim()
+}
+
+private fun normalizeSourceValue(value: String): String {
+    val normalized = value.trim()
+    return extractOpenableSourceUrl(normalized) ?: normalized
+}
+
+private fun openSourceUrl(context: android.content.Context, rawUrl: String) {
+    val normalizedUrl = rawUrl.trim()
+    val browserUri = normalizedUrl.toUri()
+    val intent = Intent(Intent.ACTION_VIEW, browserUri).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val launched = runCatching {
+        context.startActivity(intent)
+    }.isSuccess
+    if (!launched) {
+        throw IllegalStateException("No activity can handle source url: $normalizedUrl")
+    }
 }

@@ -1,8 +1,11 @@
 package com.example.lcsc_android_erp.feature.inbound
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -38,6 +42,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -68,9 +73,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material.icons.Icons
@@ -83,11 +91,19 @@ import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.printer.PrinterConnectionState
 import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
+import com.example.lcsc_android_erp.core.ui.LocationPickerDialog
+import com.example.lcsc_android_erp.core.ui.LocationPickerOption
 import com.example.lcsc_android_erp.core.ui.MaterialListCard
+import com.example.lcsc_android_erp.core.ui.QuantityOutlinedTextField
+import com.example.lcsc_android_erp.core.ui.SourceOutlinedTextField
+import com.example.lcsc_android_erp.core.ui.clearFocusOnTapOutside
 import com.example.lcsc_android_erp.core.ui.performCopyFeedback
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
 import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
 import com.example.lcsc_android_erp.domain.model.StorageLocation
+import java.io.File
+import java.io.FileOutputStream
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 @Composable
@@ -107,7 +123,17 @@ fun InboundRoute(
         onQrScanned = viewModel::onQrScanned,
         onContinueScanning = viewModel::clearScanResult,
         onManualSearch = viewModel::searchManual,
-        onConfirmInbound = viewModel::confirmInbound,
+        onRefreshExistingStock = viewModel::refreshExistingStock,
+        onConfirmInbound = { component, quantity, locationCode, sourceType, rawPayload, onCompleted ->
+            viewModel.confirmInbound(
+                component = component,
+                quantity = quantity,
+                locationCode = locationCode,
+                sourceType = sourceType,
+                rawPayload = rawPayload,
+                onCompleted = onCompleted
+            )
+        },
         onViewInventoryItem = onViewInventoryItem,
     )
 }
@@ -119,7 +145,8 @@ fun InboundScreen(
     onQrScanned: (String) -> Unit,
     onContinueScanning: () -> Unit,
     onManualSearch: (String) -> Unit,
-    onConfirmInbound: (ComponentDetail, Int, String, String, String?) -> Unit,
+    onRefreshExistingStock: (String) -> Unit,
+    onConfirmInbound: (ComponentDetail, Int, String, String, String?, (String?) -> Unit) -> Unit,
     onViewInventoryItem: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -142,6 +169,22 @@ fun InboundScreen(
 
     var inboundMode by rememberSaveable { mutableStateOf(InboundMode.Scan) }
     var manualKeyword by rememberSaveable { mutableStateOf("") }
+    var manualName by rememberSaveable { mutableStateOf("") }
+    var manualBrand by rememberSaveable { mutableStateOf("") }
+    var manualPackageName by rememberSaveable { mutableStateOf("") }
+    var manualCategory by rememberSaveable { mutableStateOf("") }
+    var manualQuantityText by rememberSaveable { mutableStateOf("") }
+    var manualDescription by rememberSaveable { mutableStateOf("") }
+    var manualSourceUrl by rememberSaveable { mutableStateOf("") }
+    var manualSourceUrlOriginal by rememberSaveable { mutableStateOf("") }
+    var manualImageLocalPath by rememberSaveable { mutableStateOf("") }
+    var manualImageUrl by rememberSaveable { mutableStateOf("") }
+    var manualSpecLines by rememberSaveable { mutableStateOf("") }
+    var manualSpecEditorVisible by rememberSaveable { mutableStateOf(false) }
+    var manualEntryError by rememberSaveable { mutableStateOf<String?>(null) }
+    var showManualImagePicker by rememberSaveable { mutableStateOf(false) }
+    var showManualLocationPicker by rememberSaveable { mutableStateOf(false) }
+    var manualLocationCode by rememberSaveable { mutableStateOf("") }
     var scannerPaused by rememberSaveable { mutableStateOf(false) }
     var torchEnabled by rememberSaveable { mutableStateOf(false) }
     var torchAvailable by remember { mutableStateOf(false) }
@@ -151,6 +194,126 @@ fun InboundScreen(
     var qrPreviewLoading by remember { mutableStateOf(false) }
     var qrPreviewSaving by remember { mutableStateOf(false) }
     var qrPreviewPrinting by remember { mutableStateOf(false) }
+    val manualPartNumber = uiState.nextManualInboundPartNumber
+    val manualImageCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap == null) {
+            return@rememberLauncherForActivityResult
+        }
+        runCatching {
+            saveManualInboundBitmap(
+                context = context,
+                partNumber = manualPartNumber,
+                bitmap = bitmap
+            )
+        }.onSuccess { path ->
+            manualImageLocalPath = path
+            manualImageUrl = ""
+            manualEntryError = null
+        }.onFailure { error ->
+            Toast.makeText(
+                context,
+                error.message ?: context.getString(R.string.inbound_manual_entry_image_save_failed),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    val manualImageGalleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) {
+            return@rememberLauncherForActivityResult
+        }
+        runCatching {
+            saveManualInboundImageUri(
+                context = context,
+                partNumber = manualPartNumber,
+                uri = uri
+            )
+        }.onSuccess { path ->
+            manualImageLocalPath = path
+            manualImageUrl = ""
+            manualEntryError = null
+        }.onFailure { error ->
+            Toast.makeText(
+                context,
+                error.message ?: context.getString(R.string.inbound_manual_entry_image_save_failed),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    val normalizedManualPartNumber = remember(manualPartNumber) { manualPartNumber.trim().uppercase() }
+    val resolvedManualLocationCode = manualLocationCode.ifBlank {
+        uiState.defaultLocationCode
+            ?: uiState.locations.firstOrNull()?.code
+            ?: "A1"
+    }
+    val resolvedManualLocationLabel = uiState.locations
+        .firstOrNull { it.code == resolvedManualLocationCode }
+        ?.let { location ->
+            location.displayName
+                ?.takeIf { it.isNotBlank() && it != location.code }
+                ?.let { "${location.code}:${it}" }
+                ?: location.code
+        }
+        ?: resolvedManualLocationCode
+    val manualEntryComponent = remember(
+        manualPartNumber,
+        manualName,
+        manualBrand,
+        manualPackageName,
+        manualCategory,
+        manualDescription,
+        manualSourceUrl,
+        manualImageLocalPath,
+        manualImageUrl,
+        manualSpecLines
+    ) {
+        buildManualInboundComponent(
+            partNumber = manualPartNumber,
+            name = manualName,
+            brand = manualBrand,
+            packageName = manualPackageName,
+            category = manualCategory,
+            description = manualDescription,
+            sourceUrl = manualSourceUrl,
+            imageLocalPath = manualImageLocalPath,
+            imageUrl = manualImageUrl,
+            specificationText = manualSpecLines
+        )
+    }
+
+    LaunchedEffect(normalizedManualPartNumber) {
+        if (normalizedManualPartNumber.isNotBlank()) {
+            onRefreshExistingStock(normalizedManualPartNumber)
+        }
+    }
+
+    val openManualInboundEditor: (ComponentDetail) -> Unit = { component ->
+        inboundMode = InboundMode.Manual
+        manualSpecEditorVisible = true
+        manualName = component.name.orEmpty()
+        manualBrand = component.brand.orEmpty()
+        manualPackageName = component.packageName.orEmpty()
+        manualCategory = component.category.orEmpty()
+        manualQuantityText = ""
+        manualDescription = component.description.orEmpty()
+        manualSourceUrl = component.productUrl.orEmpty()
+        manualSourceUrlOriginal = component.productUrl.orEmpty()
+        manualImageLocalPath = component.imageLocalPath.orEmpty()
+        manualImageUrl = component.imageUrl.orEmpty()
+        manualSpecLines = component.specifications.entries.joinToString("\n") { (key, value) ->
+            "$key=$value"
+        }
+        manualLocationCode = suggestInboundLocationCode(
+            category = component.category,
+            existingStockLocations = emptyList(),
+            availableLocations = uiState.locations,
+            fallbackCode = uiState.defaultLocationCode ?: "A1"
+        )
+        manualEntryError = null
+    }
 
     LaunchedEffect(inboundMode) {
         if (inboundMode != InboundMode.Scan) {
@@ -195,15 +358,24 @@ fun InboundScreen(
                 quantityEditable = true,
                 initialLocation = suggestInboundLocationCode(
                     category = component.category,
+                    existingStockLocations = uiState.existingStockByPartNumber[component.partNumber].orEmpty(),
                     availableLocations = uiState.locations,
                     fallbackCode = uiState.defaultLocationCode ?: "A1"
                 ),
                 availableLocations = uiState.locations,
                 rawPayload = payload?.rawText,
                 existingStockLocations = uiState.existingStockByPartNumber[component.partNumber].orEmpty(),
+                onEdit = openManualInboundEditor,
                 onConfirm = { quantity, locationCode ->
-                    onConfirmInbound(component, quantity, locationCode, "QRCODE", payload?.rawText)
-                    onContinueScanning()
+                    onConfirmInbound(
+                        component,
+                        quantity,
+                        locationCode,
+                        "QRCODE",
+                        payload?.rawText
+                    ) {
+                        onContinueScanning()
+                    }
                 },
                 onCancel = {
                     onContinueScanning()
@@ -216,6 +388,24 @@ fun InboundScreen(
         inboundMode = mode
         if (mode != InboundMode.Scan) {
             torchEnabled = false
+        }
+        if (mode == InboundMode.Manual) {
+            manualName = ""
+            manualBrand = ""
+            manualPackageName = ""
+            manualCategory = ""
+            manualSpecEditorVisible = false
+            manualQuantityText = ""
+            manualDescription = ""
+            manualSpecLines = ""
+            manualSourceUrl = ""
+            manualSourceUrlOriginal = ""
+            manualImageLocalPath = ""
+            manualImageUrl = ""
+            manualEntryError = null
+            manualLocationCode = uiState.defaultLocationCode
+                ?: uiState.locations.firstOrNull()?.code
+                ?: "A1"
         }
         dialogState = null
         onContinueScanning()
@@ -279,7 +469,7 @@ fun InboundScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 when (inboundMode) {
-                    InboundMode.Manual -> {
+                    InboundMode.Search -> {
                         item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -363,17 +553,118 @@ fun InboundScreen(
                                     quantityEditable = true,
                                     initialLocation = suggestInboundLocationCode(
                                         category = component.category,
+                                        existingStockLocations = uiState.existingStockByPartNumber[component.partNumber].orEmpty(),
                                         availableLocations = uiState.locations,
                                         fallbackCode = uiState.defaultLocationCode ?: "A1"
                                     ),
                                     availableLocations = uiState.locations,
                                     rawPayload = null,
                                     existingStockLocations = uiState.existingStockByPartNumber[component.partNumber].orEmpty(),
+                                    onEdit = openManualInboundEditor,
                                     onConfirm = { quantity, locationCode ->
-                                            onConfirmInbound(component, quantity, locationCode, "MANUAL", null)
+                                            onConfirmInbound(
+                                                component,
+                                                quantity,
+                                                locationCode,
+                                                "MANUAL",
+                                                null
+                                            ) { }
                                         },
                                         onCancel = {}
                                     )
+                                }
+                            )
+                        }
+                    }
+                    InboundMode.Manual -> {
+                        item {
+                            ManualInboundEditorCard(
+                                component = manualEntryComponent,
+                                partNumber = manualPartNumber,
+                                name = manualName,
+                                onNameChange = {
+                                    manualName = it
+                                    manualEntryError = null
+                                },
+                                brand = manualBrand,
+                                onBrandChange = {
+                                    manualBrand = it
+                                    manualEntryError = null
+                                },
+                                packageName = manualPackageName,
+                                onPackageNameChange = {
+                                    manualPackageName = it
+                                    manualEntryError = null
+                                },
+                                category = manualCategory,
+                                onCategoryChange = {
+                                    manualCategory = it
+                                    manualEntryError = null
+                                },
+                                quantityText = manualQuantityText,
+                                onQuantityTextChange = {
+                                    manualQuantityText = it.filter(Char::isDigit)
+                                    manualEntryError = null
+                                },
+                                description = manualDescription,
+                                onDescriptionChange = {
+                                    manualDescription = it
+                                    manualEntryError = null
+                                },
+                                sourceUrl = manualSourceUrl,
+                                originalSourceUrl = manualSourceUrlOriginal,
+                                onSourceUrlChange = {
+                                    manualSourceUrl = it
+                                    manualEntryError = null
+                                },
+                                onImagePreviewClick = { showManualImagePicker = true },
+                                specificationText = manualSpecLines,
+                                onSpecificationTextChange = {
+                                    manualSpecLines = it
+                                    manualEntryError = null
+                                },
+                                showSpecificationEditor = manualSpecEditorVisible,
+                                errorMessage = manualEntryError,
+                                locationLabel = resolvedManualLocationLabel,
+                                onLocationClick = { showManualLocationPicker = true },
+                                onInboundClick = {
+                                    val confirmedPartNumber = manualEntryComponent.partNumber
+                                    onConfirmInbound(
+                                        manualEntryComponent,
+                                        manualQuantityText.toIntOrNull() ?: 0,
+                                        resolvedManualLocationCode,
+                                        "MANUAL_INPUT",
+                                        null
+                                    ) { errorMessage ->
+                                        manualEntryError = errorMessage
+                                        if (errorMessage != null) {
+                                            return@onConfirmInbound
+                                        }
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(
+                                                R.string.inbound_manual_entry_success,
+                                                confirmedPartNumber
+                                            ),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        manualName = ""
+                                        manualBrand = ""
+                                        manualPackageName = ""
+                                        manualCategory = ""
+                                        manualQuantityText = ""
+                                        manualDescription = ""
+                                        manualSourceUrl = ""
+                                        manualSourceUrlOriginal = ""
+                                        manualImageLocalPath = ""
+                                        manualImageUrl = ""
+                                        manualSpecLines = ""
+                                        manualSpecEditorVisible = false
+                                        manualEntryError = null
+                                        manualLocationCode = uiState.defaultLocationCode
+                                            ?: uiState.locations.firstOrNull()?.code
+                                            ?: "A1"
+                                    }
                                 }
                             )
                         }
@@ -399,6 +690,11 @@ fun InboundScreen(
                 state.onCancel()
                 dialogState = null
                 onViewInventoryItem(locationCode, partNumber)
+            },
+            onEdit = { component ->
+                state.onCancel()
+                dialogState = null
+                (state.onEdit ?: openManualInboundEditor)(component)
             }
         )
     }
@@ -538,6 +834,67 @@ fun InboundScreen(
             }
         )
     }
+
+    if (showManualImagePicker) {
+        AlertDialog(
+            onDismissRequest = { showManualImagePicker = false },
+            title = { Text(text = stringResource(R.string.inbound_manual_entry_pick_image_title)) },
+            text = { Text(text = stringResource(R.string.inbound_manual_entry_pick_image_body)) },
+            dismissButton = {
+                TextButton(onClick = { showManualImagePicker = false }) {
+                    Text(text = stringResource(R.string.common_cancel))
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            showManualImagePicker = false
+                            manualImageCameraLauncher.launch(null)
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.inbound_manual_entry_take_photo))
+                    }
+                    TextButton(
+                        onClick = {
+                            showManualImagePicker = false
+                            manualImageGalleryLauncher.launch("image/*")
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.inbound_manual_entry_pick_gallery))
+                    }
+                }
+            }
+        )
+    }
+
+    if (showManualLocationPicker) {
+        LocationPickerDialog(
+            title = stringResource(R.string.inbound_pick_location),
+            options = uiState.locations.map { location ->
+                LocationPickerOption(
+                    code = location.code,
+                    displayName = location.displayName,
+                    colorHex = location.colorHex
+                )
+            },
+            selectedCode = resolvedManualLocationCode,
+            currentOption = uiState.locations
+                .firstOrNull { it.code == resolvedManualLocationCode }
+                ?.let { location ->
+                    LocationPickerOption(
+                        code = location.code,
+                        displayName = location.displayName,
+                        colorHex = location.colorHex
+                    )
+                },
+            onSelect = { code ->
+                manualLocationCode = code
+                showManualLocationPicker = false
+            },
+            onDismiss = { showManualLocationPicker = false }
+        )
+    }
 }
 
 @Composable
@@ -546,7 +903,7 @@ private fun InboundHeader(
     onModeSelected: (InboundMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val visibleModes = listOf(InboundMode.Manual, InboundMode.Scan)
+    val visibleModes = listOf(InboundMode.Search, InboundMode.Scan, InboundMode.Manual)
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -570,6 +927,7 @@ private fun InboundHeader(
 }
 
 private enum class InboundMode(val titleRes: Int) {
+    Search(R.string.inbound_mode_search),
     Manual(R.string.inbound_mode_manual),
     Scan(R.string.inbound_mode_scan)
 }
@@ -613,6 +971,403 @@ private fun RecentManualSearchesCard(
     }
 }
 
+@Composable
+private fun ManualInboundEditorCard(
+    component: ComponentDetail,
+    partNumber: String,
+    name: String,
+    onNameChange: (String) -> Unit,
+    brand: String,
+    onBrandChange: (String) -> Unit,
+    packageName: String,
+    onPackageNameChange: (String) -> Unit,
+    category: String,
+    onCategoryChange: (String) -> Unit,
+    quantityText: String,
+    onQuantityTextChange: (String) -> Unit,
+    description: String,
+    onDescriptionChange: (String) -> Unit,
+    sourceUrl: String,
+    originalSourceUrl: String,
+    onSourceUrlChange: (String) -> Unit,
+    onImagePreviewClick: () -> Unit,
+    specificationText: String,
+    onSpecificationTextChange: (String) -> Unit,
+    showSpecificationEditor: Boolean,
+    errorMessage: String?,
+    locationLabel: String,
+    onLocationClick: () -> Unit,
+    onInboundClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val openableSourceUrl = remember(sourceUrl) { extractOpenableSourceUrl(sourceUrl) }
+    val sourceChanged = sourceUrl != originalSourceUrl
+    Column(
+        modifier = Modifier.clearFocusOnTapOutside(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Card(
+                modifier = Modifier
+                    .width(168.dp)
+                    .combinedClickable(
+                        onClick = onImagePreviewClick,
+                        onLongClick = onImagePreviewClick
+                    )
+            ) {
+                val imageModel = component.imageLocalPath
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(::File)
+                    ?.takeIf { it.exists() && it.length() > 0L }
+                    ?: component.imageUrl?.takeIf { it.isNotBlank() }
+                if (imageModel != null) {
+                    AsyncImage(
+                        model = imageModel,
+                        contentDescription = component.name ?: component.partNumber,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = component.partNumber.ifBlank { stringResource(R.string.inbound_component_number) },
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = stringResource(R.string.inbound_manual_entry_pick_image_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            ManualInboundEditableFirstPropertyCard(
+                partNumber = partNumber,
+                brand = brand,
+                onBrandChange = onBrandChange,
+                packageName = packageName,
+                onPackageNameChange = onPackageNameChange,
+                category = category,
+                onCategoryChange = onCategoryChange,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(MaterialTheme.shapes.small)
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+        )
+        ManualInboundEditableSecondPropertyCard(
+            name = name,
+            onNameChange = onNameChange,
+            specificationText = specificationText,
+            onSpecificationTextChange = onSpecificationTextChange,
+            showSpecificationEditor = showSpecificationEditor,
+            description = description,
+            onDescriptionChange = onDescriptionChange
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val originalQuantityText = ""
+            QuantityOutlinedTextField(
+                value = quantityText,
+                onValueChange = onQuantityTextChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.inbound_quantity_label),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Next
+                ),
+                onDecrease = {
+                    val current = quantityText.toIntOrNull() ?: 0
+                    onQuantityTextChange((current - 1).coerceAtLeast(0).toString())
+                },
+                decreaseContentDescription = stringResource(R.string.common_decrease),
+                onIncrease = {
+                    val current = quantityText.toIntOrNull()
+                    onQuantityTextChange(((current ?: 0) + 1).toString())
+                },
+                increaseContentDescription = stringResource(R.string.common_increase),
+                showUndo = quantityText != originalQuantityText,
+                onUndo = { onQuantityTextChange(originalQuantityText) },
+                undoContentDescription = stringResource(R.string.common_undo)
+            )
+            SourceOutlinedTextField(
+                value = sourceUrl,
+                onValueChange = onSourceUrlChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.inventory_source_label),
+                singleLine = false,
+                minLines = 2,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Default
+                ),
+                showUndo = sourceChanged,
+                onUndo = { onSourceUrlChange(originalSourceUrl) },
+                undoContentDescription = stringResource(R.string.common_undo),
+                onValueBlurTransform = ::normalizeSourceValue,
+                showOpen = openableSourceUrl != null,
+                onOpen = {
+                    openableSourceUrl ?: return@SourceOutlinedTextField
+                    runCatching {
+                        openSourceUrl(context, openableSourceUrl)
+                    }.onFailure {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.inventory_open_source_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                openContentDescription = stringResource(R.string.inventory_open_source)
+            )
+        }
+        errorMessage?.let { message ->
+            PayloadFieldCard(
+                title = stringResource(R.string.inbound_component_error_title),
+                value = message
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onLocationClick) {
+                Text(text = locationLabel)
+            }
+            Button(onClick = onInboundClick) {
+                Text(text = stringResource(R.string.common_confirm))
+            }
+        }
+    }
+}
+
+private fun normalizeSourceValue(value: String): String {
+    val normalized = value.trim()
+    return extractOpenableSourceUrl(normalized) ?: normalized
+}
+
+@Composable
+private fun ManualInboundEditableFirstPropertyCard(
+    partNumber: String,
+    brand: String,
+    onBrandChange: (String) -> Unit,
+    packageName: String,
+    onPackageNameChange: (String) -> Unit,
+    category: String,
+    onCategoryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            ManualInboundEditableCell(
+                label = stringResource(R.string.inbound_component_number),
+                value = partNumber,
+                onValueChange = {},
+                readOnly = true
+            )
+            HorizontalDivider()
+            ManualInboundEditableCell(
+                label = stringResource(R.string.inbound_component_brand),
+                value = brand,
+                onValueChange = onBrandChange
+            )
+            HorizontalDivider()
+            ManualInboundEditableCell(
+                label = stringResource(R.string.inbound_component_package),
+                value = packageName,
+                onValueChange = onPackageNameChange
+            )
+            HorizontalDivider()
+            ManualInboundEditableCell(
+                label = stringResource(R.string.inbound_component_category),
+                value = category,
+                onValueChange = onCategoryChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManualInboundEditableSecondPropertyCard(
+    name: String,
+    onNameChange: (String) -> Unit,
+    specificationText: String,
+    onSpecificationTextChange: (String) -> Unit,
+    showSpecificationEditor: Boolean,
+    description: String,
+    onDescriptionChange: (String) -> Unit,
+) {
+    val specificationEntries = remember(specificationText) {
+        parseManualSpecificationEntries(specificationText)
+    }
+    Card {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            ManualInboundEditableRow(
+                label = stringResource(R.string.inbound_component_name),
+                value = name,
+                onValueChange = onNameChange
+            )
+            if (showSpecificationEditor) {
+                specificationEntries.forEachIndexed { index, (key, value) ->
+                    HorizontalDivider()
+                    ManualInboundEditableRow(
+                        label = key,
+                        value = value,
+                        onValueChange = { newValue ->
+                            onSpecificationTextChange(
+                                rebuildManualSpecificationText(
+                                    specificationEntries.mapIndexed { entryIndex, entry ->
+                                        if (entryIndex == index) {
+                                            entry.first to newValue
+                                        } else {
+                                            entry
+                                        }
+                                    }
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+            HorizontalDivider()
+            ManualInboundEditableRow(
+                label = stringResource(R.string.inbound_component_description),
+                value = description,
+                onValueChange = onDescriptionChange,
+                singleLine = false,
+                minLines = 3
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManualInboundEditableCell(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    readOnly: Boolean = false
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        ManualInboundEditableText(
+            value = value,
+            onValueChange = onValueChange,
+            readOnly = readOnly
+        )
+    }
+}
+
+@Composable
+private fun ManualInboundEditableRow(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    placeholder: String? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(76.dp)
+        )
+        ManualInboundEditableText(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            singleLine = singleLine,
+            minLines = minLines,
+            placeholder = placeholder
+        )
+    }
+}
+
+@Composable
+private fun ManualInboundEditableText(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    placeholder: String? = null
+) {
+    Box(modifier = modifier) {
+        if (value.isBlank() && !placeholder.isNullOrBlank()) {
+            Text(
+                text = placeholder,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            readOnly = readOnly,
+            singleLine = singleLine,
+            minLines = minLines,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold
+            ),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+                imeAction = if (singleLine) ImeAction.Next else ImeAction.Default
+            )
+        )
+    }
+}
+
 private data class InboundDialogState(
     val title: String,
     val component: ComponentDetail,
@@ -622,9 +1377,211 @@ private data class InboundDialogState(
     val availableLocations: List<StorageLocation>,
     val rawPayload: String?,
     val existingStockLocations: List<ExistingStockLocation>,
+    val onEdit: ((ComponentDetail) -> Unit)? = null,
     val onConfirm: (Int, String) -> Unit,
     val onCancel: () -> Unit
 )
+
+private fun buildManualInboundComponent(
+    partNumber: String,
+    name: String,
+    brand: String,
+    packageName: String,
+    category: String,
+    description: String,
+    sourceUrl: String,
+    imageLocalPath: String,
+    imageUrl: String,
+    specificationText: String
+): ComponentDetail {
+    val normalizedPartNumber = partNumber.trim().uppercase()
+    return ComponentDetail(
+        partNumber = normalizedPartNumber,
+        mpn = null,
+        name = name.trim().ifBlank { null },
+        brand = brand.trim().ifBlank { null },
+        packageName = packageName.trim().ifBlank { null },
+        category = category.trim().ifBlank { null },
+        description = description.trim().ifBlank { null },
+        stockQuantity = null,
+        price = null,
+        productUrl = sourceUrl.trim().ifBlank { null },
+        datasheetUrl = null,
+        imageLocalPath = imageLocalPath.trim().ifBlank { null },
+        imageUrl = imageUrl.trim().ifBlank { null },
+        specifications = parseManualSpecifications(specificationText)
+    )
+}
+
+private fun parseManualSpecifications(rawText: String): Map<String, String> {
+    return parseManualSpecificationEntries(rawText).toMap()
+}
+
+private fun parseManualSpecificationEntries(rawText: String): List<Pair<String, String>> {
+    return rawText
+        .lineSequence()
+        .map(String::trim)
+        .filter { it.isNotEmpty() }
+        .mapNotNull { line ->
+            val separatorIndex = line.indexOfFirst { it == ':' || it == '=' || it == '：' }
+            if (separatorIndex <= 0 || separatorIndex >= line.lastIndex) {
+                return@mapNotNull null
+            }
+            val key = line.substring(0, separatorIndex).trim()
+            val value = line.substring(separatorIndex + 1).trim()
+            if (key.isEmpty() || value.isEmpty()) {
+                null
+            } else {
+                key to value
+            }
+        }
+        .toList()
+}
+
+private fun rebuildManualSpecificationText(entries: List<Pair<String, String>>): String {
+    return entries.joinToString("\n") { (key, value) -> "$key=$value" }
+}
+
+private fun saveManualInboundBitmap(
+    context: android.content.Context,
+    partNumber: String,
+    bitmap: Bitmap
+): String {
+    val imageDir = File(context.filesDir, "manual_inbound_images").apply { mkdirs() }
+    val targetFile = File(imageDir, "${partNumber.trim().uppercase().ifBlank { "MANUAL" }}.jpg")
+    saveBitmapToFile(
+        bitmap = resizeBitmapWithinLimit(bitmap),
+        targetFile = targetFile,
+        format = Bitmap.CompressFormat.JPEG
+    )
+    return targetFile.absolutePath
+}
+
+private fun saveManualInboundImageUri(
+    context: android.content.Context,
+    partNumber: String,
+    uri: Uri
+): String {
+    val imageDir = File(context.filesDir, "manual_inbound_images").apply { mkdirs() }
+    val (extension, format) = when (context.contentResolver.getType(uri)?.lowercase()) {
+        "image/png" -> "png" to Bitmap.CompressFormat.PNG
+        "image/webp" -> "webp" to Bitmap.CompressFormat.WEBP_LOSSY
+        else -> "jpg" to Bitmap.CompressFormat.JPEG
+    }
+    val targetFile = File(imageDir, "${partNumber.trim().uppercase().ifBlank { "MANUAL" }}.$extension")
+    val bitmap = decodeBitmapWithinLimit(context, uri) ?: error("Failed to decode selected image")
+    saveBitmapToFile(
+        bitmap = bitmap,
+        targetFile = targetFile,
+        format = format
+    )
+    return targetFile.absolutePath
+}
+
+private fun decodeBitmapWithinLimit(
+    context: android.content.Context,
+    uri: Uri,
+    maxDimension: Int = 300
+): Bitmap? {
+    val resolver = context.contentResolver
+    val bounds = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    resolver.openInputStream(uri)?.use { inputStream ->
+        BitmapFactory.decodeStream(inputStream, null, bounds)
+    } ?: return null
+
+    val sampledOptions = BitmapFactory.Options().apply {
+        inSampleSize = calculateInSampleSize(
+            width = bounds.outWidth,
+            height = bounds.outHeight,
+            maxDimension = maxDimension
+        )
+    }
+    val decodedBitmap = resolver.openInputStream(uri)?.use { inputStream ->
+        BitmapFactory.decodeStream(inputStream, null, sampledOptions)
+    } ?: return null
+
+    return resizeBitmapWithinLimit(decodedBitmap, maxDimension)
+}
+
+private fun calculateInSampleSize(
+    width: Int,
+    height: Int,
+    maxDimension: Int
+): Int {
+    if (width <= 0 || height <= 0 || (width <= maxDimension && height <= maxDimension)) {
+        return 1
+    }
+    var sampleSize = 1
+    var sampledWidth = width
+    var sampledHeight = height
+    while (sampledWidth > maxDimension || sampledHeight > maxDimension) {
+        sampleSize *= 2
+        sampledWidth = width / sampleSize
+        sampledHeight = height / sampleSize
+    }
+    return sampleSize.coerceAtLeast(1)
+}
+
+private fun resizeBitmapWithinLimit(
+    bitmap: Bitmap,
+    maxDimension: Int = 300
+): Bitmap {
+    val width = bitmap.width
+    val height = bitmap.height
+    if (width <= maxDimension && height <= maxDimension) {
+        return bitmap
+    }
+    val scale = minOf(
+        maxDimension.toFloat() / width.toFloat(),
+        maxDimension.toFloat() / height.toFloat()
+    )
+    val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+    val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+    return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+}
+
+private fun saveBitmapToFile(
+    bitmap: Bitmap,
+    targetFile: File,
+    format: Bitmap.CompressFormat
+) {
+    FileOutputStream(targetFile).use { outputStream ->
+        val quality = when (format) {
+            Bitmap.CompressFormat.PNG -> 100
+            else -> 92
+        }
+        if (!bitmap.compress(format, quality, outputStream)) {
+            error("Failed to compress bitmap")
+        }
+        outputStream.flush()
+    }
+}
+
+private fun extractOpenableSourceUrl(value: String): String? {
+    val normalized = value.trim()
+    if (normalized.isEmpty()) {
+        return null
+    }
+    val urlRegex = Regex("""(?i)\bhttps?://[^\s"”」】]+""")
+    return urlRegex.find(normalized)?.value?.trim()
+}
+
+private fun openSourceUrl(context: android.content.Context, rawUrl: String) {
+    val normalizedUrl = rawUrl.trim()
+    val browserUri = normalizedUrl.toUri()
+    val intent = Intent(Intent.ACTION_VIEW, browserUri).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val launched = runCatching {
+        context.startActivity(intent)
+    }.isSuccess
+    if (!launched) {
+        throw IllegalStateException("No activity can handle source url: $normalizedUrl")
+    }
+}
 
 @Composable
 fun ScannerCard(
@@ -782,9 +1739,16 @@ private val inboundCategoryLocationMappings = listOf(
 
 private fun suggestInboundLocationCode(
     category: String?,
+    existingStockLocations: List<ExistingStockLocation>,
     availableLocations: List<StorageLocation>,
     fallbackCode: String
 ): String {
+    existingStockLocations.firstOrNull { existing ->
+        availableLocations.any { location ->
+            location.code.equals(existing.locationCode, ignoreCase = true)
+        }
+    }?.let { return it.locationCode }
+
     val normalizedCategory = category?.trim().orEmpty()
     if (normalizedCategory.isEmpty()) {
         return fallbackCode
@@ -839,9 +1803,11 @@ private fun ManualSearchResultCard(
         title = component.name ?: component.mpn ?: component.partNumber,
         subtitle = listOfNotNull(component.brand, component.packageName, component.category).joinToString(" · "),
         secondarySummary = secondarySummary,
+        sourceText = component.productUrl,
         imageModel = component.imageUrl?.takeIf { it.isNotBlank() },
         imageContentDescription = component.name ?: component.partNumber,
         placeholderText = component.partNumber,
+        onClick = onInboundClick,
         titleTrailing = {
             if (hasExistingStock) {
                 Text(
@@ -928,20 +1894,20 @@ private fun InboundConfirmDialog(
     state: InboundDialogState,
     onDismiss: () -> Unit,
     onConfirm: (Int, String) -> Unit,
-    onViewExistingStock: (String, String) -> Unit
+    onViewExistingStock: (String, String) -> Unit,
+    onEdit: (ComponentDetail) -> Unit
 ) {
-    var quantityText by remember(state) {
-        mutableStateOf(
-            if (state.quantityEditable) {
-                state.initialQuantity
-                    .takeIf { it > 0 }
-                    ?.toString()
-                    .orEmpty()
-            } else {
-                state.initialQuantity.coerceAtLeast(1).toString()
-            }
-        )
+    val initialQuantityText = remember(state) {
+        if (state.quantityEditable) {
+            state.initialQuantity
+                .takeIf { it > 0 }
+                ?.toString()
+                .orEmpty()
+        } else {
+            state.initialQuantity.coerceAtLeast(1).toString()
+        }
     }
+    var quantityText by remember(state) { mutableStateOf(initialQuantityText) }
     var locationText by remember(state) { mutableStateOf(state.initialLocation) }
     val hasExistingStock = state.existingStockLocations.isNotEmpty()
     val confirmedQuantity = if (state.quantityEditable) {
@@ -971,10 +1937,13 @@ private fun InboundConfirmDialog(
             }
         ),
         onQuantityChange = { quantityText = it.filter(Char::isDigit) },
+        quantityShowUndo = quantityText != initialQuantityText,
+        onQuantityUndo = { quantityText = initialQuantityText },
         selectedLocationCode = locationText.ifBlank { state.initialLocation },
         availableLocations = state.availableLocations,
         onLocationSelected = { locationText = it },
         onDismiss = onDismiss,
+        onEdit = { onEdit(state.component) },
         onConfirm = {
             confirmedQuantity?.let { quantity ->
                 onConfirm(quantity, locationText.ifBlank { "A1" })

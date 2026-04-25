@@ -1,4 +1,15 @@
+<!--
+ * @author: BC
+ * @date: 26/04/06
+ * @lastEditTime: 26/04/24
+ * @description: 
+ * @note: 
+ * @version: 0.1.0
+-->
 # LCSC Android ERP
+
+![](docs/video16_9.jpeg)
+【【开源】告别物料丢失烦恼 立创商城物料管理手机APP】 https://www.bilibili.com/video/BV1fL9JBHEpr
 
 面向立创商城物料管理场景的 Android 原生应用。项目聚焦“小型离线仓储”流程，支持扫码入库、手动入库、库位管理、库存检索、BOM 匹配、二维码打印，以及本地库存导入导出。
 

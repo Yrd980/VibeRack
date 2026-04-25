@@ -132,6 +132,7 @@ class LcscCatalogRepositoryImpl(
             price = firstPrice,
             productUrl = productUrl,
             datasheetUrl = datasheetUrl,
+            imageLocalPath = null,
             imageUrl = product.optStringOrNull("breviaryImageUrl"),
             specifications = searchParams
         )

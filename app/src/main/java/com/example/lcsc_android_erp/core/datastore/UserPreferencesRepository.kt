@@ -11,7 +11,8 @@ data class UserPreferences(
     val defaultLocationCode: String? = null,
     val appLanguageTag: String = UserPreferencesRepository.LANGUAGE_ZH,
     val recentManualSearches: List<String> = emptyList(),
-    val bomPartBindings: Map<String, String> = emptyMap()
+    val bomPartBindings: Map<String, String> = emptyMap(),
+    val printerType: String = UserPreferencesRepository.PRINTER_TYPE_AUTO
 )
 
 class UserPreferencesRepository(
@@ -22,7 +23,10 @@ class UserPreferencesRepository(
             defaultLocationCode = preferences[DEFAULT_LOCATION_CODE],
             appLanguageTag = preferences[APP_LANGUAGE_TAG] ?: LANGUAGE_ZH,
             recentManualSearches = parseRecentManualSearches(preferences[RECENT_MANUAL_SEARCHES]),
-            bomPartBindings = parseBomPartBindings(preferences[BOM_PART_BINDINGS])
+            bomPartBindings = parseBomPartBindings(preferences[BOM_PART_BINDINGS]),
+            printerType = preferences[PRINTER_TYPE]
+                ?.takeIf { it == PRINTER_TYPE_AUTO || it == PRINTER_TYPE_DELI_Q5 }
+                ?: PRINTER_TYPE_AUTO
         )
     }
 
@@ -75,6 +79,16 @@ class UserPreferencesRepository(
         }
     }
 
+    suspend fun setPrinterType(printerType: String) {
+        val normalizedType = when (printerType.trim().lowercase()) {
+            PRINTER_TYPE_DELI_Q5 -> PRINTER_TYPE_DELI_Q5
+            else -> PRINTER_TYPE_AUTO
+        }
+        dataStore.edit { preferences ->
+            preferences[PRINTER_TYPE] = normalizedType
+        }
+    }
+
     private fun parseRecentManualSearches(value: String?): List<String> {
         return value
             ?.split('\n')
@@ -110,5 +124,9 @@ class UserPreferencesRepository(
         val APP_LANGUAGE_TAG = stringPreferencesKey("app_language_tag")
         val RECENT_MANUAL_SEARCHES = stringPreferencesKey("recent_manual_searches")
         val BOM_PART_BINDINGS = stringPreferencesKey("bom_part_bindings")
+        val PRINTER_TYPE = stringPreferencesKey("printer_type")
+
+        const val PRINTER_TYPE_AUTO = "auto"
+        const val PRINTER_TYPE_DELI_Q5 = "deli_q5"
     }
 }

@@ -10,6 +10,7 @@ data class SearchInventoryRecord(
     val packageName: String?,
     val category: String?,
     val description: String?,
+    val sourceUrl: String? = null,
     val specifications: Map<String, String> = emptyMap(),
     val imageLocalPath: String? = null,
     val quantity: Int,

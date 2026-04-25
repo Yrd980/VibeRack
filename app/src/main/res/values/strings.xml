@@ -21,6 +21,7 @@
     <string name="inbound_title">入库管理</string>
     <string name="inbound_card_title">下一步实现方向</string>
     <string name="inbound_card_body">当前版本已接入 CameraX + ML Kit 扫码和立创二维码解析。下一步会继续补器件详情拉取、库位选择和正式入库写库。</string>
+    <string name="inbound_mode_search">搜索入库</string>
     <string name="inbound_mode_manual">手动入库</string>
     <string name="inbound_mode_scan">扫码入库</string>
     <string name="inbound_manual_keyword_label">搜索关键字</string>
@@ -28,7 +29,7 @@
     <string name="inbound_recent_searches">近期搜索</string>
     <string name="inbound_manual_search_action">搜索</string>
     <string name="inbound_manual_searching">正在搜索立创商城…</string>
-    <string name="inbound_manual_result_title">手动入库结果</string>
+    <string name="inbound_manual_result_title">搜索入库结果</string>
     <string name="inbound_manual_empty">未找到相关器件。</string>
     <string name="inbound_manual_confirm_action">选择并入库</string>
     <string name="inbound_manual_print_qr">打印物料二维码</string>
@@ -37,6 +38,18 @@
     <string name="inbound_manual_print_qr_saved">二维码已保存到相册：%1$s</string>
     <string name="inbound_manual_print_qr_failed">二维码保存失败。</string>
     <string name="inbound_manual_dialog_title">手动入库确认</string>
+    <string name="inbound_manual_entry_dialog_title">手动入库确认</string>
+    <string name="inbound_manual_entry_part_number_required">请填写物料编号</string>
+    <string name="inbound_manual_entry_specifications_label">第二属性</string>
+    <string name="inbound_manual_entry_specifications_placeholder">每行一个属性，格式：键=值</string>
+    <string name="inbound_manual_entry_image_url_label">图片链接</string>
+    <string name="inbound_manual_entry_pick_image_title">选择物料图片</string>
+    <string name="inbound_manual_entry_pick_image_body">可以调用系统拍照，或者从相册选择一张图片。</string>
+    <string name="inbound_manual_entry_take_photo">拍照</string>
+    <string name="inbound_manual_entry_pick_gallery">相册</string>
+    <string name="inbound_manual_entry_pick_image_hint">点击选择图片</string>
+    <string name="inbound_manual_entry_image_save_failed">图片保存失败。</string>
+    <string name="inbound_manual_entry_success">%1$s 已入库</string>
     <string name="inbound_scan_dialog_title">扫码入库确认</string>
     <string name="inbound_flashlight_on">关闭闪光灯</string>
     <string name="inbound_flashlight_off">开启闪光灯</string>
@@ -58,6 +71,7 @@
     <string name="inbound_quantity_label">数量</string>
     <string name="inbound_quantity_increment_label">增加数量</string>
     <string name="inbound_location_label">仓库位置</string>
+    <string name="inbound_invalid_input">请输入有效数量并选择仓库。</string>
     <string name="inbound_component_loading">正在查询立创商城物料信息…</string>
     <string name="inbound_component_error_title">物料查询结果</string>
     <string name="inbound_component_title">立创商城物料信息</string>
@@ -91,8 +105,12 @@
     <string name="common_force_delete">强制删除</string>
     <string name="common_back">返回</string>
     <string name="common_save">保存</string>
+    <string name="common_edit">编辑</string>
     <string name="common_remove">移除</string>
     <string name="common_copied">已复制：%1$s</string>
+    <string name="common_decrease">减少</string>
+    <string name="common_increase">增加</string>
+    <string name="common_undo">撤销</string>
     <string name="common_network_unavailable">当前无网络连接，请检查网络后重试。</string>
     <string name="search_title">物料搜索</string>
     <string name="search_mode_manual">手动搜索</string>
@@ -162,6 +180,9 @@
     <string name="inventory_cell_summary">%1$s:%2$d种物料</string>
     <string name="inventory_item_quantity">库存数量：%1$s</string>
     <string name="inventory_quantity_label">库存数量</string>
+    <string name="inventory_source_label">物料来源</string>
+    <string name="inventory_open_source">打开来源链接</string>
+    <string name="inventory_open_source_failed">无法打开来源链接</string>
     <string name="inventory_location_code">仓库编号</string>
     <string name="inventory_location_code_hint">例如 A1、C3，格式固定为 1 个字母 + 1 个数字。</string>
     <string name="inventory_location_name">库位名称</string>
@@ -249,6 +270,9 @@
     <string name="search_bom_direct_inbound_invalid_input">请输入有效数量并选择仓库。</string>
     <string name="inbound_pick_location">选择仓库位置</string>
     <string name="printer_title">打印机</string>
+    <string name="printer_type_title">打印机类型</string>
+    <string name="printer_type_auto">auto</string>
+    <string name="printer_type_deli_q5">Deli Q5</string>
     <string name="printer_connection_title">连接状态</string>
     <string name="printer_status_idle">未连接打印机。</string>
     <string name="printer_status_connecting">正在连接 %1$s…</string>
@@ -264,6 +288,7 @@
     <string name="printer_refresh">刷新</string>
     <string name="printer_bonded_devices">已配对设备</string>
     <string name="printer_no_bonded_devices">未找到已配对设备，请先在系统蓝牙中完成配对。</string>
+    <string name="printer_no_matching_devices">未找到符合当前打印机类型的已配对设备。</string>
     <string name="printer_unknown_device">未知设备</string>
     <string name="printer_connect_address_required">请选择要连接的打印机。</string>
     <string name="printer_not_connected">打印机未连接，请先在打印机页面进行连接。</string>

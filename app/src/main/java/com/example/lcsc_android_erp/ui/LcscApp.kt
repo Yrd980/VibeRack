@@ -153,6 +153,7 @@ private val topLevelDestinations = listOf(
     Destination.Home,
     Destination.Inbound,
     Destination.Search,
+    // Destination.Printer,
     Destination.Inventory,
     Destination.Settings
 )

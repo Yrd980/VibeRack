@@ -16,6 +16,7 @@ import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
 import com.example.lcsc_android_erp.domain.model.InboundRecord
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
 import com.example.lcsc_android_erp.domain.repository.LcscCatalogRepository
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,7 @@ class InboundViewModel(
     ) { locations, preferences, state ->
         InboundUiState(
             defaultLocationCode = preferences.defaultLocationCode,
+            nextManualInboundPartNumber = state.nextManualInboundPartNumber,
             locations = locations,
             recentManualSearches = preferences.recentManualSearches,
             manualSearchResults = state.manualSearchResults,
@@ -61,6 +63,7 @@ class InboundViewModel(
     init {
         viewModelScope.launch {
             inventoryRepository.bootstrapDefaults()
+            refreshNextManualInboundPartNumber()
         }
     }
 
@@ -119,6 +122,26 @@ class InboundViewModel(
                         null
                     },
                     existingStockByPartNumber = existingStocks
+                )
+            }
+        }
+    }
+
+    fun refreshExistingStock(partNumber: String) {
+        val normalizedPartNumber = partNumber.trim().uppercase()
+        if (normalizedPartNumber.isBlank()) {
+            inboundState.update {
+                it.copy(
+                    existingStockByPartNumber = it.existingStockByPartNumber - normalizedPartNumber
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            val existingStocks = inventoryRepository.findExistingStockLocations(normalizedPartNumber)
+            inboundState.update {
+                it.copy(
+                    existingStockByPartNumber = it.existingStockByPartNumber + (normalizedPartNumber to existingStocks)
                 )
             }
         }
@@ -214,9 +237,12 @@ class InboundViewModel(
         quantity: Int,
         locationCode: String,
         sourceType: String,
-        rawPayload: String? = null
+        rawPayload: String? = null,
+        onCompleted: (String?) -> Unit = {}
     ) {
-        if (quantity < 0 || locationCode.isBlank()) {
+        val normalizedLocationCode = locationCode.trim().uppercase(Locale.ROOT)
+        if (quantity < 0 || normalizedLocationCode.isBlank()) {
+            onCompleted(appContext.getString(R.string.inbound_invalid_input))
             return
         }
         viewModelScope.launch {
@@ -224,7 +250,7 @@ class InboundViewModel(
                 InboundRecord(
                     component = component,
                     quantity = quantity,
-                    locationCode = locationCode,
+                    locationCode = normalizedLocationCode,
                     sourceType = sourceType,
                     rawPayload = rawPayload
                 )
@@ -235,6 +261,19 @@ class InboundViewModel(
                     existingStockByPartNumber = it.existingStockByPartNumber + (component.partNumber to existingStocks)
                 )
             }
+            if (sourceType == "MANUAL_INPUT") {
+                refreshNextManualInboundPartNumber()
+            }
+            onCompleted(null)
+        }
+    }
+
+    private suspend fun refreshNextManualInboundPartNumber() {
+        val nextPartNumber = inventoryRepository.getNextManualInboundPartNumber()
+        inboundState.update {
+            it.copy(
+                nextManualInboundPartNumber = nextPartNumber
+            )
         }
     }
 
@@ -253,6 +292,7 @@ class InboundViewModel(
 }
 
 private data class InboundInternalState(
+    val nextManualInboundPartNumber: String = "C01",
     val manualSearchResults: List<ComponentDetail> = emptyList(),
     val isSearchingManual: Boolean = false,
     val manualSearchError: String? = null,

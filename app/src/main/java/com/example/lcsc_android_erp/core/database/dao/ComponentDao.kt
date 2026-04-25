@@ -24,6 +24,15 @@ interface ComponentDao {
     @Query("SELECT * FROM component_master WHERE part_number = :partNumber LIMIT 1")
     suspend fun findByPartNumber(partNumber: String): ComponentEntity?
 
+    @Query(
+        """
+        SELECT part_number FROM component_master
+        WHERE part_number GLOB 'C[0-9][0-9]*'
+        ORDER BY id ASC
+        """
+    )
+    suspend fun getManualInboundPartNumbers(): List<String>
+
     @Update
     suspend fun update(component: ComponentEntity)
 
