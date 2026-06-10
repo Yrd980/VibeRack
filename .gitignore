@@ -34,4 +34,7 @@ uni-appX/
 .superpowers/
 .gradle-user-home*/
 
+/asset/BOM.xlsx
+/tmp/
+
 
