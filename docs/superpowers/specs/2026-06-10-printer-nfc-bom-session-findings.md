@@ -273,6 +273,9 @@ P0 print smoke test:
 - `PrinterScreen` exposes a `测试打印` action when a printer is connected.
 - `PrinterSmokeTestLabel` generates the current P0 smoke-test bitmap.
 - The accepted physical layout is a narrow rotated label, with text running along the label length.
+- The smoke-test bitmap is now backed by the same reusable 10 mm box-layer label generator used by the Printer screen.
+- `PrinterScreen` now has a first real 10 mm box-layer label tool with editable position and LCSC part fields, an on-screen bitmap preview, and a print action that sends the preview bitmap through the connected `PrinterManager`.
+- The generator still outputs a ready-to-print `384 x 232` bitmap and keeps the verified rotated coordinate system; it does not ask `P0Protocol` to scale or crop a different label aspect ratio.
 
 Navigation:
 
@@ -356,18 +359,38 @@ TEST PRINT
 5. Adjusted the layout after the first physical output showed only a cropped fragment.
 6. Confirmed the final narrow rotated label prints correctly.
 
+## Completed App-Level 10 mm Label Slice
+
+Implemented in the app:
+
+1. Promoted the verified smoke-test layout into a reusable 10 mm box-layer bitmap profile.
+2. Kept the generator output at `384 x 232` dots to match the current P0/Q5 bitmap encoder assumptions.
+3. Added text fitting and end ellipsis so long position or part strings do not run outside the rotated printable band.
+4. Kept `测试打印` as a compatibility smoke action, but made it call the formal 10 mm label profile.
+5. Added a Printer screen card for:
+   - position, for example `BOX01-L03`,
+   - LCSC part, for example `C17710`,
+   - live label preview,
+   - print action gated by the connected printer state.
+
+Still pending:
+
+- A new physical print check of the editable `打印盒层标签` action on `P0-YF604020851`.
+- Real box/layer assignment data instead of temporary Printer screen fields.
+
 ## Recommended Next Slice
 
-The next useful slice is formal box-layer label generation:
+The next useful slice after the app-level 10 mm label tool is physical verification and then real box-layer assignment:
 
-1. Promote the narrow rotated smoke-test layout into a real 10 mm label profile.
-2. Replace the fixed smoke-test text with layer/component data:
+1. Print from the new editable `10mm 盒层标签` card with real layer/component values.
+2. Confirm the printed output uses the same practical area as the successful smoke test.
+3. If the physical output is good, introduce temporary or formal box/layer assignment data so the label fields come from a selected layer/component instead of manual inputs.
+4. Keep QR out of the 10 mm profile unless a wider physical label is confirmed.
+5. Only after the 10 mm profile is stable should the work move into BOM assignment and NFC write flow.
+
+Example target label:
 
 ```text
 BOX01-L03
 C17710
 ```
-
-3. Add a preview from the layer or printer flow.
-4. Keep QR out of the 10 mm profile unless a wider physical label is confirmed.
-5. Only after the 10 mm profile is stable should the work move into BOM assignment and NFC write flow.

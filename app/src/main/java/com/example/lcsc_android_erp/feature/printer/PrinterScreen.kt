@@ -4,7 +4,11 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -14,17 +18,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -37,6 +43,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +63,7 @@ import com.example.lcsc_android_erp.core.printer.BondedPrinter
 import com.example.lcsc_android_erp.core.printer.PrinterManager
 import com.example.lcsc_android_erp.core.printer.PrinterConnectionState
 import com.example.lcsc_android_erp.core.printer.PrinterNameMatcher
+import com.example.lcsc_android_erp.core.printer.PrinterState
 import kotlinx.coroutines.launch
 
 @Composable
@@ -90,7 +100,9 @@ fun PrinterScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by printerManager.state.collectAsStateWithLifecycle()
-    var smokeTestMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var printMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var boxLabelPosition by rememberSaveable { mutableStateOf("BOX01-L03") }
+    var boxLabelPartNumber by rememberSaveable { mutableStateOf("C17710") }
     var hasBluetoothPermission by rememberSaveable {
         mutableStateOf(hasBluetoothPermission(context, printerType))
     }
@@ -141,6 +153,18 @@ fun PrinterScreen(
             }
 
             else -> state.bondedPrinters
+        }
+    }
+    val boxLabelPositionValue = boxLabelPosition.trim()
+    val boxLabelPartNumberValue = boxLabelPartNumber.trim()
+    val boxLabelBitmap = remember(boxLabelPositionValue, boxLabelPartNumberValue) {
+        if (boxLabelPositionValue.isNotBlank() && boxLabelPartNumberValue.isNotBlank()) {
+            BoxLayerLabelBitmap.create10MmBitmap(
+                positionCode = boxLabelPositionValue,
+                partNumber = boxLabelPartNumberValue
+            )
+        } else {
+            null
         }
     }
 
@@ -241,9 +265,9 @@ fun PrinterScreen(
                 if (state.connectionState == PrinterConnectionState.CONNECTED) {
                     Button(
                         onClick = {
-                            smokeTestMessage = context.getString(R.string.printer_print_in_progress)
+                            printMessage = context.getString(R.string.printer_print_in_progress)
                             printerManager.printBitmap(PrinterSmokeTestLabel.createBitmap()) { errorMessage ->
-                                smokeTestMessage = errorMessage
+                                printMessage = errorMessage
                                     ?: context.getString(R.string.printer_print_success)
                             }
                         },
@@ -259,7 +283,41 @@ fun PrinterScreen(
                 }
             }
         }
-        smokeTestMessage?.let { message ->
+        item {
+            BoxLayerLabelCard(
+                positionCode = boxLabelPosition,
+                onPositionCodeChange = { boxLabelPosition = it },
+                partNumber = boxLabelPartNumber,
+                onPartNumberChange = { boxLabelPartNumber = it },
+                previewBitmap = boxLabelBitmap,
+                printerState = state,
+                onPrint = {
+                    val bitmap = boxLabelBitmap
+                    when {
+                        boxLabelPositionValue.isBlank() -> {
+                            printMessage = context.getString(R.string.printer_box_label_position_required)
+                        }
+
+                        boxLabelPartNumberValue.isBlank() -> {
+                            printMessage = context.getString(R.string.printer_box_label_part_required)
+                        }
+
+                        bitmap == null -> {
+                            printMessage = context.getString(R.string.printer_box_label_preview_unavailable)
+                        }
+
+                        else -> {
+                            printMessage = context.getString(R.string.printer_print_in_progress)
+                            printerManager.printBitmap(bitmap) { errorMessage ->
+                                printMessage = errorMessage
+                                    ?: context.getString(R.string.printer_print_success)
+                            }
+                        }
+                    }
+                }
+            )
+        }
+        printMessage?.let { message ->
             item {
                 StatusCard(body = message)
             }
@@ -347,6 +405,95 @@ fun PrinterScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BoxLayerLabelCard(
+    positionCode: String,
+    onPositionCodeChange: (String) -> Unit,
+    partNumber: String,
+    onPartNumberChange: (String) -> Unit,
+    previewBitmap: Bitmap?,
+    printerState: PrinterState,
+    onPrint: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.printer_box_label_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            OutlinedTextField(
+                value = positionCode,
+                onValueChange = onPositionCodeChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(text = stringResource(R.string.printer_box_label_position_label)) },
+                placeholder = { Text(text = stringResource(R.string.printer_box_label_position_placeholder)) },
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = partNumber,
+                onValueChange = onPartNumberChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(text = stringResource(R.string.printer_box_label_part_label)) },
+                placeholder = { Text(text = stringResource(R.string.printer_box_label_part_placeholder)) },
+                singleLine = true
+            )
+            Text(
+                text = stringResource(R.string.printer_box_label_preview_title),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (previewBitmap == null) {
+                Text(
+                    text = stringResource(R.string.printer_box_label_preview_unavailable),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Image(
+                    bitmap = previewBitmap.asImageBitmap(),
+                    contentDescription = stringResource(R.string.printer_box_label_preview_title),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            Text(
+                text = if (printerState.connectionState == PrinterConnectionState.CONNECTED) {
+                    printerState.connectionSummary
+                } else {
+                    stringResource(R.string.printer_not_connected)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (printerState.isPrinting) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text(text = stringResource(R.string.printer_print_in_progress))
+                }
+            }
+            Button(
+                onClick = onPrint,
+                enabled = previewBitmap != null &&
+                    printerState.connectionState == PrinterConnectionState.CONNECTED &&
+                    !printerState.isPrinting
+            ) {
+                Text(text = stringResource(R.string.printer_print_box_label))
             }
         }
     }

@@ -298,7 +298,17 @@
     <string name="printer_print_in_progress">正在发送打印任务…</string>
     <string name="printer_print_label">打印标签</string>
     <string name="printer_print_smoke_test">测试打印</string>
+    <string name="printer_print_box_label">打印盒层标签</string>
     <string name="printer_print_success">打印任务已发送。</string>
+    <string name="printer_box_label_title">10mm 盒层标签</string>
+    <string name="printer_box_label_position_label">位置</string>
+    <string name="printer_box_label_position_placeholder">例如 BOX01-L03</string>
+    <string name="printer_box_label_part_label">立创料号</string>
+    <string name="printer_box_label_part_placeholder">例如 C17710</string>
+    <string name="printer_box_label_preview_title">标签预览</string>
+    <string name="printer_box_label_preview_unavailable">填写位置和立创料号后生成预览。</string>
+    <string name="printer_box_label_position_required">请填写位置。</string>
+    <string name="printer_box_label_part_required">请填写立创料号。</string>
     <string name="printer_enable_bluetooth">开启蓝牙</string>
     <string name="printer_device_info">设备信息</string>
     <string name="printer_device_name">设备名称</string>

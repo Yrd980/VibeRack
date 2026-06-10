@@ -291,7 +291,17 @@
     <string name="printer_print_in_progress">Sending print job…</string>
     <string name="printer_print_label">Print Label</string>
     <string name="printer_print_smoke_test">Test Print</string>
+    <string name="printer_print_box_label">Print Box Label</string>
     <string name="printer_print_success">Print job sent.</string>
+    <string name="printer_box_label_title">10 mm Box Layer Label</string>
+    <string name="printer_box_label_position_label">Position</string>
+    <string name="printer_box_label_position_placeholder">e.g. BOX01-L03</string>
+    <string name="printer_box_label_part_label">LCSC Part</string>
+    <string name="printer_box_label_part_placeholder">e.g. C17710</string>
+    <string name="printer_box_label_preview_title">Label Preview</string>
+    <string name="printer_box_label_preview_unavailable">Enter a position and LCSC part to generate a preview.</string>
+    <string name="printer_box_label_position_required">Enter a position.</string>
+    <string name="printer_box_label_part_required">Enter an LCSC part number.</string>
     <string name="printer_enable_bluetooth">Enable Bluetooth</string>
     <string name="printer_device_info">Device Info</string>
     <string name="printer_device_name">Device Name</string>
