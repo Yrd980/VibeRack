@@ -392,6 +392,11 @@ Still pending:
 - BOM-to-layer workflow.
 - NFC payload upgrade to explicit box/layer fields.
 - Legacy storage location migration.
+- Backup/export migration for the new box, layer, and binding tables.
+- Layer editing UI for generated layer names/display labels and ordering.
+- Per-action layer label print quantity control; current Boxes flow sends one label per click.
+- Physical print verification from the new Boxes layer row action on `P0-YF604020851`.
+- Wider label profiles such as 12-18 mm and larger fallback labels.
 
 ## Recommended Next Slice
 
