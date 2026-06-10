@@ -1,6 +1,7 @@
 package com.example.lcsc_android_erp.feature.search
 
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
+import com.example.lcsc_android_erp.domain.model.ComponentBoxLayer
 import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
 import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
 import com.example.lcsc_android_erp.domain.model.StorageLocation
@@ -20,6 +21,7 @@ data class SearchUiState(
     val bomFilter: BomMatchFilter = BomMatchFilter.All,
     val bomRows: List<BomSearchRowUiModel> = emptyList(),
     val bomMatchedCount: Int = 0,
+    val emptyBoxLayers: List<ComponentBoxLayer> = emptyList(),
     val bomError: String? = null,
     val isParsingBom: Boolean = false
 )
@@ -79,6 +81,7 @@ data class ParsedBomDocument(
 data class BomSearchRowUiModel(
     val entry: BomSearchEntry,
     val matchedResults: List<SearchResultUiModel>,
+    val assignedLayers: List<ComponentBoxLayer> = emptyList(),
     val isBound: Boolean = false,
     val isPersistentBinding: Boolean = false
 )
@@ -86,5 +89,11 @@ data class BomSearchRowUiModel(
 data class BomDirectInboundLookupResult(
     val component: ComponentDetail? = null,
     val existingStockLocations: List<ExistingStockLocation> = emptyList(),
+    val errorMessage: String? = null
+)
+
+data class BomLayerAssignmentResult(
+    val assignedLayer: ComponentBoxLayer? = null,
+    val partNumber: String? = null,
     val errorMessage: String? = null
 )

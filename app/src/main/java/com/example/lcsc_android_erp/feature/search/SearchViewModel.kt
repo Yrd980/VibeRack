@@ -11,8 +11,10 @@ import com.example.lcsc_android_erp.core.AppContainer
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.network.isNetworkAvailable
+import com.example.lcsc_android_erp.domain.model.ComponentBoxLayer
 import com.example.lcsc_android_erp.domain.model.InboundRecord
 import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
+import com.example.lcsc_android_erp.domain.repository.BoxRepository
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
 import com.example.lcsc_android_erp.domain.repository.LcscCatalogRepository
 import java.util.Locale
@@ -27,6 +29,7 @@ import kotlinx.coroutines.launch
 
 class SearchViewModel(
     private val inventoryRepository: InventoryRepository,
+    private val boxRepository: BoxRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val lcscCatalogRepository: LcscCatalogRepository,
     private val appContext: Context
@@ -35,10 +38,13 @@ class SearchViewModel(
         val records: List<SearchInventoryRecord>,
         val persistentBindings: Map<String, String>,
         val temporaryBindings: Map<String, String>,
-        val ignoredEntryKeys: Set<String>
+        val ignoredEntryKeys: Set<String>,
+        val boxLayers: List<ComponentBoxLayer>
     )
 
     private val inventoryRecords = inventoryRepository.observeSearchInventoryRecords()
+    private val allBoxLayers = boxRepository.observeAllLayers()
+    private val emptyBoxLayers = boxRepository.observeEmptyLayers()
     private val locations = inventoryRepository.observeStorageLocations()
     private val persistentBomBindings = userPreferencesRepository.preferences.map { it.bomPartBindings }
     private val defaultLocationCode = userPreferencesRepository.preferences.map { it.defaultLocationCode }
@@ -56,13 +62,15 @@ class SearchViewModel(
         inventoryRecords,
         persistentBomBindings,
         temporaryBomBindings,
-        ignoredBomEntryKeys
-    ) { records, persistentBindings, temporaryBindings, ignoredEntryKeys ->
+        ignoredBomEntryKeys,
+        allBoxLayers
+    ) { records, persistentBindings, temporaryBindings, ignoredEntryKeys, layers ->
         BomBindingContext(
             records = records,
             persistentBindings = persistentBindings,
             temporaryBindings = temporaryBindings,
-            ignoredEntryKeys = ignoredEntryKeys
+            ignoredEntryKeys = ignoredEntryKeys,
+            boxLayers = layers
         )
     }
 
@@ -83,7 +91,8 @@ class SearchViewModel(
             document = bomDocument,
             persistentBindings = bindingContext.persistentBindings,
             temporaryBindings = bindingContext.temporaryBindings,
-            ignoredEntryKeys = bindingContext.ignoredEntryKeys
+            ignoredEntryKeys = bindingContext.ignoredEntryKeys,
+            boxLayers = bindingContext.boxLayers
         )
         SearchUiState(
             mode = searchMode,
@@ -96,7 +105,7 @@ class SearchViewModel(
             pageCount = pageCount,
             bomFileName = bomDocument?.fileName,
             bomRows = allBomRows,
-            bomMatchedCount = allBomRows.count { it.matchedResults.isNotEmpty() }
+            bomMatchedCount = allBomRows.count { it.matchedResults.isNotEmpty() || it.assignedLayers.isNotEmpty() }
         )
     }
 
@@ -109,15 +118,22 @@ class SearchViewModel(
             bomRows = baseState.bomRows.filter { row ->
                 when (currentBomFilter) {
                     BomMatchFilter.All -> true
-                    BomMatchFilter.Matched -> row.matchedResults.isNotEmpty()
-                    BomMatchFilter.Unmatched -> row.matchedResults.isEmpty()
+                    BomMatchFilter.Matched -> row.matchedResults.isNotEmpty() || row.assignedLayers.isNotEmpty()
+                    BomMatchFilter.Unmatched -> row.matchedResults.isEmpty() && row.assignedLayers.isEmpty()
                 }
             }
         )
     }
 
-    val uiState: StateFlow<SearchUiState> = combine(
+    private val baseUiStateWithEmptyLayers = combine(
         baseUiState,
+        emptyBoxLayers
+    ) { baseState, emptyLayers ->
+        baseState.copy(emptyBoxLayers = emptyLayers)
+    }
+
+    val uiState: StateFlow<SearchUiState> = combine(
+        baseUiStateWithEmptyLayers,
         bomError,
         isParsingBom,
         locations,
@@ -265,6 +281,65 @@ class SearchViewModel(
         }
     }
 
+    fun assignBomEntryToEmptyLayer(
+        entry: BomSearchEntry,
+        onCompleted: (BomLayerAssignmentResult) -> Unit
+    ) {
+        val normalizedPartNumber = entry.supplierPart?.trim()?.uppercase(Locale.ROOT)
+        if (normalizedPartNumber.isNullOrBlank()) {
+            onCompleted(
+                BomLayerAssignmentResult(
+                    errorMessage = appContext.getString(R.string.search_bom_assign_no_part)
+                )
+            )
+            return
+        }
+
+        if (!appContext.isNetworkAvailable()) {
+            val message = appContext.getString(R.string.common_network_unavailable)
+            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            onCompleted(BomLayerAssignmentResult(errorMessage = message))
+            return
+        }
+
+        viewModelScope.launch {
+            val component = lcscCatalogRepository.lookupByPartNumber(normalizedPartNumber)
+            if (component == null) {
+                onCompleted(
+                    BomLayerAssignmentResult(
+                        errorMessage = appContext.getString(
+                            R.string.search_bom_direct_inbound_not_found,
+                            normalizedPartNumber
+                        )
+                    )
+                )
+                return@launch
+            }
+
+            val assignedLayer = boxRepository.assignComponentToFirstEmptyLayer(
+                component = component,
+                quantity = entry.quantity?.coerceAtLeast(0) ?: 0,
+                sourceType = "BOM",
+                rawPayload = entry.toRawPayload()
+            )
+            if (assignedLayer == null) {
+                onCompleted(
+                    BomLayerAssignmentResult(
+                        partNumber = component.partNumber,
+                        errorMessage = appContext.getString(R.string.search_bom_assign_no_empty_layer)
+                    )
+                )
+            } else {
+                onCompleted(
+                    BomLayerAssignmentResult(
+                        assignedLayer = assignedLayer,
+                        partNumber = component.partNumber
+                    )
+                )
+            }
+        }
+    }
+
     fun goToNextPage() {
         currentPage.update { page -> page + 1 }
     }
@@ -315,6 +390,7 @@ class SearchViewModel(
             initializer {
                 SearchViewModel(
                     inventoryRepository = appContainer.inventoryRepository,
+                    boxRepository = appContainer.boxRepository,
                     userPreferencesRepository = appContainer.userPreferencesRepository,
                     lcscCatalogRepository = appContainer.lcscCatalogRepository,
                     appContext = appContainer.appContext
@@ -406,7 +482,8 @@ class SearchViewModel(
         document: ParsedBomDocument?,
         persistentBindings: Map<String, String>,
         temporaryBindings: Map<String, String>,
-        ignoredEntryKeys: Set<String>
+        ignoredEntryKeys: Set<String>,
+        boxLayers: List<ComponentBoxLayer>
     ): List<BomSearchRowUiModel> {
         if (document == null) {
             return emptyList()
@@ -423,6 +500,11 @@ class SearchViewModel(
                     ?.let(persistentBindings::get)
                 val temporaryBindingPartNumber = temporaryBindings[entryKey]
                 val boundPartNumber = persistentBindingPartNumber ?: temporaryBindingPartNumber
+                val resolvedPartNumber = boundPartNumber
+                    ?: entry.supplierPart
+                        ?.trim()
+                        ?.uppercase(Locale.ROOT)
+                        ?.takeIf { it.isNotBlank() }
                 val matchedRecords = inventoryRecords.filter { record ->
                     matchesBomEntry(
                         record = record,
@@ -430,9 +512,15 @@ class SearchViewModel(
                         boundPartNumber = boundPartNumber
                     )
                 }
+                val assignedLayers = resolvedPartNumber?.let { partNumber ->
+                    boxLayers.filter { layer ->
+                        layer.partNumber?.trim()?.uppercase(Locale.ROOT) == partNumber
+                    }
+                }.orEmpty()
                 BomSearchRowUiModel(
                     entry = entry,
                     matchedResults = groupRecords(matchedRecords),
+                    assignedLayers = assignedLayers,
                     isBound = boundPartNumber != null,
                     isPersistentBinding = persistentBindingPartNumber != null
                 )
@@ -547,5 +635,18 @@ class SearchViewModel(
             entry.designator.orEmpty(),
             entry.value.orEmpty()
         ).joinToString("|") { it.trim().uppercase(Locale.ROOT) }
+    }
+
+    private fun BomSearchEntry.toRawPayload(): String {
+        return listOf(
+            "row=$rowNumber",
+            "quantity=${quantity ?: 0}",
+            "supplierPart=${supplierPart.orEmpty()}",
+            "manufacturerPart=${manufacturerPart.orEmpty()}",
+            "manufacturer=${manufacturer.orEmpty()}",
+            "value=${value.orEmpty()}",
+            "footprint=${footprint.orEmpty()}",
+            "designator=${designator.orEmpty()}"
+        ).joinToString(";")
     }
 }

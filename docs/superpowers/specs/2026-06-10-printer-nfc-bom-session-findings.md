@@ -386,11 +386,14 @@ Implemented:
 2. A Boxes top-level route for creating boxes and generating layers.
 3. Layer-level label printing through the existing 10 mm bitmap profile.
 
-Still pending:
+Usable loop next:
 
 - Component assignment UI.
-- BOM-to-layer workflow.
-- NFC payload upgrade to explicit box/layer fields.
+- BOM-to-layer workflow that assigns resolved parts into empty box layers.
+- NFC payload upgrade to explicit box/layer fields and opens the target layer on scan.
+
+Later backlog:
+
 - Legacy storage location migration.
 - Backup/export migration for the new box, layer, and binding tables.
 - Layer editing UI for generated layer names/display labels and ordering.
@@ -400,13 +403,22 @@ Still pending:
 
 ## Recommended Next Slice
 
-The next useful slice after the app-level 10 mm label tool is physical verification and then real box-layer assignment:
+The next useful slice should focus only on the smallest usable loop: bind a component to a layer, use BOM rows to fill empty layers, and scan NFC back into that layer. This should produce an app loop where the user can create a box, assign parts, print the existing 10 mm label, and return to the exact layer from NFC.
 
-1. Print from the new editable `10mm 盒层标签` card with real layer/component values.
-2. Confirm the printed output uses the same practical area as the successful smoke test.
-3. If the physical output is good, introduce temporary or formal box/layer assignment data so the label fields come from a selected layer/component instead of manual inputs.
-4. Keep QR out of the 10 mm profile unless a wider physical label is confirmed.
-5. Only after the 10 mm profile is stable should the work move into BOM assignment and NFC write flow.
+Build next:
+
+1. Add a layer binding action that can attach one LCSC component to one `BoxLayer`.
+2. Let BOM rows resolve to components and assign those components into empty layers.
+3. Update NFC material payloads to include `box` and `layer`, while keeping existing location payloads readable.
+4. Route scanned NFC material payloads to the matching box layer detail.
+
+Keep out of the usable-loop slice:
+
+- Legacy `storage_location` migration.
+- Backup/export support for box tables.
+- Layer renaming/reordering.
+- Print quantity controls.
+- Wider label profiles.
 
 Example target label:
 

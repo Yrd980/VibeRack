@@ -7,6 +7,8 @@ data class NfcLabelPayload(
     val kind: NfcLabelKind,
     val locationCode: String? = null,
     val partNumber: String? = null,
+    val boxCode: String? = null,
+    val layerCode: String? = null,
 )
 
 enum class NfcLabelKind {
@@ -28,7 +30,12 @@ object NfcLabelPayloadCodec {
             .toString()
     }
 
-    fun materialUri(partNumber: String, locationCode: String? = null): String {
+    fun materialUri(
+        partNumber: String,
+        locationCode: String? = null,
+        boxCode: String? = null,
+        layerCode: String? = null
+    ): String {
         val builder = Uri.Builder()
             .scheme(scheme)
             .authority(hostMaterial)
@@ -38,6 +45,16 @@ object NfcLabelPayloadCodec {
             ?.uppercase(Locale.ROOT)
             ?.takeIf { it.isNotBlank() }
             ?.let { builder.appendQueryParameter("location", it) }
+        boxCode
+            ?.trim()
+            ?.uppercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { builder.appendQueryParameter("box", it) }
+        layerCode
+            ?.trim()
+            ?.uppercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { builder.appendQueryParameter("layer", it) }
         return builder.build().toString()
     }
 
@@ -66,10 +83,20 @@ object NfcLabelPayloadCodec {
                     ?.trim()
                     ?.uppercase(Locale.ROOT)
                     ?.takeIf { it.isNotBlank() }
+                val boxCode = uri.getQueryParameter("box")
+                    ?.trim()
+                    ?.uppercase(Locale.ROOT)
+                    ?.takeIf { it.isNotBlank() }
+                val layerCode = uri.getQueryParameter("layer")
+                    ?.trim()
+                    ?.uppercase(Locale.ROOT)
+                    ?.takeIf { it.isNotBlank() }
                 NfcLabelPayload(
                     kind = NfcLabelKind.MATERIAL,
                     locationCode = locationCode,
                     partNumber = partNumber,
+                    boxCode = boxCode,
+                    layerCode = layerCode,
                 )
             }
 

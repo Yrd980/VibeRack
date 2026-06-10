@@ -37,6 +37,7 @@ import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.nfc.NfcLabelKind
 import com.example.lcsc_android_erp.core.nfc.NfcScanResult
+import com.example.lcsc_android_erp.feature.boxes.BoxesOpenRequest
 import com.example.lcsc_android_erp.feature.boxes.BoxesRoute
 import com.example.lcsc_android_erp.feature.home.HomeRoute
 import com.example.lcsc_android_erp.feature.inbound.InboundRoute
@@ -58,6 +59,8 @@ fun LcscApp() {
     var inventoryResetToOverviewSignal by remember { mutableIntStateOf(0) }
     var inventoryOpenRequestSignal by remember { mutableIntStateOf(0) }
     var inventoryOpenRequest by remember { mutableStateOf<InventoryOpenRequest?>(null) }
+    var boxesOpenRequestSignal by remember { mutableIntStateOf(0) }
+    var boxesOpenRequest by remember { mutableStateOf<BoxesOpenRequest?>(null) }
 
     val jumpToInventoryItem: (String, String) -> Unit = { locationCode, partNumber ->
         inventoryOpenRequest = InventoryOpenRequest(
@@ -95,6 +98,20 @@ fun LcscApp() {
             restoreState = true
         }
     }
+    val jumpToBoxLayer: (String, String) -> Unit = { boxCode, layerCode ->
+        boxesOpenRequest = BoxesOpenRequest(
+            boxCode = boxCode,
+            layerCode = layerCode
+        )
+        boxesOpenRequestSignal++
+        navController.navigate(Destination.Boxes.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     DisposableEffect(activity, appContainer) {
         appContainer.nfcLabelManager.setOnScanResult { result ->
@@ -109,7 +126,11 @@ fun LcscApp() {
                             NfcLabelKind.MATERIAL -> {
                                 val locationCode = result.payload.locationCode
                                 val partNumber = result.payload.partNumber
-                                if (locationCode != null && partNumber != null) {
+                                val boxCode = result.payload.boxCode
+                                val layerCode = result.payload.layerCode
+                                if (boxCode != null && layerCode != null) {
+                                    jumpToBoxLayer(boxCode, layerCode)
+                                } else if (locationCode != null && partNumber != null) {
                                     jumpToInventoryItem(locationCode, partNumber)
                                 } else if (partNumber != null) {
                                     jumpToInventoryPartNumber(partNumber)
@@ -202,7 +223,10 @@ fun LcscApp() {
                 HomeRoute()
             }
             composable(Destination.Boxes.route) {
-                BoxesRoute()
+                BoxesRoute(
+                    openRequest = boxesOpenRequest,
+                    openRequestSignal = boxesOpenRequestSignal
+                )
             }
             composable(Destination.Inbound.route) {
                 InboundRoute(onViewInventoryItem = jumpToInventoryItem)
