@@ -128,6 +128,25 @@ class InventoryViewModel(
         selectedLocation.value = null
     }
 
+    fun openInventoryLocation(locationCode: String) {
+        val normalizedLocationCode = locationCode.trim().uppercase(Locale.ROOT)
+        if (normalizedLocationCode.isBlank()) {
+            return
+        }
+
+        viewModelScope.launch {
+            val targetLocation = inventoryRepository.observeStockLocationCells()
+                .first()
+                .firstOrNull { it.code.equals(normalizedLocationCode, ignoreCase = true) }
+                ?: return@launch
+
+            pendingOpenRequest.value = InventoryOpenRequest(
+                locationCode = targetLocation.code,
+            )
+            selectedLocation.value = targetLocation
+        }
+    }
+
     fun openInventoryItem(locationCode: String, partNumber: String) {
         val normalizedLocationCode = locationCode.trim().uppercase(Locale.ROOT)
         val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
@@ -146,6 +165,20 @@ class InventoryViewModel(
                 partNumber = normalizedPartNumber
             )
             selectedLocation.value = targetLocation
+        }
+    }
+
+    fun openFirstInventoryItem(partNumber: String) {
+        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
+        if (normalizedPartNumber.isBlank()) {
+            return
+        }
+
+        viewModelScope.launch {
+            val targetLocation = inventoryRepository.findExistingStockLocations(normalizedPartNumber)
+                .firstOrNull()
+                ?: return@launch
+            openInventoryItem(targetLocation.locationCode, normalizedPartNumber)
         }
     }
 

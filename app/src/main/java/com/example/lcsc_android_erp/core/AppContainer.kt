@@ -8,6 +8,9 @@ import androidx.room.Room
 import androidx.room.withTransaction
 import com.example.lcsc_android_erp.core.database.AppDatabase
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
+import com.example.lcsc_android_erp.core.nfc.NfcLabelManager
+import com.example.lcsc_android_erp.core.printer.P0PrinterManager
+import com.example.lcsc_android_erp.core.printer.PrinterManager
 import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
 import com.example.lcsc_android_erp.data.repository.ComponentEnrichmentManager
 import com.example.lcsc_android_erp.data.remote.LcscCatalogRemoteDataSource
@@ -50,6 +53,7 @@ class AppContainer(context: Context) {
         .build()
 
     val userPreferencesRepository = UserPreferencesRepository(preferencesDataStore)
+    val nfcLabelManager = NfcLabelManager(appContext)
 
     private val componentImageStore = ComponentImageStore(
         context = appContext,
@@ -119,4 +123,12 @@ class AppContainer(context: Context) {
     )
 
     val q5PrinterManager = Q5PrinterManager(appContext)
+    val p0PrinterManager = P0PrinterManager(appContext)
+
+    fun printerManagerForType(printerType: String): PrinterManager {
+        return when (printerType) {
+            UserPreferencesRepository.PRINTER_TYPE_YINLIFANG_P0 -> p0PrinterManager
+            else -> q5PrinterManager
+        }
+    }
 }

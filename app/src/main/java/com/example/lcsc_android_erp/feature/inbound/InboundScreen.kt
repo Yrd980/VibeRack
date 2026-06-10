@@ -91,8 +91,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.nfc.NfcLabelPayloadCodec
 import com.example.lcsc_android_erp.core.printer.PrinterConnectionState
-import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
+import com.example.lcsc_android_erp.core.printer.PrinterManager
 import com.example.lcsc_android_erp.core.ui.LocationPickerDialog
 import com.example.lcsc_android_erp.core.ui.LocationPickerOption
 import com.example.lcsc_android_erp.core.ui.MaterialListCard
@@ -121,10 +122,13 @@ fun InboundRoute(
         factory = InboundViewModel.factory(appContainer)
     )
     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
+    val preferences by appContainer.userPreferencesRepository.preferences.collectAsStateWithLifecycle(
+        initialValue = com.example.lcsc_android_erp.core.datastore.UserPreferences()
+    )
     InboundScreen(
         modifier = modifier,
         uiState = uiState.value,
-        q5PrinterManager = appContainer.q5PrinterManager,
+        printerManager = appContainer.printerManagerForType(preferences.printerType),
         onQrScanned = viewModel::onQrScanned,
         onContinueScanning = viewModel::clearScanResult,
         onManualSearch = viewModel::searchManual,
@@ -147,7 +151,7 @@ fun InboundRoute(
 @Composable
 fun InboundScreen(
     uiState: InboundUiState,
-    q5PrinterManager: Q5PrinterManager,
+    printerManager: PrinterManager,
     onQrScanned: (String) -> Unit,
     onContinueScanning: () -> Unit,
     onManualSearch: (String) -> Unit,
@@ -158,8 +162,9 @@ fun InboundScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val appContainer = (context.applicationContext as LcscApplication).appContainer
     val coroutineScope = rememberCoroutineScope()
-    val printerState by q5PrinterManager.state.collectAsStateWithLifecycle()
+    val printerState by printerManager.state.collectAsStateWithLifecycle()
     var hasCameraPermission by rememberSaveable {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -780,9 +785,27 @@ fun InboundScreen(
                 ) {
                     TextButton(
                         onClick = {
+                            appContainer.nfcLabelManager.setPendingWrite(
+                                NfcLabelPayloadCodec.materialUri(component.partNumber)
+                            )
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.nfc_tap_tag_to_write),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        enabled = !qrPreviewLoading &&
+                            !qrPreviewSaving &&
+                            !qrPreviewPrinting &&
+                            qrPreviewBitmap != null
+                    ) {
+                        Text(text = stringResource(R.string.nfc_write_tag))
+                    }
+                    TextButton(
+                        onClick = {
                             val bitmap = qrPreviewBitmap ?: return@TextButton
                             qrPreviewPrinting = true
-                            q5PrinterManager.printBitmap(bitmap) { errorMessage ->
+                            printerManager.printBitmap(bitmap) { errorMessage ->
                                 qrPreviewPrinting = false
                                 Toast.makeText(
                                     context,

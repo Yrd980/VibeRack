@@ -3,13 +3,18 @@ package com.example.lcsc_android_erp.core.printer
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.graphics.Bitmap
 import com.example.lcsc_android_erp.R
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class Q5PrinterManager(
+class P0PrinterManager(
     private val appContext: Context
 ) : PrinterManager {
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
@@ -34,11 +39,40 @@ class Q5PrinterManager(
     override val state: StateFlow<PrinterState> = _state.asStateFlow()
 
     @Volatile
-    private var receiveBuffer = ByteArray(0)
+    private var client: P0BluetoothClient? = null
 
-    @Volatile
-    private var client: Q5BluetoothClient? = null
+    private var scanJob: Job? = null
 
+    private val scanCallback = object : ScanCallback() {
+        @SuppressLint("MissingPermission")
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val name = result.scanRecord?.deviceName
+                ?: result.device.name
+                ?: appContext.getString(R.string.printer_unknown_device)
+            val address = result.device.address.uppercase(Locale.ROOT)
+            val isP0Printer = PrinterNameMatcher.isDetongerP0(name)
+            if (!isP0Printer) {
+                return
+            }
+            _state.update { state ->
+                val existing = state.bondedPrinters.filterNot { it.address == address }
+                state.copy(
+                    bondedPrinters = (existing + BondedPrinter(name, address))
+                        .sortedWith(compareBy({ !PrinterNameMatcher.isDetongerP0(it.name) }, { it.name }, { it.address }))
+                )
+            }
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            _state.update {
+                it.copy(
+                    connectionSummary = appContext.getString(R.string.printer_scan_failed)
+                )
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     override fun refreshBondedPrinters(hasBluetoothPermission: Boolean) {
         val adapter = bluetoothAdapter
         if (adapter == null) {
@@ -54,6 +88,7 @@ class Q5PrinterManager(
         }
         val bluetoothEnabled = adapter.safeIsEnabled()
         if (!hasBluetoothPermission) {
+            stopScan()
             _state.update {
                 it.copy(
                     bluetoothAvailable = true,
@@ -63,14 +98,27 @@ class Q5PrinterManager(
             }
             return
         }
-        val bondedPrinters = readBondedPrinters(adapter)
+        if (!bluetoothEnabled) {
+            stopScan()
+            _state.update {
+                it.copy(
+                    bluetoothAvailable = true,
+                    bluetoothEnabled = false,
+                    bondedPrinters = emptyList(),
+                    connectionSummary = appContext.getString(R.string.printer_bluetooth_disabled)
+                )
+            }
+            return
+        }
         _state.update {
             it.copy(
                 bluetoothAvailable = true,
-                bluetoothEnabled = bluetoothEnabled,
-                bondedPrinters = bondedPrinters
+                bluetoothEnabled = true,
+                bondedPrinters = emptyList(),
+                connectionSummary = appContext.getString(R.string.printer_scan_in_progress)
             )
         }
+        startScan(adapter)
     }
 
     @SuppressLint("MissingPermission")
@@ -114,20 +162,23 @@ class Q5PrinterManager(
             }
             return
         }
-        receiveBuffer = ByteArray(0)
+        stopScan()
         val targetPrinter = _state.value.bondedPrinters.firstOrNull { it.address == normalizedAddress }
         _state.update {
             it.copy(
                 bluetoothAvailable = true,
                 bluetoothEnabled = true,
                 connectionState = PrinterConnectionState.CONNECTING,
-                connectionSummary = appContext.getString(R.string.printer_status_connecting, targetPrinter?.name ?: normalizedAddress),
+                connectionSummary = appContext.getString(
+                    R.string.printer_status_connecting,
+                    targetPrinter?.name ?: normalizedAddress
+                ),
                 connectedAddress = normalizedAddress,
                 connectedName = targetPrinter?.name,
                 deviceInfo = null
             )
         }
-        client = Q5BluetoothClient(
+        client = P0BluetoothClient(
             adapter = adapter,
             onStateChanged = { connectionState, message ->
                 scope.launch {
@@ -139,15 +190,12 @@ class Q5PrinterManager(
                     )
                 }
             },
-            onBytesReceived = { bytes ->
-                scope.launch {
-                    handleIncomingBytes(bytes)
-                }
-            }
+            onBytesReceived = {}
         ).also { it.connect(normalizedAddress) }
     }
 
     override fun disconnect() {
+        stopScan()
         client?.disconnect()
         client = null
         _state.update {
@@ -176,7 +224,7 @@ class Q5PrinterManager(
         _state.update { it.copy(isPrinting = true) }
         scope.launch(Dispatchers.IO) {
             val result = runCatching {
-                Q5ImageEncoder.buildBitmapPrintChunks(bitmap).forEach { chunk ->
+                P0Protocol.buildBitmapPrintChunks(bitmap).forEach { chunk ->
                     if (chunk.bytes.isNotEmpty()) {
                         currentClient.send(chunk.bytes)
                     }
@@ -193,22 +241,38 @@ class Q5PrinterManager(
     }
 
     @SuppressLint("MissingPermission")
-    private fun readBondedPrinters(adapter: BluetoothAdapter): List<BondedPrinter> {
-        return adapter.bondedDevices
-            .orEmpty()
-            .map { device ->
-                BondedPrinter(
-                    name = device.name ?: appContext.getString(R.string.printer_unknown_device),
-                    address = device.address
-                )
+    private fun startScan(adapter: BluetoothAdapter) {
+        stopScan()
+        val scanner = adapter.safeBluetoothLeScanner()
+        if (scanner == null) {
+            return
+        }
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+        scanner.startScan(null, settings, scanCallback)
+        scanJob = scope.launch {
+            delay(8_000)
+            stopScan()
+            _state.update { state ->
+                if (state.connectionState == PrinterConnectionState.DISCONNECTED) {
+                    state.copy(connectionSummary = appContext.getString(R.string.printer_status_idle))
+                } else {
+                    state
+                }
             }
-            .sortedWith(
-                compareBy<BondedPrinter>(
-                    { !PrinterNameMatcher.isDeliQ5(it.name) },
-                    { it.name },
-                    { it.address }
-                )
-            )
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun stopScan() {
+        scanJob?.cancel()
+        scanJob = null
+        bluetoothAdapter.safeBluetoothLeScanner()?.let { scanner ->
+            runCatching {
+                scanner.stopScan(scanCallback)
+            }
+        }
     }
 
     private fun handleConnectionStateChanged(
@@ -244,10 +308,13 @@ class Q5PrinterManager(
                             targetName
                         ),
                         connectedAddress = address,
-                        connectedName = targetName
+                        connectedName = targetName,
+                        deviceInfo = PrinterDeviceInfo(
+                            name = targetName,
+                            mac = address,
+                        )
                     )
                 }
-                queryDeviceInfo()
             }
 
             PrinterConnectionState.DISCONNECTED -> {
@@ -267,44 +334,6 @@ class Q5PrinterManager(
                         isPrinting = false
                     )
                 }
-            }
-        }
-    }
-
-    private fun handleIncomingBytes(bytes: ByteArray) {
-        receiveBuffer += bytes
-        val (frames, remaining) = Q5Protocol.tryExtractFrames(receiveBuffer)
-        receiveBuffer = remaining
-        frames.forEach { frame ->
-            if (Q5Protocol.isAck(frame)) {
-                return@forEach
-            }
-            when (frame.command) {
-                0x35 -> {
-                    val deviceInfo = Q5Protocol.parseDeviceInfo(frame) ?: return@forEach
-                    _state.update {
-                        it.copy(
-                            connectedName = deviceInfo.name,
-                            deviceInfo = PrinterDeviceInfo(
-                                name = deviceInfo.name,
-                                mac = deviceInfo.mac,
-                                standbyMinutes = deviceInfo.standbyMinutes,
-                                batteryPercent = deviceInfo.batteryPercent,
-                                firmwareVersion = deviceInfo.firmwareVersion,
-                                serialNumber = deviceInfo.serialNumber,
-                            ),
-                            connectionSummary = appContext.getString(R.string.printer_status_connected, deviceInfo.name)
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private fun queryDeviceInfo() {
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                client?.send(Q5Protocol.queryDeviceInfo)
             }
         }
     }

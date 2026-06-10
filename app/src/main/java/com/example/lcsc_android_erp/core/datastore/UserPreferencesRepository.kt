@@ -30,7 +30,7 @@ class UserPreferencesRepository(
                 usePresetFallback = true
             ),
             printerType = preferences[PRINTER_TYPE]
-                ?.takeIf { it == PRINTER_TYPE_AUTO || it == PRINTER_TYPE_DELI_Q5 }
+                ?.takeIf { it in SUPPORTED_PRINTER_TYPES }
                 ?: PRINTER_TYPE_AUTO
         )
     }
@@ -87,6 +87,7 @@ class UserPreferencesRepository(
     suspend fun setPrinterType(printerType: String) {
         val normalizedType = when (printerType.trim().lowercase()) {
             PRINTER_TYPE_DELI_Q5 -> PRINTER_TYPE_DELI_Q5
+            PRINTER_TYPE_YINLIFANG_P0 -> PRINTER_TYPE_YINLIFANG_P0
             else -> PRINTER_TYPE_AUTO
         }
         dataStore.edit { preferences ->
@@ -189,6 +190,13 @@ class UserPreferencesRepository(
 
         const val PRINTER_TYPE_AUTO = "auto"
         const val PRINTER_TYPE_DELI_Q5 = "deli_q5"
+        const val PRINTER_TYPE_YINLIFANG_P0 = "yinlifang_p0"
+
+        val SUPPORTED_PRINTER_TYPES = setOf(
+            PRINTER_TYPE_AUTO,
+            PRINTER_TYPE_DELI_Q5,
+            PRINTER_TYPE_YINLIFANG_P0,
+        )
 
         val PRESET_LOCATION_COLORS = listOf("#C8E6C9", "#B3E5FC", "#F8BBD0", "#D1C4E9", "#FFE0B2")
     }

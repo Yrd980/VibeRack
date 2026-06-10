@@ -98,8 +98,10 @@ import coil3.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.nfc.NfcLabelPayloadCodec
 import com.example.lcsc_android_erp.core.printer.PrinterConnectionState
-import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
+import com.example.lcsc_android_erp.core.datastore.UserPreferences
+import com.example.lcsc_android_erp.core.printer.PrinterManager
 import com.example.lcsc_android_erp.core.ui.LocationPickerDialog
 import com.example.lcsc_android_erp.core.ui.LocationPickerOption
 import com.example.lcsc_android_erp.core.ui.performCopyFeedback
@@ -133,6 +135,9 @@ fun InventoryRoute(
         factory = InventoryViewModel.factory(appContainer)
     )
     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
+    val preferences by appContainer.userPreferencesRepository.preferences.collectAsStateWithLifecycle(
+        initialValue = UserPreferences()
+    )
 
     LaunchedEffect(resetToOverviewSignal) {
         viewModel.dismissLocationDetail()
@@ -140,14 +145,28 @@ fun InventoryRoute(
 
     LaunchedEffect(openRequestSignal) {
         openRequest?.let { request ->
-            viewModel.openInventoryItem(request.locationCode, request.partNumber)
+            val locationCode = request.locationCode
+            val partNumber = request.partNumber
+            when {
+                locationCode != null && partNumber != null -> {
+                    viewModel.openInventoryItem(locationCode, partNumber)
+                }
+
+                locationCode != null -> {
+                    viewModel.openInventoryLocation(locationCode)
+                }
+
+                partNumber != null -> {
+                    viewModel.openFirstInventoryItem(partNumber)
+                }
+            }
         }
     }
 
     InventoryScreen(
         modifier = modifier,
         uiState = uiState.value,
-        q5PrinterManager = appContainer.q5PrinterManager,
+        printerManager = appContainer.printerManagerForType(preferences.printerType),
         onLocationSelected = viewModel::onLocationSelected,
         onDismissLocationDetail = viewModel::dismissLocationDetail,
         onOpenLocationSettings = viewModel::openLocationSettings,
@@ -175,7 +194,7 @@ fun InventoryRoute(
 @Composable
 fun InventoryScreen(
     uiState: InventoryUiState,
-    q5PrinterManager: Q5PrinterManager,
+    printerManager: PrinterManager,
     onLocationSelected: (StockLocationCell) -> Unit,
     onDismissLocationDetail: () -> Unit,
     onOpenLocationSettings: (Long) -> Unit,
@@ -203,6 +222,7 @@ fun InventoryScreen(
     var addLocationSubmitted by remember { mutableStateOf(false) }
     var settingsTargetCell by remember { mutableStateOf<StockLocationCell?>(null) }
     val context = LocalContext.current
+    val appContainer = (context.applicationContext as LcscApplication).appContainer
     val rows = groupLocationRows(uiState.cells)
 
     LaunchedEffect(uiState.cells.size, uiState.addLocationError, addLocationSubmitted) {
@@ -287,7 +307,7 @@ fun InventoryScreen(
                 uiState = uiState,
                 cell = uiState.selectedLocation,
                 items = uiState.selectedLocationItems,
-                q5PrinterManager = q5PrinterManager,
+                printerManager = printerManager,
                 onBack = onDismissLocationDetail,
                 onSave = onUpdateLocation,
                 onClearUpdateLocationError = onClearUpdateLocationError,
@@ -623,7 +643,7 @@ private fun InventoryLocationDetailScreen(
     uiState: InventoryUiState,
     cell: StockLocationCell,
     items: List<LocationInventoryItem>,
-    q5PrinterManager: Q5PrinterManager,
+    printerManager: PrinterManager,
     onBack: () -> Unit,
     onSave: (Long, String, String?, String?, String, (String?) -> Unit) -> Unit,
     onClearUpdateLocationError: () -> Unit,
@@ -643,8 +663,9 @@ private fun InventoryLocationDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val appContainer = (context.applicationContext as LcscApplication).appContainer
     val coroutineScope = rememberCoroutineScope()
-    val printerState by q5PrinterManager.state.collectAsStateWithLifecycle()
+    val printerState by printerManager.state.collectAsStateWithLifecycle()
     var showSettingsDialog by remember(cell.id) { mutableStateOf(false) }
     var showScanAddDialog by remember(cell.id) { mutableStateOf(false) }
     var showPrintLabelDialog by remember(cell.id) { mutableStateOf(false) }
@@ -1141,9 +1162,27 @@ private fun InventoryLocationDetailScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(
                         onClick = {
+                            appContainer.nfcLabelManager.setPendingWrite(
+                                NfcLabelPayloadCodec.locationUri(cell.code)
+                            )
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.nfc_tap_tag_to_write),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        enabled = !locationLabelLoading &&
+                            !locationLabelSaving &&
+                            !locationLabelPrinting &&
+                            locationLabelBitmap != null
+                    ) {
+                        Text(text = stringResource(R.string.nfc_write_tag))
+                    }
+                    TextButton(
+                        onClick = {
                             val bitmap = locationLabelBitmap ?: return@TextButton
                             locationLabelPrinting = true
-                            q5PrinterManager.printBitmap(bitmap) { errorMessage ->
+                            printerManager.printBitmap(bitmap) { errorMessage ->
                                 locationLabelPrinting = false
                                 Toast.makeText(
                                     context,

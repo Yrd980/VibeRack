@@ -51,8 +51,9 @@ import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.datastore.UserPreferences
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.core.printer.BondedPrinter
+import com.example.lcsc_android_erp.core.printer.PrinterManager
 import com.example.lcsc_android_erp.core.printer.PrinterConnectionState
-import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
+import com.example.lcsc_android_erp.core.printer.PrinterNameMatcher
 import kotlinx.coroutines.launch
 
 @Composable
@@ -64,8 +65,11 @@ fun PrinterRoute(
         initialValue = UserPreferences()
     )
     val coroutineScope = rememberCoroutineScope()
+    val printerManager = remember(appContainer, preferences.printerType) {
+        appContainer.printerManagerForType(preferences.printerType)
+    }
     PrinterScreen(
-        printerManager = appContainer.q5PrinterManager,
+        printerManager = printerManager,
         printerType = preferences.printerType,
         onPrinterTypeChange = { printerType ->
             coroutineScope.launch {
@@ -78,7 +82,7 @@ fun PrinterRoute(
 
 @Composable
 fun PrinterScreen(
-    printerManager: Q5PrinterManager,
+    printerManager: PrinterManager,
     printerType: String,
     onPrinterTypeChange: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -86,20 +90,27 @@ fun PrinterScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by printerManager.state.collectAsStateWithLifecycle()
+    var smokeTestMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var hasBluetoothPermission by rememberSaveable {
-        mutableStateOf(hasBluetoothPermission(context))
+        mutableStateOf(hasBluetoothPermission(context, printerType))
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        hasBluetoothPermission = hasBluetoothPermission(context)
+        hasBluetoothPermission = hasBluetoothPermission(context, printerType)
         printerManager.refreshBondedPrinters(hasBluetoothPermission)
     }
     val enableBluetoothLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
         printerManager.refreshBondedPrinters(hasBluetoothPermission)
+    }
+
+    LaunchedEffect(printerManager, printerType) {
+        val currentPermission = hasBluetoothPermission(context, printerType)
+        hasBluetoothPermission = currentPermission
+        printerManager.refreshBondedPrinters(currentPermission)
     }
 
     LaunchedEffect(hasBluetoothPermission) {
@@ -109,7 +120,7 @@ fun PrinterScreen(
     DisposableEffect(lifecycleOwner, printerManager) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                hasBluetoothPermission = hasBluetoothPermission(context)
+                hasBluetoothPermission = hasBluetoothPermission(context, printerType)
                 printerManager.refreshBondedPrinters(hasBluetoothPermission)
             }
         }
@@ -122,9 +133,11 @@ fun PrinterScreen(
     val visiblePrinters = remember(state.bondedPrinters, printerType) {
         when (printerType) {
             UserPreferencesRepository.PRINTER_TYPE_DELI_Q5 -> state.bondedPrinters.filter { printer ->
-                printer.name.contains("Q5", ignoreCase = true) ||
-                    printer.name.contains("DELI", ignoreCase = true) ||
-                    printer.name.contains("得力", ignoreCase = true)
+                PrinterNameMatcher.isDeliQ5(printer.name)
+            }
+
+            UserPreferencesRepository.PRINTER_TYPE_YINLIFANG_P0 -> state.bondedPrinters.filter { printer ->
+                PrinterNameMatcher.isDetongerP0(printer.name)
             }
 
             else -> state.bondedPrinters
@@ -181,6 +194,13 @@ fun PrinterScreen(
                             onPrinterTypeChange(UserPreferencesRepository.PRINTER_TYPE_DELI_Q5)
                         }
                     )
+                    PrinterTypeOptionButton(
+                        text = stringResource(R.string.printer_type_yinlifang_p0),
+                        selected = printerType == UserPreferencesRepository.PRINTER_TYPE_YINLIFANG_P0,
+                        onClick = {
+                            onPrinterTypeChange(UserPreferencesRepository.PRINTER_TYPE_YINLIFANG_P0)
+                        }
+                    )
                 }
             }
         }
@@ -191,14 +211,11 @@ fun PrinterScreen(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBluetoothPermission) {
+                if (!hasBluetoothPermission && bluetoothPermissions(printerType).isNotEmpty()) {
                     Button(
                         onClick = {
                             permissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.BLUETOOTH_CONNECT,
-                                    Manifest.permission.BLUETOOTH_SCAN
-                                )
+                                bluetoothPermissions(printerType)
                             )
                         }
                     ) {
@@ -222,12 +239,29 @@ fun PrinterScreen(
                     Text(text = stringResource(R.string.printer_refresh))
                 }
                 if (state.connectionState == PrinterConnectionState.CONNECTED) {
+                    Button(
+                        onClick = {
+                            smokeTestMessage = context.getString(R.string.printer_print_in_progress)
+                            printerManager.printBitmap(PrinterSmokeTestLabel.createBitmap()) { errorMessage ->
+                                smokeTestMessage = errorMessage
+                                    ?: context.getString(R.string.printer_print_success)
+                            }
+                        },
+                        enabled = !state.isPrinting
+                    ) {
+                        Text(text = stringResource(R.string.printer_print_smoke_test))
+                    }
                     OutlinedButton(
                         onClick = printerManager::disconnect
                     ) {
                         Text(text = stringResource(R.string.printer_disconnect))
                     }
                 }
+            }
+        }
+        smokeTestMessage?.let { message ->
+            item {
+                StatusCard(body = message)
             }
         }
         item {
@@ -240,7 +274,7 @@ fun PrinterScreen(
         if (visiblePrinters.isEmpty()) {
             item {
                 StatusCard(
-                    body = if (printerType == UserPreferencesRepository.PRINTER_TYPE_DELI_Q5) {
+                    body = if (printerType != UserPreferencesRepository.PRINTER_TYPE_AUTO) {
                         stringResource(R.string.printer_no_matching_devices)
                     } else {
                         stringResource(R.string.printer_no_bonded_devices)
@@ -277,10 +311,12 @@ fun PrinterScreen(
                                 label = stringResource(R.string.printer_device_name),
                                 value = info.name
                             )
-                            PrinterInfoRow(
-                                label = stringResource(R.string.printer_device_mac),
-                                value = info.mac
-                            )
+                            info.mac?.let { mac ->
+                                PrinterInfoRow(
+                                    label = stringResource(R.string.printer_device_mac),
+                                    value = mac
+                                )
+                            }
                             info.batteryPercent?.let { battery ->
                                 PrinterInfoRow(
                                     label = stringResource(R.string.printer_device_battery),
@@ -296,14 +332,18 @@ fun PrinterScreen(
                                     )
                                 )
                             }
-                            PrinterInfoRow(
-                                label = stringResource(R.string.printer_device_firmware),
-                                value = info.firmwareVersion
-                            )
-                            PrinterInfoRow(
-                                label = stringResource(R.string.printer_device_serial),
-                                value = info.serialNumber
-                            )
+                            info.firmwareVersion?.let { firmwareVersion ->
+                                PrinterInfoRow(
+                                    label = stringResource(R.string.printer_device_firmware),
+                                    value = firmwareVersion
+                                )
+                            }
+                            info.serialNumber?.let { serialNumber ->
+                                PrinterInfoRow(
+                                    label = stringResource(R.string.printer_device_serial),
+                                    value = serialNumber
+                                )
+                            }
                         }
                     }
                 }
@@ -440,16 +480,34 @@ private fun PrinterInfoRow(
     }
 }
 
-private fun hasBluetoothPermission(context: android.content.Context): Boolean {
+private fun hasBluetoothPermission(context: android.content.Context, printerType: String): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-        return true
+        return if (printerType == UserPreferencesRepository.PRINTER_TYPE_YINLIFANG_P0) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
     }
-    return ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.BLUETOOTH_CONNECT
-    ) == PackageManager.PERMISSION_GRANTED &&
+    return bluetoothPermissions(printerType).all { permission ->
         ContextCompat.checkSelfPermission(
             context,
-            Manifest.permission.BLUETOOTH_SCAN
+            permission
         ) == PackageManager.PERMISSION_GRANTED
+    }
+}
+
+private fun bluetoothPermissions(printerType: String): Array<String> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN
+        )
+    } else if (printerType == UserPreferencesRepository.PRINTER_TYPE_YINLIFANG_P0) {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    } else {
+        emptyArray()
+    }
 }

@@ -266,6 +266,7 @@
     <string name="printer_type_title">Printer Type</string>
     <string name="printer_type_auto">auto</string>
     <string name="printer_type_deli_q5">Deli Q5</string>
+    <string name="printer_type_yinlifang_p0">Tong P0 / Yinlifang</string>
     <string name="printer_connection_title">Connection Status</string>
     <string name="printer_status_idle">No printer connected.</string>
     <string name="printer_status_connecting">Connecting to %1$s…</string>
@@ -279,6 +280,8 @@
     <string name="printer_connect">Connect</string>
     <string name="printer_disconnect">Disconnect</string>
     <string name="printer_refresh">Refresh</string>
+    <string name="printer_scan_in_progress">Scanning for Yinlifang BLE printers…</string>
+    <string name="printer_scan_failed">Failed to scan for Bluetooth printers.</string>
     <string name="printer_bonded_devices">Bonded Devices</string>
     <string name="printer_no_bonded_devices">No bonded device was found. Pair the printer in system Bluetooth settings first.</string>
     <string name="printer_no_matching_devices">No bonded device matches the current printer type.</string>
@@ -287,6 +290,7 @@
     <string name="printer_not_connected">Printer not connected. Connect a printer on the Printer page first.</string>
     <string name="printer_print_in_progress">Sending print job…</string>
     <string name="printer_print_label">Print Label</string>
+    <string name="printer_print_smoke_test">Test Print</string>
     <string name="printer_print_success">Print job sent.</string>
     <string name="printer_enable_bluetooth">Enable Bluetooth</string>
     <string name="printer_device_info">Device Info</string>
@@ -297,4 +301,9 @@
     <string name="printer_device_standby_minutes">%1$d min</string>
     <string name="printer_device_firmware">Firmware</string>
     <string name="printer_device_serial">Serial Number</string>
+    <string name="nfc_write_tag">Write NFC</string>
+    <string name="nfc_tap_tag_to_write">Hold the NFC tag near the back of the phone to write.</string>
+    <string name="nfc_write_success">NFC tag written.</string>
+    <string name="nfc_unsupported_tag">This NFC tag is not supported by this app.</string>
+    <string name="nfc_material_without_location">Material NFC recognized: %1$s</string>
 </resources>

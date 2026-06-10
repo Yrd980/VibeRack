@@ -1,5 +1,7 @@
 package com.example.lcsc_android_erp.ui
 
+import android.app.Activity
+import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -15,6 +17,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -29,7 +33,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.nfc.NfcLabelKind
+import com.example.lcsc_android_erp.core.nfc.NfcScanResult
 import com.example.lcsc_android_erp.feature.home.HomeRoute
 import com.example.lcsc_android_erp.feature.inbound.InboundRoute
 import com.example.lcsc_android_erp.feature.inventory.InventoryOpenRequest
@@ -40,6 +47,9 @@ import com.example.lcsc_android_erp.feature.settings.SettingsRoute
 
 @Composable
 fun LcscApp() {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val appContainer = (context.applicationContext as LcscApplication).appContainer
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -60,6 +70,83 @@ fun LcscApp() {
             }
             launchSingleTop = true
             restoreState = true
+        }
+    }
+    val jumpToInventoryLocation: (String) -> Unit = { locationCode ->
+        inventoryOpenRequest = InventoryOpenRequest(locationCode = locationCode)
+        inventoryOpenRequestSignal++
+        navController.navigate(Destination.Inventory.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+    val jumpToInventoryPartNumber: (String) -> Unit = { partNumber ->
+        inventoryOpenRequest = InventoryOpenRequest(partNumber = partNumber)
+        inventoryOpenRequestSignal++
+        navController.navigate(Destination.Inventory.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    DisposableEffect(activity, appContainer) {
+        appContainer.nfcLabelManager.setOnScanResult { result ->
+            activity?.runOnUiThread {
+                when (result) {
+                    is NfcScanResult.Label -> {
+                        when (result.payload.kind) {
+                            NfcLabelKind.LOCATION -> {
+                                result.payload.locationCode?.let(jumpToInventoryLocation)
+                            }
+
+                            NfcLabelKind.MATERIAL -> {
+                                val locationCode = result.payload.locationCode
+                                val partNumber = result.payload.partNumber
+                                if (locationCode != null && partNumber != null) {
+                                    jumpToInventoryItem(locationCode, partNumber)
+                                } else if (partNumber != null) {
+                                    jumpToInventoryPartNumber(partNumber)
+                                }
+                            }
+                        }
+                    }
+
+                    is NfcScanResult.Unsupported -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.nfc_unsupported_tag),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    is NfcScanResult.Error -> {
+                        Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                    }
+
+                    NfcScanResult.WriteCompleted -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.nfc_write_success),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        }
+        if (activity != null) {
+            appContainer.nfcLabelManager.enable(activity)
+        }
+        onDispose {
+            appContainer.nfcLabelManager.setOnScanResult(null)
+            if (activity != null) {
+                appContainer.nfcLabelManager.disable(activity)
+            }
         }
     }
 
@@ -153,7 +240,7 @@ private val topLevelDestinations = listOf(
     Destination.Home,
     Destination.Inbound,
     Destination.Search,
-    // Destination.Printer,
+    Destination.Printer,
     Destination.Inventory,
     Destination.Settings
 )

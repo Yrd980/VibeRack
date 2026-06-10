@@ -31,5 +31,7 @@ h5/
 tools/output/
 uni-appX/
 .backup/
+.superpowers/
+.gradle-user-home*/
 
 

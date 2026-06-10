@@ -273,6 +273,7 @@
     <string name="printer_type_title">打印机类型</string>
     <string name="printer_type_auto">auto</string>
     <string name="printer_type_deli_q5">Deli Q5</string>
+    <string name="printer_type_yinlifang_p0">佟 P0 / 印立方</string>
     <string name="printer_connection_title">连接状态</string>
     <string name="printer_status_idle">未连接打印机。</string>
     <string name="printer_status_connecting">正在连接 %1$s…</string>
@@ -286,6 +287,8 @@
     <string name="printer_connect">连接</string>
     <string name="printer_disconnect">断开</string>
     <string name="printer_refresh">刷新</string>
+    <string name="printer_scan_in_progress">正在扫描印立方蓝牙打印机…</string>
+    <string name="printer_scan_failed">扫描蓝牙打印机失败。</string>
     <string name="printer_bonded_devices">已配对设备</string>
     <string name="printer_no_bonded_devices">未找到已配对设备，请先在系统蓝牙中完成配对。</string>
     <string name="printer_no_matching_devices">未找到符合当前打印机类型的已配对设备。</string>
@@ -294,6 +297,7 @@
     <string name="printer_not_connected">打印机未连接，请先在打印机页面进行连接。</string>
     <string name="printer_print_in_progress">正在发送打印任务…</string>
     <string name="printer_print_label">打印标签</string>
+    <string name="printer_print_smoke_test">测试打印</string>
     <string name="printer_print_success">打印任务已发送。</string>
     <string name="printer_enable_bluetooth">开启蓝牙</string>
     <string name="printer_device_info">设备信息</string>
@@ -304,4 +308,9 @@
     <string name="printer_device_standby_minutes">%1$d 分钟</string>
     <string name="printer_device_firmware">固件版本</string>
     <string name="printer_device_serial">序列号</string>
+    <string name="nfc_write_tag">写入 NFC</string>
+    <string name="nfc_tap_tag_to_write">请将 NFC 标签贴近手机背面写入。</string>
+    <string name="nfc_write_success">NFC 标签已写入。</string>
+    <string name="nfc_unsupported_tag">未识别到本应用支持的 NFC 标签。</string>
+    <string name="nfc_material_without_location">已识别物料 NFC：%1$s</string>
 </resources>
