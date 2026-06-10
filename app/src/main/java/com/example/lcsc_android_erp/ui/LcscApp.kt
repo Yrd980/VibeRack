@@ -37,6 +37,7 @@ import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.nfc.NfcLabelKind
 import com.example.lcsc_android_erp.core.nfc.NfcScanResult
+import com.example.lcsc_android_erp.feature.boxes.BoxesRoute
 import com.example.lcsc_android_erp.feature.home.HomeRoute
 import com.example.lcsc_android_erp.feature.inbound.InboundRoute
 import com.example.lcsc_android_erp.feature.inventory.InventoryOpenRequest
@@ -200,6 +201,9 @@ fun LcscApp() {
             composable(Destination.Home.route) {
                 HomeRoute()
             }
+            composable(Destination.Boxes.route) {
+                BoxesRoute()
+            }
             composable(Destination.Inbound.route) {
                 InboundRoute(onViewInventoryItem = jumpToInventoryItem)
             }
@@ -229,6 +233,7 @@ private sealed class Destination(
     val icon: ImageVector
 ) {
     data object Home : Destination("home", R.string.nav_home, Icons.Outlined.Home)
+    data object Boxes : Destination("boxes", R.string.nav_boxes, Icons.Outlined.Inventory2)
     data object Inbound : Destination("inbound", R.string.nav_inbound, Icons.Outlined.QrCodeScanner)
     data object Search : Destination("search", R.string.nav_search, Icons.Outlined.Search)
     data object Printer : Destination("printer", R.string.nav_printer, Icons.Outlined.Print)
@@ -238,9 +243,9 @@ private sealed class Destination(
 
 private val topLevelDestinations = listOf(
     Destination.Home,
+    Destination.Boxes,
     Destination.Inbound,
     Destination.Search,
     Destination.Printer,
-    Destination.Inventory,
     Destination.Settings
 )
