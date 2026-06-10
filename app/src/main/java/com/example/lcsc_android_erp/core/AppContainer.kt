@@ -13,6 +13,7 @@ import com.example.lcsc_android_erp.core.printer.P0PrinterManager
 import com.example.lcsc_android_erp.core.printer.PrinterManager
 import com.example.lcsc_android_erp.core.printer.Q5PrinterManager
 import com.example.lcsc_android_erp.data.repository.ComponentEnrichmentManager
+import com.example.lcsc_android_erp.data.repository.BoxRepositoryImpl
 import com.example.lcsc_android_erp.data.remote.LcscCatalogRemoteDataSource
 import com.example.lcsc_android_erp.data.repository.ComponentImageStore
 import com.example.lcsc_android_erp.data.repository.InventoryBackupManager
@@ -20,6 +21,7 @@ import com.example.lcsc_android_erp.data.repository.InventoryRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.LcscCatalogRepositoryImpl
 import com.example.lcsc_android_erp.domain.model.LocationCategoryProfile
 import com.example.lcsc_android_erp.domain.model.calculateDominantLocationCategoryProfile
+import com.example.lcsc_android_erp.domain.repository.BoxRepository
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
 import com.example.lcsc_android_erp.domain.repository.LcscCatalogRepository
 import java.io.File
@@ -104,6 +106,11 @@ class AppContainer(context: Context) {
         inventoryTransactionDao = database.inventoryTransactionDao(),
         componentEnrichmentManager = componentEnrichmentManager,
         componentImageStore = componentImageStore
+    )
+
+    val boxRepository: BoxRepository = BoxRepositoryImpl(
+        database = database,
+        boxDao = database.boxDao()
     )
 
     val inventoryBackupManager = InventoryBackupManager(
