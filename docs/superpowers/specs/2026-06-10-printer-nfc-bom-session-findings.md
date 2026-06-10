@@ -378,6 +378,21 @@ Still pending:
 - A new physical print check of the editable `打印盒层标签` action on `P0-YF604020851`.
 - Real box/layer assignment data instead of temporary Printer screen fields.
 
+## Completed Box/Layer First Slice
+
+Implemented:
+
+1. Explicit Room tables for boxes, layers, and layer-material bindings.
+2. A Boxes top-level route for creating boxes and generating layers.
+3. Layer-level label printing through the existing 10 mm bitmap profile.
+
+Still pending:
+
+- Component assignment UI.
+- BOM-to-layer workflow.
+- NFC payload upgrade to explicit box/layer fields.
+- Legacy storage location migration.
+
 ## Recommended Next Slice
 
 The next useful slice after the app-level 10 mm label tool is physical verification and then real box-layer assignment:

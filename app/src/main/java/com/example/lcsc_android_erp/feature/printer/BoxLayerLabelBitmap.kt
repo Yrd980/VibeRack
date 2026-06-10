@@ -65,13 +65,15 @@ object BoxLayerLabelBitmap {
             baseline = 36f,
             minTextSize = 26f,
         )
-        drawFittedLine(
-            canvas = canvas,
-            text = content.partNumber,
-            paint = partPaint,
-            baseline = 72f,
-            minTextSize = 24f,
-        )
+        content.partNumber.takeIf { it.isNotBlank() }?.let { partNumber ->
+            drawFittedLine(
+                canvas = canvas,
+                text = partNumber,
+                paint = partPaint,
+                baseline = 72f,
+                minTextSize = 24f,
+            )
+        }
         content.note?.takeIf { it.isNotBlank() }?.let { note ->
             drawFittedLine(
                 canvas = canvas,
