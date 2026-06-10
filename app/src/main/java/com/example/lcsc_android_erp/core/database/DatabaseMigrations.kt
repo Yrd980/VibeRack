@@ -76,10 +76,75 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS component_box (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    code TEXT NOT NULL,
+                    name TEXT,
+                    layerCount INTEGER NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_component_box_code " +
+                    "ON component_box (code)"
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS box_layer (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    box_id INTEGER NOT NULL,
+                    layer_code TEXT NOT NULL,
+                    displayName TEXT,
+                    sortOrder INTEGER NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    FOREIGN KEY(box_id) REFERENCES component_box(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_box_layer_box_id ON box_layer (box_id)")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_box_layer_box_id_layer_code " +
+                    "ON box_layer (box_id, layer_code)"
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS layer_material (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    layer_id INTEGER NOT NULL,
+                    component_id INTEGER NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    sourceType TEXT,
+                    rawPayload TEXT,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    FOREIGN KEY(layer_id) REFERENCES box_layer(id) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(component_id) REFERENCES component_master(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_layer_material_layer_id " +
+                    "ON layer_material (layer_id)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_layer_material_component_id " +
+                    "ON layer_material (component_id)"
+            )
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
         MIGRATION_3_4,
-        MIGRATION_4_5
+        MIGRATION_4_5,
+        MIGRATION_5_6
     )
 }
