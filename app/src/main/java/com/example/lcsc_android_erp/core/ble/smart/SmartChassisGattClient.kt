@@ -11,7 +11,10 @@ import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
@@ -49,6 +52,8 @@ class SmartChassisGattClient(
     private var pendingLightWrite: CompletableDeferred<SmartChassisClientResult<SmartChassisLightStatus>>? = null
     private val pendingDescriptors = ArrayDeque<BluetoothGattDescriptor>()
     private var pendingDescriptorSetup: CompletableDeferred<Boolean>? = null
+    private var bondReceiver: BroadcastReceiver? = null
+    private var bondingDeviceAddress: String? = null
 
     private val _discoveredChassis = MutableStateFlow<List<SmartChassisDevice>>(emptyList())
     override val discoveredChassis: StateFlow<List<SmartChassisDevice>> = _discoveredChassis.asStateFlow()
@@ -107,7 +112,7 @@ class SmartChassisGattClient(
             queueNotificationDescriptor(tableInfoCharacteristic)
             queueNotificationDescriptor(lightStatus)
             if (pendingDescriptors.isEmpty()) {
-                completeConnect()
+                completeConnectWhenBonded()
             } else {
                 writeNextDescriptor(gatt)
             }
@@ -128,7 +133,7 @@ class SmartChassisGattClient(
             if (pendingDescriptors.isEmpty()) {
                 pendingDescriptorSetup?.complete(true)
                 pendingDescriptorSetup = null
-                completeConnect()
+                completeConnectWhenBonded()
             } else {
                 writeNextDescriptor(gatt)
             }
@@ -230,7 +235,7 @@ class SmartChassisGattClient(
         )
         val gattClient = connectGatt(remoteDevice)
         gatt = gattClient
-        return withBleTimeout("Connect timed out") {
+        return withBleTimeout("Connect timed out", CONNECT_TIMEOUT_MS) {
             deferred.await()
         }
     }
@@ -675,6 +680,65 @@ class SmartChassisGattClient(
         return withBleTimeout("Light Status read timed out") { deferred.await() }
     }
 
+    private fun completeConnectWhenBonded() {
+        val device = gatt?.device ?: return failConnect("Connected device is unavailable")
+        when (device.bondState) {
+            BluetoothDevice.BOND_BONDED -> completeConnect()
+            BluetoothDevice.BOND_BONDING -> waitForBond(device)
+            else -> startBond(device)
+        }
+    }
+
+    private fun startBond(device: BluetoothDevice) {
+        waitForBond(device)
+        _connectionState.value = _connectionState.value.copy(
+            message = "Pairing with ${device.address}"
+        )
+        if (!device.createBond()) {
+            unregisterBondReceiver()
+            failConnect("Smart chassis pairing could not be started")
+            closeGatt()
+        }
+    }
+
+    private fun waitForBond(device: BluetoothDevice) {
+        if (bondReceiver != null && bondingDeviceAddress == device.address) {
+            return
+        }
+        unregisterBondReceiver()
+        bondingDeviceAddress = device.address
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
+                    return
+                }
+                val changedDevice = intent.bluetoothDeviceExtra() ?: return
+                if (!changedDevice.address.equals(bondingDeviceAddress, ignoreCase = true)) {
+                    return
+                }
+                when (intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)) {
+                    BluetoothDevice.BOND_BONDED -> {
+                        unregisterBondReceiver()
+                        completeConnect()
+                    }
+
+                    BluetoothDevice.BOND_NONE -> {
+                        unregisterBondReceiver()
+                        failConnect("Smart chassis pairing was cancelled or failed")
+                        closeGatt()
+                    }
+                }
+            }
+        }
+        bondReceiver = receiver
+        val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            appContext.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            appContext.registerReceiver(receiver, filter)
+        }
+    }
+
     private fun completeConnect() {
         val deviceAddress = gatt?.device?.address?.uppercase() ?: return failConnect("Connected device address is unavailable")
         val device = SmartChassisDevice(
@@ -722,6 +786,7 @@ class SmartChassisGattClient(
     }
 
     private fun closeGatt() {
+        unregisterBondReceiver()
         runCatching { gatt?.disconnect() }
         runCatching { gatt?.close() }
         gatt = null
@@ -733,6 +798,14 @@ class SmartChassisGattClient(
         _tableInfoUpdates.value = null
         pendingDescriptors.clear()
         pendingDescriptorSetup = null
+    }
+
+    private fun unregisterBondReceiver() {
+        bondReceiver?.let { receiver ->
+            runCatching { appContext.unregisterReceiver(receiver) }
+        }
+        bondReceiver = null
+        bondingDeviceAddress = null
     }
 
     private fun validateReadAll(
@@ -765,12 +838,22 @@ class SmartChassisGattClient(
 
     private suspend fun <T> withBleTimeout(
         timeoutMessage: String,
+        timeoutMs: Long = OPERATION_TIMEOUT_MS,
         block: suspend () -> SmartChassisClientResult<T>
     ): SmartChassisClientResult<T> {
         return try {
-            withTimeout(OPERATION_TIMEOUT_MS) { block() }
+            withTimeout(timeoutMs) { block() }
         } catch (_: TimeoutCancellationException) {
             SmartChassisClientResult.Failure(timeoutMessage)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun Intent.bluetoothDeviceExtra(): BluetoothDevice? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+        } else {
+            getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
         }
     }
 
@@ -786,6 +869,7 @@ class SmartChassisGattClient(
 
     private companion object {
         private const val OPERATION_TIMEOUT_MS = 12_000L
+        private const val CONNECT_TIMEOUT_MS = 45_000L
         private const val FLASH_BUSY_MAX_RETRIES = 3
         private const val FLASH_BUSY_RETRY_DELAY_MS = 100L
         private val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID =

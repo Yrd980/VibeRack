@@ -9,6 +9,9 @@ import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
 
 @Dao
 interface StockItemDao {
+    @Query("SELECT * FROM stock_item ORDER BY id ASC")
+    suspend fun getAll(): List<StockItemEntity>
+
     @Query("SELECT * FROM stock_item WHERE id = :stockItemId LIMIT 1")
     suspend fun findById(stockItemId: Long): StockItemEntity?
 

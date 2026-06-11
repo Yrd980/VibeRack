@@ -10,16 +10,12 @@ import com.example.lcsc_android_erp.core.database.dao.ContainerDao
 import com.example.lcsc_android_erp.core.database.dao.DashboardDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryItemDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryTransactionDao
-import com.example.lcsc_android_erp.core.database.dao.StockItemDao
-import com.example.lcsc_android_erp.core.database.dao.StockOperationDao
 import com.example.lcsc_android_erp.core.database.dao.StorageLocationDao
 import com.example.lcsc_android_erp.core.database.entity.ComponentEntity
 import com.example.lcsc_android_erp.core.database.entity.ContainerEntity
 import com.example.lcsc_android_erp.core.database.entity.ContainerSlotEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryItemEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryTransactionEntity
-import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
-import com.example.lcsc_android_erp.core.database.entity.StockOperationEntity
 import com.example.lcsc_android_erp.core.database.entity.StorageLocationEntity
 import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.DashboardSummary
@@ -27,14 +23,16 @@ import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
 import com.example.lcsc_android_erp.domain.model.InboundRecord
 import com.example.lcsc_android_erp.domain.model.LocationCategoryProfile
 import com.example.lcsc_android_erp.domain.model.LocationInventoryItem
-import com.example.lcsc_android_erp.domain.model.QuantityState
 import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
 import com.example.lcsc_android_erp.domain.model.StockLocationCell
+import com.example.lcsc_android_erp.domain.model.StockOperation
 import com.example.lcsc_android_erp.domain.model.StockOperationType
 import com.example.lcsc_android_erp.domain.model.StorageLocation
 import com.example.lcsc_android_erp.domain.model.StorageLocationSortMode
 import com.example.lcsc_android_erp.domain.model.calculateDominantLocationCategoryProfile
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
+import com.example.lcsc_android_erp.domain.repository.StockPlacementRepository
+import com.example.lcsc_android_erp.domain.repository.StockPlacementWrite
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
@@ -50,8 +48,7 @@ class InventoryRepositoryImpl(
     private val inventoryItemDao: InventoryItemDao,
     private val inventoryTransactionDao: InventoryTransactionDao,
     private val containerDao: ContainerDao,
-    private val stockItemDao: StockItemDao,
-    private val stockOperationDao: StockOperationDao,
+    private val stockPlacementRepository: StockPlacementRepository,
     private val componentEnrichmentManager: ComponentEnrichmentManager,
     private val componentImageStore: ComponentImageStore
 ) : InventoryRepository {
@@ -301,11 +298,11 @@ class InventoryRepositoryImpl(
                 slot = slot,
                 updatedAt = inboundAt
             )
-            stockOperationDao.insert(
-                StockOperationEntity(
-                    type = StockOperationType.INBOUND.name,
+            stockPlacementRepository.recordOperation(
+                StockOperation(
+                    type = StockOperationType.INBOUND,
                     containerId = location.id,
-                    containerSlotId = slot.id,
+                    slotId = slot.id,
                     componentId = componentId,
                     quantityDelta = preparedRecord.quantity,
                     sourceType = preparedRecord.sourceType,
@@ -426,11 +423,11 @@ class InventoryRepositoryImpl(
             val now = System.currentTimeMillis()
             items.forEach { item ->
                 val component = componentDao.findById(item.componentId)
-                stockOperationDao.insert(
-                    StockOperationEntity(
-                        type = StockOperationType.DELETE.name,
+                stockPlacementRepository.recordOperation(
+                    StockOperation(
+                        type = StockOperationType.DELETE,
                         containerId = location.id,
-                        containerSlotId = slot.id,
+                        slotId = slot.id,
                         componentId = item.componentId,
                         quantityDelta = -item.quantity,
                         sourceType = "MANUAL_DELETE_LOCATION",
@@ -441,7 +438,7 @@ class InventoryRepositoryImpl(
             }
             inventoryTransactionDao.deleteByLocationId(location.id)
             inventoryItemDao.deleteByLocationId(location.id)
-            stockItemDao.deleteByContainerId(location.id)
+            stockPlacementRepository.deleteContainerStock(location.id)
             refreshLocationCategoryProfileInternal(location.id)
             containerDao.deleteContainerById(location.id)
             storageLocationDao.deleteById(location.id)
@@ -477,11 +474,11 @@ class InventoryRepositoryImpl(
                 slot = slot,
                 updatedAt = now
             )
-            stockOperationDao.insert(
-                StockOperationEntity(
-                    type = StockOperationType.ADJUST.name,
+            stockPlacementRepository.recordOperation(
+                StockOperation(
+                    type = StockOperationType.ADJUST,
                     containerId = item.locationId,
-                    containerSlotId = slot.id,
+                    slotId = slot.id,
                     componentId = item.componentId,
                     quantityDelta = delta,
                     sourceType = "MANUAL_EDIT",
@@ -552,7 +549,7 @@ class InventoryRepositoryImpl(
                     updatedAt = now
                 )
                 inventoryItemDao.update(movedItem)
-                stockItemDao.deleteByComponentAndSlot(item.componentId, sourceSlot.id)
+                stockPlacementRepository.deleteComponentFromSlot(item.componentId, sourceSlot.id)
                 upsertStockItemForLegacyInventoryItem(
                     item = movedItem,
                     slot = targetSlot,
@@ -565,18 +562,18 @@ class InventoryRepositoryImpl(
                 )
                 inventoryItemDao.update(mergedItem)
                 inventoryItemDao.deleteById(item.id)
-                stockItemDao.deleteByComponentAndSlot(item.componentId, sourceSlot.id)
+                stockPlacementRepository.deleteComponentFromSlot(item.componentId, sourceSlot.id)
                 upsertStockItemForLegacyInventoryItem(
                     item = mergedItem,
                     slot = targetSlot,
                     updatedAt = now
                 )
             }
-            stockOperationDao.insert(
-                StockOperationEntity(
-                    type = StockOperationType.TRANSFER_OUT.name,
+            stockPlacementRepository.recordOperation(
+                StockOperation(
+                    type = StockOperationType.TRANSFER_OUT,
                     containerId = item.locationId,
-                    containerSlotId = sourceSlot.id,
+                    slotId = sourceSlot.id,
                     componentId = item.componentId,
                     quantityDelta = -item.quantity,
                     sourceType = "MANUAL_TRANSFER",
@@ -584,11 +581,11 @@ class InventoryRepositoryImpl(
                     createdAt = now
                 )
             )
-            stockOperationDao.insert(
-                StockOperationEntity(
-                    type = StockOperationType.TRANSFER_IN.name,
+            stockPlacementRepository.recordOperation(
+                StockOperation(
+                    type = StockOperationType.TRANSFER_IN,
                     containerId = targetLocation.id,
-                    containerSlotId = targetSlot.id,
+                    slotId = targetSlot.id,
                     componentId = item.componentId,
                     quantityDelta = item.quantity,
                     sourceType = "MANUAL_TRANSFER",
@@ -633,12 +630,12 @@ class InventoryRepositoryImpl(
             val slot = ensureLegacyLocationContainer(location)
             val now = System.currentTimeMillis()
             inventoryItemDao.deleteById(item.id)
-            stockItemDao.deleteByComponentAndSlot(item.componentId, slot.id)
-            stockOperationDao.insert(
-                StockOperationEntity(
-                    type = StockOperationType.DELETE.name,
+            stockPlacementRepository.deleteComponentFromSlot(item.componentId, slot.id)
+            stockPlacementRepository.recordOperation(
+                StockOperation(
+                    type = StockOperationType.DELETE,
                     containerId = item.locationId,
-                    containerSlotId = slot.id,
+                    slotId = slot.id,
                     componentId = item.componentId,
                     quantityDelta = -item.quantity,
                     sourceType = "MANUAL_DELETE",
@@ -790,30 +787,16 @@ class InventoryRepositoryImpl(
         slot: ContainerSlotEntity,
         updatedAt: Long
     ) {
-        val existing = stockItemDao.findByComponentAndSlot(item.componentId, slot.id)
-        if (existing == null) {
-            stockItemDao.insert(
-                StockItemEntity(
-                    componentId = item.componentId,
-                    containerId = item.locationId,
-                    containerSlotId = slot.id,
-                    quantity = item.quantity,
-                    quantityState = QuantityState.KNOWN.name,
-                    lastInboundAt = item.lastInboundAt,
-                    updatedAt = updatedAt
-                )
+        stockPlacementRepository.upsertStock(
+            StockPlacementWrite(
+                componentId = item.componentId,
+                containerId = item.locationId,
+                slotId = slot.id,
+                quantity = item.quantity,
+                lastInboundAt = item.lastInboundAt,
+                updatedAt = updatedAt
             )
-        } else {
-            stockItemDao.update(
-                existing.copy(
-                    containerId = item.locationId,
-                    quantity = item.quantity,
-                    quantityState = QuantityState.KNOWN.name,
-                    lastInboundAt = item.lastInboundAt,
-                    updatedAt = updatedAt
-                )
-            )
-        }
+        )
     }
 
     private fun protocolPartIdForComponent(

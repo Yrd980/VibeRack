@@ -14,6 +14,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BoxDao {
+    @Query("SELECT * FROM component_box ORDER BY code ASC")
+    suspend fun getAllBoxes(): List<BoxEntity>
+
+    @Query("SELECT * FROM box_layer ORDER BY box_id ASC, sortOrder ASC, layer_code ASC")
+    suspend fun getAllLayerEntities(): List<BoxLayerEntity>
+
     @Query(
         """
         SELECT
@@ -48,6 +54,9 @@ interface BoxDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertLayers(layers: List<BoxLayerEntity>)
+
+    @Query("DELETE FROM component_box")
+    suspend fun deleteAllBoxes()
 
     @Update
     suspend fun updateBox(box: BoxEntity)

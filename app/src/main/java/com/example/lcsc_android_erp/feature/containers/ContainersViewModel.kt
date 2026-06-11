@@ -6,12 +6,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.lcsc_android_erp.core.AppContainer
-import com.example.lcsc_android_erp.core.ble.smart.RgbColor
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisConnectionState
-import com.example.lcsc_android_erp.core.ble.smart.SmartChassisCodec
-import com.example.lcsc_android_erp.core.ble.smart.SmartChassisLightCommand
-import com.example.lcsc_android_erp.core.ble.smart.SmartChassisLightMode
-import com.example.lcsc_android_erp.core.ble.smart.SmartChassisManager
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisOperations
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisScanner
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisOperationError
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisTableInfo
@@ -34,7 +30,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContainersViewModel(
     private val containerRepository: ContainerRepository,
-    private val smartChassisManager: SmartChassisManager,
+    private val smartChassisOperations: SmartChassisOperations,
     private val smartChassisScanner: SmartChassisScanner
 ) : ViewModel() {
     private val selectedContainerId = MutableStateFlow<Long?>(null)
@@ -65,9 +61,9 @@ class ContainersViewModel(
     }
 
     private val chassisState = combine(
-        smartChassisManager.connectionState,
-        smartChassisManager.activeTableInfo,
-        smartChassisManager.lastOperationError
+        smartChassisOperations.connectionState,
+        smartChassisOperations.activeTableInfo,
+        smartChassisOperations.lastOperationError
     ) { connectionState, activeTableInfo, lastOperationError ->
         ChassisState(
             connectionState = connectionState,
@@ -143,29 +139,19 @@ class ContainersViewModel(
         val macAddress = container.macAddress ?: return
         viewModelScope.launch {
             message.value = null
-            val connected = smartChassisManager.connect(macAddress)
+            val connected = smartChassisOperations.connectAndRefresh(macAddress)
             if (connected != null) {
-                smartChassisManager.refreshTableInfo()
                 message.value = "已连接 ${connected.name ?: connected.address}"
             }
         }
     }
 
     fun readAllSmartChassis(container: StockContainer) {
-        val macAddress = container.macAddress ?: return
         viewModelScope.launch {
             message.value = null
-            if (!smartChassisManager.connectionState.value.isConnected) {
-                smartChassisManager.connect(macAddress)
-            }
-            val snapshot = smartChassisManager.readAll()
-            if (snapshot != null) {
-                val restoredCount = containerRepository.restoreSmartChassisTable(
-                    containerId = container.id,
-                    records = snapshot.records,
-                    tableInfo = snapshot.tableInfo
-                )
-                message.value = "已读取 ${snapshot.records.size} 个槽位，恢复 $restoredCount 条记录"
+            val result = smartChassisOperations.restoreFromHardware(container)
+            if (result != null) {
+                message.value = "已读取 ${result.totalSlots} 个槽位，恢复 ${result.restoredRecords} 条记录"
             }
         }
     }
@@ -177,18 +163,7 @@ class ContainersViewModel(
         val macAddress = container.macAddress ?: return
         viewModelScope.launch {
             message.value = null
-            if (!smartChassisManager.connectionState.value.isConnected) {
-                smartChassisManager.connect(macAddress)
-            }
-            val status = smartChassisManager.sendLightCommand(
-                SmartChassisLightCommand(
-                    mode = SmartChassisLightMode.FIND,
-                    maskA = SmartChassisCodec.slotMask(slotNumber),
-                    colorA = RgbColor(red = 40, green = 180, blue = 255),
-                    timeoutSeconds = 30
-                )
-            )
-            if (status != null) {
+            if (smartChassisOperations.findSlot(macAddress, slotNumber)) {
                 activeLightSlot.value = slotNumber
                 message.value = "正在点亮槽位 $slotNumber"
             }
@@ -202,18 +177,7 @@ class ContainersViewModel(
         val macAddress = container.macAddress ?: return
         viewModelScope.launch {
             message.value = null
-            if (!smartChassisManager.connectionState.value.isConnected) {
-                smartChassisManager.connect(macAddress)
-            }
-            val status = smartChassisManager.sendLightCommand(
-                SmartChassisLightCommand(
-                    mode = SmartChassisLightMode.STOCK_IN,
-                    maskA = SmartChassisCodec.slotMask(slotNumber),
-                    colorA = RgbColor(red = 30, green = 220, blue = 100),
-                    timeoutSeconds = 45
-                )
-            )
-            if (status != null) {
+            if (smartChassisOperations.guideStockInSlot(macAddress, slotNumber)) {
                 activeLightSlot.value = slotNumber
                 message.value = "槽位 $slotNumber 已进入入库引导"
             }
@@ -222,14 +186,7 @@ class ContainersViewModel(
 
     fun lightsOff() {
         viewModelScope.launch {
-            val status = smartChassisManager.sendLightCommand(
-                SmartChassisLightCommand(
-                    mode = SmartChassisLightMode.OFF,
-                    maskA = 0,
-                    colorA = RgbColor(red = 0, green = 0, blue = 0)
-                )
-            )
-            if (status != null) {
+            if (smartChassisOperations.lightsOff()) {
                 activeLightSlot.value = null
                 message.value = "灯光已关闭"
             }
@@ -250,7 +207,8 @@ class ContainersViewModel(
                     protoVersion = device.advertisement.protoVersion,
                     batteryPct = device.advertisement.batteryPct,
                     statusFlags = device.advertisement.statusFlags,
-                    tableSeqLow16 = device.advertisement.tableSeqLow16
+                    tableSeqLow16 = device.advertisement.tableSeqLow16,
+                    advertisedName = device.name
                 )
                 if (firstRegisteredContainer == null) {
                     firstRegisteredContainer = registeredContainer
@@ -269,7 +227,7 @@ class ContainersViewModel(
             initializer {
                 ContainersViewModel(
                     containerRepository = appContainer.containerRepository,
-                    smartChassisManager = appContainer.smartChassisManager,
+                    smartChassisOperations = appContainer.smartChassisOperations,
                     smartChassisScanner = appContainer.smartChassisScanner
                 )
             }

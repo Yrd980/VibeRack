@@ -11,19 +11,9 @@ interface DashboardDao {
         """
         SELECT
             (SELECT COUNT(*) FROM component_master) AS componentCount,
-            (SELECT COUNT(*) FROM storage_location) AS locationCount,
-            (
-                SELECT COUNT(*)
-                FROM stock_item si
-                INNER JOIN `container` c ON c.id = si.container_id
-                WHERE c.type = 'LEGACY_LOCATION'
-            ) AS inventoryCount,
-            (
-                SELECT COALESCE(SUM(si.quantity), 0)
-                FROM stock_item si
-                INNER JOIN `container` c ON c.id = si.container_id
-                WHERE c.type = 'LEGACY_LOCATION'
-            ) AS totalQuantity,
+            (SELECT COUNT(*) FROM `container`) AS locationCount,
+            (SELECT COUNT(*) FROM stock_item) AS inventoryCount,
+            (SELECT COALESCE(SUM(quantity), 0) FROM stock_item) AS totalQuantity,
             (SELECT COUNT(*) FROM inventory_txn) AS transactionCount
         """
     )

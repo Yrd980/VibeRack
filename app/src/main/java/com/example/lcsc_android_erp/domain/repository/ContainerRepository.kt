@@ -21,7 +21,8 @@ interface ContainerRepository {
         protoVersion: Int,
         batteryPct: Int? = null,
         statusFlags: Int? = null,
-        tableSeqLow16: Int? = null
+        tableSeqLow16: Int? = null,
+        advertisedName: String? = null
     ): StockContainer?
     suspend fun getSlots(containerId: Long): List<ContainerSlot>
     suspend fun restoreSmartChassisTable(

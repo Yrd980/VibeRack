@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LightbulbCircle
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Refresh
@@ -44,7 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -95,8 +93,6 @@ fun ContainersRoute(
         onSelectContainer = viewModel::selectContainer,
         onConnectSmartChassis = viewModel::connectSmartChassis,
         onReadAllSmartChassis = viewModel::readAllSmartChassis,
-        onFindSlot = viewModel::findSlot,
-        onStockInSlot = viewModel::stockInSlot,
         onLightsOff = viewModel::lightsOff,
         onScanSmartChassis = viewModel::scanSmartChassis,
         hasBluetoothPermission = hasBluetoothPermission,
@@ -119,8 +115,6 @@ fun ContainersScreen(
     onSelectContainer: (StockContainer) -> Unit,
     onConnectSmartChassis: (StockContainer) -> Unit,
     onReadAllSmartChassis: (StockContainer) -> Unit,
-    onFindSlot: (StockContainer, Int) -> Unit,
-    onStockInSlot: (StockContainer, Int) -> Unit,
     onLightsOff: () -> Unit,
     onScanSmartChassis: (Boolean) -> Unit,
     hasBluetoothPermission: Boolean,
@@ -178,8 +172,6 @@ fun ContainersScreen(
                     },
                     onConnectSmartChassis = { onConnectSmartChassis(container) },
                     onReadAllSmartChassis = { onReadAllSmartChassis(container) },
-                    onFindSlot = { slotNumber -> onFindSlot(container, slotNumber) },
-                    onStockInSlot = { slotNumber -> onStockInSlot(container, slotNumber) },
                     onLightsOff = onLightsOff,
                     hasBluetoothPermission = hasBluetoothPermission,
                     onRequestBluetoothPermission = onRequestBluetoothPermission,
@@ -389,8 +381,6 @@ private fun ContainerDetail(
     tableInfoText: String?,
     onConnectSmartChassis: () -> Unit,
     onReadAllSmartChassis: () -> Unit,
-    onFindSlot: (Int) -> Unit,
-    onStockInSlot: (Int) -> Unit,
     onLightsOff: () -> Unit,
     hasBluetoothPermission: Boolean,
     onRequestBluetoothPermission: () -> Unit,
@@ -401,8 +391,9 @@ private fun ContainerDetail(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        val containerTitle = container.displayName?.takeIf { it.isNotBlank() } ?: container.code
         Text(
-            text = stringResource(R.string.containers_detail_title, container.code),
+            text = stringResource(R.string.containers_detail_title, containerTitle),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold
         )
@@ -417,11 +408,9 @@ private fun ContainerDetail(
                 onRequestBluetoothPermission = onRequestBluetoothPermission,
                 onEnableBluetooth = onEnableBluetooth
             )
-            SmartChassisTwinGrid(
+            SmartChassisLightStrip(
                 slots = slots,
-                activeLightSlot = activeLightSlot,
-                onFindSlot = onFindSlot,
-                onStockInSlot = onStockInSlot
+                activeLightSlot = activeLightSlot
             )
         } else {
             SlotList(slots = slots)
@@ -535,98 +524,34 @@ private fun SmartChassisActions(
 }
 
 @Composable
-fun SmartChassisTwinGrid(
+private fun SmartChassisLightStrip(
     slots: List<ContainerSlotStock>,
     activeLightSlot: Int?,
-    onFindSlot: (Int) -> Unit,
-    onStockInSlot: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val slotMap = slots.associateBy { it.slot.slotNumber }
-    Column(
+    Row(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        (1..SmartChassisProtocol.SLOT_COUNT).chunked(5).forEach { rowSlots ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                rowSlots.forEach { slotNumber ->
-                    SmartChassisSlotCell(
-                        slotNumber = slotNumber,
-                        slotStock = slotMap[slotNumber],
-                        active = activeLightSlot == slotNumber,
-                        onFind = { onFindSlot(slotNumber) },
-                        onStockIn = { onStockInSlot(slotNumber) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+        (1..SmartChassisProtocol.SLOT_COUNT).forEach { slotNumber ->
+            val stockItem = slotMap[slotNumber]?.stockItem
+            val active = activeLightSlot == slotNumber
+            val color = when {
+                active -> MaterialTheme.colorScheme.tertiary
+                stockItem?.isAtOrBelowSafetyStock == true -> MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
+                stockItem != null -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.62f)
+                else -> MaterialTheme.colorScheme.outlineVariant
             }
-        }
-    }
-}
-
-@Composable
-private fun SmartChassisSlotCell(
-    slotNumber: Int,
-    slotStock: ContainerSlotStock?,
-    active: Boolean,
-    onFind: () -> Unit,
-    onStockIn: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val stockItem = slotStock?.stockItem
-    val containerColor = when {
-        active -> MaterialTheme.colorScheme.tertiaryContainer
-        stockItem?.isAtOrBelowSafetyStock == true -> MaterialTheme.colorScheme.errorContainer
-        stockItem != null -> MaterialTheme.colorScheme.secondaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    Surface(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = if (stockItem == null) onStockIn else onFind),
-        color = containerColor,
-        tonalElevation = if (active) 4.dp else 0.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(6.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = slotNumber.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                if (stockItem != null) {
-                    Icon(
-                        imageVector = Icons.Outlined.Lightbulb,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-            Text(
-                text = stockItem?.partNumber ?: stringResource(R.string.containers_slot_empty),
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = stockItem?.quantity?.toString().orEmpty(),
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .aspectRatio(1f),
+                shape = RoundedCornerShape(percent = 50),
+                color = color,
+                tonalElevation = if (active) 4.dp else 0.dp
+            ) {}
         }
     }
 }

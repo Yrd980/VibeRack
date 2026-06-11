@@ -7,6 +7,7 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.database.dao.BoxDao
 import com.example.lcsc_android_erp.core.database.dao.ComponentDao
 import com.example.lcsc_android_erp.core.database.dao.ContainerDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryItemDao
@@ -14,11 +15,14 @@ import com.example.lcsc_android_erp.core.database.dao.InventoryTransactionDao
 import com.example.lcsc_android_erp.core.database.dao.StockItemDao
 import com.example.lcsc_android_erp.core.database.dao.StockOperationDao
 import com.example.lcsc_android_erp.core.database.dao.StorageLocationDao
+import com.example.lcsc_android_erp.core.database.entity.BoxEntity
+import com.example.lcsc_android_erp.core.database.entity.BoxLayerEntity
 import com.example.lcsc_android_erp.core.database.entity.ComponentEntity
 import com.example.lcsc_android_erp.core.database.entity.ContainerEntity
 import com.example.lcsc_android_erp.core.database.entity.ContainerSlotEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryItemEntity
 import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
+import com.example.lcsc_android_erp.core.database.entity.StockOperationEntity
 import com.example.lcsc_android_erp.core.database.entity.StorageLocationEntity
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.domain.model.ContainerType
@@ -47,6 +51,7 @@ import org.json.JSONObject
 class InventoryBackupManager(
     private val context: Context,
     private val database: RoomDatabase,
+    private val boxDao: BoxDao,
     private val storageLocationDao: StorageLocationDao,
     private val componentDao: ComponentDao,
     private val inventoryItemDao: InventoryItemDao,
@@ -82,13 +87,20 @@ class InventoryBackupManager(
             val appVersionCode = PackageInfoCompat.getLongVersionCode(packageInfo).toString()
 
             val storageLocations = database.withTransaction { storageLocationDao.getAll() }
+            val boxes = database.withTransaction { boxDao.getAllBoxes() }
+            val boxLayers = database.withTransaction { boxDao.getAllLayerEntities() }
+            val containers = database.withTransaction { containerDao.getAllContainers() }
+            val containerSlots = database.withTransaction { containerDao.getAllSlots() }
+            val stockItems = database.withTransaction { stockItemDao.getAll() }
+            val stockOperations = database.withTransaction { stockOperationDao.getAll() }
             val recentLocationColors = userPreferencesRepository.preferences
                 .first()
                 .recentLocationColors
             val inventoryItems = database.withTransaction { inventoryItemDao.getAll() }
-            val referencedComponentIds = inventoryItems
+            val referencedComponentIds = (inventoryItems.asSequence().map(InventoryItemEntity::componentId) +
+                stockItems.asSequence().map(StockItemEntity::componentId) +
+                stockOperations.asSequence().mapNotNull(StockOperationEntity::componentId))
                 .asSequence()
-                .map(InventoryItemEntity::componentId)
                 .toSet()
             val initialComponents = database.withTransaction {
                 componentDao.getAll().filter { it.id in referencedComponentIds }
@@ -106,7 +118,7 @@ class InventoryBackupManager(
             workbook.createSheet("meta").apply {
                 writeRow(
                     0,
-                    listOf("schemaVersion", "1")
+                    listOf("schemaVersion", "2")
                 )
                 writeRow(
                     1,
@@ -203,6 +215,196 @@ class InventoryBackupManager(
                 }
             }
 
+            workbook.createSheet("boxes").apply {
+                writeRow(0, listOf("id", "code", "name", "layerCount", "createdAt", "updatedAt"))
+                boxes.forEachIndexed { index, item ->
+                    writeRow(
+                        index + 1,
+                        listOf(
+                            item.id,
+                            item.code,
+                            item.name,
+                            item.layerCount,
+                            item.createdAt,
+                            item.updatedAt
+                        )
+                    )
+                }
+            }
+
+            workbook.createSheet("box_layers").apply {
+                writeRow(0, listOf("id", "boxId", "layerCode", "displayName", "sortOrder", "createdAt", "updatedAt"))
+                boxLayers.forEachIndexed { index, item ->
+                    writeRow(
+                        index + 1,
+                        listOf(
+                            item.id,
+                            item.boxId,
+                            item.layerCode,
+                            item.displayName,
+                            item.sortOrder,
+                            item.createdAt,
+                            item.updatedAt
+                        )
+                    )
+                }
+            }
+
+            workbook.createSheet("containers").apply {
+                writeRow(
+                    0,
+                    listOf(
+                        "id",
+                        "code",
+                        "displayName",
+                        "type",
+                        "slotCount",
+                        "colorHex",
+                        "sortMode",
+                        "remark",
+                        "createdAt",
+                        "updatedAt",
+                        "macAddress",
+                        "batchId",
+                        "protoVersion",
+                        "firmwareVersion",
+                        "hardwareVersion",
+                        "batteryPct",
+                        "statusFlags",
+                        "tableSeq",
+                        "tableCrc16",
+                        "lastSeenAt",
+                        "lastSyncedAt"
+                    )
+                )
+                containers.forEachIndexed { index, item ->
+                    writeRow(
+                        index + 1,
+                        listOf(
+                            item.id,
+                            item.code,
+                            item.displayName,
+                            item.type,
+                            item.slotCount,
+                            item.colorHex,
+                            item.sortMode,
+                            item.remark,
+                            item.createdAt,
+                            item.updatedAt,
+                            item.macAddress,
+                            item.batchId,
+                            item.protoVersion,
+                            item.firmwareVersion,
+                            item.hardwareVersion,
+                            item.batteryPct,
+                            item.statusFlags,
+                            item.tableSeq,
+                            item.tableCrc16,
+                            item.lastSeenAt,
+                            item.lastSyncedAt
+                        )
+                    )
+                }
+            }
+
+            workbook.createSheet("container_slots").apply {
+                writeRow(
+                    0,
+                    listOf("id", "containerId", "slotNumber", "slotCode", "displayName", "sortOrder", "createdAt", "updatedAt")
+                )
+                containerSlots.forEachIndexed { index, item ->
+                    writeRow(
+                        index + 1,
+                        listOf(
+                            item.id,
+                            item.containerId,
+                            item.slotNumber,
+                            item.slotCode,
+                            item.displayName,
+                            item.sortOrder,
+                            item.createdAt,
+                            item.updatedAt
+                        )
+                    )
+                }
+            }
+
+            workbook.createSheet("stock_items").apply {
+                writeRow(
+                    0,
+                    listOf(
+                        "id",
+                        "componentId",
+                        "containerId",
+                        "containerSlotId",
+                        "quantity",
+                        "quantityState",
+                        "safetyStockThreshold",
+                        "lastInboundAt",
+                        "updatedAt"
+                    )
+                )
+                stockItems.forEachIndexed { index, item ->
+                    writeRow(
+                        index + 1,
+                        listOf(
+                            item.id,
+                            item.componentId,
+                            item.containerId,
+                            item.containerSlotId,
+                            item.quantity,
+                            item.quantityState,
+                            item.safetyStockThreshold,
+                            item.lastInboundAt,
+                            item.updatedAt
+                        )
+                    )
+                }
+            }
+
+            workbook.createSheet("stock_operations").apply {
+                writeRow(
+                    0,
+                    listOf(
+                        "id",
+                        "type",
+                        "containerId",
+                        "containerSlotId",
+                        "componentId",
+                        "quantityDelta",
+                        "sourceType",
+                        "sourceRef",
+                        "rawPayload",
+                        "bleOpcode",
+                        "bleStatus",
+                        "tableSeqBefore",
+                        "tableSeqAfter",
+                        "createdAt"
+                    )
+                )
+                stockOperations.forEachIndexed { index, item ->
+                    writeRow(
+                        index + 1,
+                        listOf(
+                            item.id,
+                            item.type,
+                            item.containerId,
+                            item.containerSlotId,
+                            item.componentId,
+                            item.quantityDelta,
+                            item.sourceType,
+                            item.sourceRef,
+                            item.rawPayload,
+                            item.bleOpcode,
+                            item.bleStatus,
+                            item.tableSeqBefore,
+                            item.tableSeqAfter,
+                            item.createdAt
+                        )
+                    )
+                }
+            }
+
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                 workbook.use { it.write(outputStream) }
             } ?: throw IOException(context.getString(R.string.settings_backup_open_export_failed))
@@ -226,7 +428,7 @@ class InventoryBackupManager(
                     ?.asString()
                     ?.toIntOrNull()
                     ?: return@use context.getString(R.string.settings_backup_unsupported_version)
-                if (schemaVersion != 1) {
+                if (schemaVersion !in 1..2) {
                     return@use context.getString(R.string.settings_backup_unsupported_version)
                 }
 
@@ -237,11 +439,20 @@ class InventoryBackupManager(
                 val importedComponents = componentSheet.toComponents(componentSheet.extractPreviewImagesByRow())
                 val components = importedComponents.map { it.entity }
                 val inventoryItems = wb.getSheet("inventory_items").toInventoryItems()
+                val boxes = wb.getSheet("boxes").toBoxes()
+                val boxLayers = wb.getSheet("box_layers").toBoxLayers()
+                val containers = wb.getSheet("containers").toContainers()
+                val containerSlots = wb.getSheet("container_slots").toContainerSlots()
+                val stockItems = wb.getSheet("stock_items").toStockItems()
+                val stockOperations = wb.getSheet("stock_operations").toStockOperations()
 
                 database.withTransaction {
                     stockOperationDao.deleteAll()
                     stockItemDao.deleteAll()
-                    containerDao.deleteContainersByType(ContainerType.LEGACY_LOCATION.name)
+                    containerDao.getAllContainers().forEach { container ->
+                        containerDao.deleteContainerById(container.id)
+                    }
+                    boxDao.deleteAllBoxes()
                     inventoryTransactionDao.deleteAll()
                     inventoryItemDao.deleteAll()
                     componentDao.deleteAll()
@@ -256,7 +467,20 @@ class InventoryBackupManager(
                     if (inventoryItems.isNotEmpty()) {
                         inventoryItemDao.insertAll(inventoryItems)
                     }
-                    rebuildLegacyContainerStock(storageLocations, inventoryItems)
+                    if (boxes.isNotEmpty()) {
+                        boxes.forEach { box -> boxDao.insertBox(box) }
+                    }
+                    if (boxLayers.isNotEmpty()) {
+                        boxDao.insertLayers(boxLayers)
+                    }
+                    if (containers.isNotEmpty() && containerSlots.isNotEmpty()) {
+                        containers.forEach { container -> containerDao.insertContainer(container) }
+                        containerDao.insertSlots(containerSlots)
+                        stockItems.forEach { stockItem -> stockItemDao.insert(stockItem) }
+                        stockOperations.forEach { operation -> stockOperationDao.insert(operation) }
+                    } else {
+                        rebuildLegacyContainerStock(storageLocations, inventoryItems)
+                    }
                     refreshAllLocationCategoryProfilesInternal()
                 }
                 if (recentLocationColors.isNotEmpty()) {
@@ -324,6 +548,119 @@ class InventoryBackupManager(
                 category = profile.category,
                 packageName = profile.packageName,
                 updatedAt = System.currentTimeMillis()
+            )
+        }
+    }
+
+    private fun org.apache.poi.ss.usermodel.Sheet?.toBoxes(): List<BoxEntity> {
+        val sheet = this ?: return emptyList()
+        return sheet.dataRows().map { row ->
+            BoxEntity(
+                id = row.long("id"),
+                code = row.string("code").orEmpty(),
+                name = row.stringOrNull("name"),
+                layerCount = row.int("layerCount"),
+                createdAt = row.long("createdAt"),
+                updatedAt = row.long("updatedAt")
+            )
+        }
+    }
+
+    private fun org.apache.poi.ss.usermodel.Sheet?.toBoxLayers(): List<BoxLayerEntity> {
+        val sheet = this ?: return emptyList()
+        return sheet.dataRows().map { row ->
+            BoxLayerEntity(
+                id = row.long("id"),
+                boxId = row.long("boxId"),
+                layerCode = row.string("layerCode").orEmpty(),
+                displayName = row.stringOrNull("displayName"),
+                sortOrder = row.int("sortOrder"),
+                createdAt = row.long("createdAt"),
+                updatedAt = row.long("updatedAt")
+            )
+        }
+    }
+
+    private fun org.apache.poi.ss.usermodel.Sheet?.toContainers(): List<ContainerEntity> {
+        val sheet = this ?: return emptyList()
+        return sheet.dataRows().map { row ->
+            ContainerEntity(
+                id = row.long("id"),
+                code = row.string("code").orEmpty(),
+                displayName = row.stringOrNull("displayName"),
+                type = row.stringOrNull("type") ?: ContainerType.LEGACY_LOCATION.name,
+                slotCount = row.int("slotCount"),
+                colorHex = row.stringOrNull("colorHex"),
+                sortMode = row.stringOrNull("sortMode") ?: StorageLocationSortMode.NONE,
+                remark = row.stringOrNull("remark"),
+                createdAt = row.long("createdAt"),
+                updatedAt = row.long("updatedAt"),
+                macAddress = row.stringOrNull("macAddress"),
+                batchId = row.intOrNull("batchId"),
+                protoVersion = row.intOrNull("protoVersion"),
+                firmwareVersion = row.stringOrNull("firmwareVersion"),
+                hardwareVersion = row.stringOrNull("hardwareVersion"),
+                batteryPct = row.intOrNull("batteryPct"),
+                statusFlags = row.intOrNull("statusFlags"),
+                tableSeq = row.longOrNull("tableSeq"),
+                tableCrc16 = row.intOrNull("tableCrc16"),
+                lastSeenAt = row.longOrNull("lastSeenAt"),
+                lastSyncedAt = row.longOrNull("lastSyncedAt")
+            )
+        }
+    }
+
+    private fun org.apache.poi.ss.usermodel.Sheet?.toContainerSlots(): List<ContainerSlotEntity> {
+        val sheet = this ?: return emptyList()
+        return sheet.dataRows().map { row ->
+            ContainerSlotEntity(
+                id = row.long("id"),
+                containerId = row.long("containerId"),
+                slotNumber = row.int("slotNumber"),
+                slotCode = row.string("slotCode").orEmpty(),
+                displayName = row.stringOrNull("displayName"),
+                sortOrder = row.int("sortOrder"),
+                createdAt = row.long("createdAt"),
+                updatedAt = row.long("updatedAt")
+            )
+        }
+    }
+
+    private fun org.apache.poi.ss.usermodel.Sheet?.toStockItems(): List<StockItemEntity> {
+        val sheet = this ?: return emptyList()
+        return sheet.dataRows().map { row ->
+            StockItemEntity(
+                id = row.long("id"),
+                componentId = row.long("componentId"),
+                containerId = row.long("containerId"),
+                containerSlotId = row.long("containerSlotId"),
+                quantity = row.int("quantity"),
+                quantityState = row.stringOrNull("quantityState") ?: QuantityState.KNOWN.name,
+                safetyStockThreshold = row.intOrNull("safetyStockThreshold"),
+                lastInboundAt = row.long("lastInboundAt"),
+                updatedAt = row.long("updatedAt")
+            )
+        }
+    }
+
+    private fun org.apache.poi.ss.usermodel.Sheet?.toStockOperations(): List<StockOperationEntity> {
+        val sheet = this ?: return emptyList()
+        return sheet.dataRows().map { row ->
+            StockOperationEntity(
+                id = row.long("id"),
+                type = row.string("type").orEmpty(),
+                containerId = row.longOrNull("containerId"),
+                containerSlotId = row.longOrNull("containerSlotId"),
+                componentId = row.longOrNull("componentId"),
+                quantityDelta = row.int("quantityDelta"),
+                sourceType = row.stringOrNull("sourceType"),
+                sourceRef = row.stringOrNull("sourceRef"),
+                rawPayload = row.stringOrNull("rawPayload"),
+                bleOpcode = row.intOrNull("bleOpcode"),
+                bleStatus = row.intOrNull("bleStatus"),
+                tableSeqBefore = row.longOrNull("tableSeqBefore"),
+                tableSeqAfter = row.longOrNull("tableSeqAfter"),
+                createdAt = row.long("createdAt")
             )
         }
     }
@@ -570,7 +907,9 @@ class InventoryBackupManager(
             return row.getCell(cellIndex)?.asString()
         }
         fun stringOrNull(header: String): String? = string(header)?.takeIf { it.isNotBlank() }
+        fun longOrNull(header: String): Long? = string(header)?.toLongOrNull()
         fun long(header: String): Long = string(header)?.toLongOrNull() ?: 0L
+        fun intOrNull(header: String): Int? = string(header)?.toIntOrNull()
         fun int(header: String): Int = string(header)?.toIntOrNull() ?: 0
     }
 

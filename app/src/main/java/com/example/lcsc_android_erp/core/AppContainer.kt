@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisGattClient
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisManager
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisOperations
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisScanner
 import com.example.lcsc_android_erp.core.database.AppDatabase
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
@@ -27,12 +28,14 @@ import com.example.lcsc_android_erp.data.repository.ContainerRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.InventoryBackupManager
 import com.example.lcsc_android_erp.data.repository.InventoryRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.LcscCatalogRepositoryImpl
+import com.example.lcsc_android_erp.data.repository.StockPlacementRepositoryImpl
 import com.example.lcsc_android_erp.domain.model.LocationCategoryProfile
 import com.example.lcsc_android_erp.domain.model.calculateDominantLocationCategoryProfile
 import com.example.lcsc_android_erp.domain.repository.BoxRepository
 import com.example.lcsc_android_erp.domain.repository.ContainerRepository
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
 import com.example.lcsc_android_erp.domain.repository.LcscCatalogRepository
+import com.example.lcsc_android_erp.domain.repository.StockPlacementRepository
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +68,11 @@ class AppContainer(context: Context) {
 
     val userPreferencesRepository = UserPreferencesRepository(preferencesDataStore)
     val nfcLabelManager = NfcLabelManager(appContext)
+    private val stockPlacementRepository: StockPlacementRepository = StockPlacementRepositoryImpl(
+        containerDao = database.containerDao(),
+        stockItemDao = database.stockItemDao(),
+        stockOperationDao = database.stockOperationDao()
+    )
 
     private val componentImageStore = ComponentImageStore(
         context = appContext,
@@ -117,8 +125,7 @@ class AppContainer(context: Context) {
         inventoryItemDao = database.inventoryItemDao(),
         inventoryTransactionDao = database.inventoryTransactionDao(),
         containerDao = database.containerDao(),
-        stockItemDao = database.stockItemDao(),
-        stockOperationDao = database.stockOperationDao(),
+        stockPlacementRepository = stockPlacementRepository,
         componentEnrichmentManager = componentEnrichmentManager,
         componentImageStore = componentImageStore
     )
@@ -128,16 +135,14 @@ class AppContainer(context: Context) {
         boxDao = database.boxDao(),
         componentDao = database.componentDao(),
         containerDao = database.containerDao(),
-        stockItemDao = database.stockItemDao(),
-        stockOperationDao = database.stockOperationDao()
+        stockPlacementRepository = stockPlacementRepository
     )
 
     val containerRepository: ContainerRepository = ContainerRepositoryImpl(
         database = database,
         containerDao = database.containerDao(),
         componentDao = database.componentDao(),
-        stockItemDao = database.stockItemDao(),
-        stockOperationDao = database.stockOperationDao()
+        stockPlacementRepository = stockPlacementRepository
     )
 
     val smartChassisManager = SmartChassisManager(
@@ -146,11 +151,16 @@ class AppContainer(context: Context) {
             hasBluetoothPermission = ::hasSmartChassisBluetoothPermission
         )
     )
+    val smartChassisOperations = SmartChassisOperations(
+        manager = smartChassisManager,
+        containerRepository = containerRepository
+    )
     val smartChassisScanner = SmartChassisScanner(appContext)
 
     val inventoryBackupManager = InventoryBackupManager(
         context = appContext,
         database = database,
+        boxDao = database.boxDao(),
         storageLocationDao = database.storageLocationDao(),
         componentDao = database.componentDao(),
         inventoryItemDao = database.inventoryItemDao(),

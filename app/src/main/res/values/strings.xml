@@ -11,7 +11,7 @@
     <string name="home_title">物料总览</string>
     <string name="home_subtitle">第一阶段已接入本地数据库、设置存储和导航骨架，后续功能在此基础上继续叠加。</string>
     <string name="summary_component_count">器件主数据</string>
-    <string name="summary_location_count">库位数量</string>
+    <string name="summary_location_count">容器数量</string>
     <string name="summary_inventory_count">库存记录</string>
     <string name="summary_total_quantity">库存总量</string>
     <string name="summary_transaction_count">流水数量</string>

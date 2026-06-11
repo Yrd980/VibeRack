@@ -11,7 +11,7 @@
     <string name="home_title">Overview</string>
     <string name="home_subtitle">The first phase has connected the local database, settings storage, and navigation shell. More features will continue to build on this foundation.</string>
     <string name="summary_component_count">Components</string>
-    <string name="summary_location_count">Locations</string>
+    <string name="summary_location_count">Containers</string>
     <string name="summary_inventory_count">Inventory Records</string>
     <string name="summary_total_quantity">Total Quantity</string>
     <string name="summary_transaction_count">Transactions</string>

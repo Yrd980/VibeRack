@@ -16,6 +16,9 @@ interface ContainerDao {
     @Query("SELECT * FROM `container` ORDER BY type ASC, code ASC")
     suspend fun getAllContainers(): List<ContainerEntity>
 
+    @Query("SELECT * FROM container_slot ORDER BY container_id ASC, sortOrder ASC, slot_number ASC")
+    suspend fun getAllSlots(): List<ContainerSlotEntity>
+
     @Query(
         """
         SELECT

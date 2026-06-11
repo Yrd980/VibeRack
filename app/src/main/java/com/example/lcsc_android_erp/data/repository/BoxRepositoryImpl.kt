@@ -5,25 +5,23 @@ import androidx.room.withTransaction
 import com.example.lcsc_android_erp.core.database.dao.BoxDao
 import com.example.lcsc_android_erp.core.database.dao.ComponentDao
 import com.example.lcsc_android_erp.core.database.dao.ContainerDao
-import com.example.lcsc_android_erp.core.database.dao.StockItemDao
-import com.example.lcsc_android_erp.core.database.dao.StockOperationDao
 import com.example.lcsc_android_erp.core.database.entity.BoxEntity
 import com.example.lcsc_android_erp.core.database.entity.BoxLayerEntity
 import com.example.lcsc_android_erp.core.database.entity.ComponentEntity
 import com.example.lcsc_android_erp.core.database.entity.ContainerEntity
 import com.example.lcsc_android_erp.core.database.entity.ContainerSlotEntity
 import com.example.lcsc_android_erp.core.database.entity.LayerMaterialEntity
-import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
-import com.example.lcsc_android_erp.core.database.entity.StockOperationEntity
 import com.example.lcsc_android_erp.core.database.model.BoxLayerProjection
 import com.example.lcsc_android_erp.core.database.model.BoxSummaryProjection
 import com.example.lcsc_android_erp.domain.model.ComponentBox
 import com.example.lcsc_android_erp.domain.model.ComponentBoxLayer
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
 import com.example.lcsc_android_erp.domain.model.ContainerType
-import com.example.lcsc_android_erp.domain.model.QuantityState
+import com.example.lcsc_android_erp.domain.model.StockOperation
 import com.example.lcsc_android_erp.domain.model.StockOperationType
 import com.example.lcsc_android_erp.domain.repository.BoxRepository
+import com.example.lcsc_android_erp.domain.repository.StockPlacementRepository
+import com.example.lcsc_android_erp.domain.repository.StockPlacementWrite
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -34,8 +32,7 @@ class BoxRepositoryImpl(
     private val boxDao: BoxDao,
     private val componentDao: ComponentDao,
     private val containerDao: ContainerDao,
-    private val stockItemDao: StockItemDao,
-    private val stockOperationDao: StockOperationDao
+    private val stockPlacementRepository: StockPlacementRepository
 ) : BoxRepository {
     private companion object {
         private val BOX_CODE_REGEX = Regex("[A-Z0-9_-]+")
@@ -353,23 +350,21 @@ class BoxRepositoryImpl(
         rawPayload: String?,
         updatedAt: Long
     ) {
-        stockItemDao.deleteBySlotId(slotId)
-        stockItemDao.insert(
-            StockItemEntity(
+        stockPlacementRepository.replaceSlotStock(
+            StockPlacementWrite(
                 componentId = componentId,
                 containerId = containerId,
-                containerSlotId = slotId,
+                slotId = slotId,
                 quantity = quantity,
-                quantityState = QuantityState.KNOWN.name,
                 lastInboundAt = updatedAt,
                 updatedAt = updatedAt
             )
         )
-        stockOperationDao.insert(
-            StockOperationEntity(
-                type = StockOperationType.INBOUND.name,
+        stockPlacementRepository.recordOperation(
+            StockOperation(
+                type = StockOperationType.INBOUND,
                 containerId = containerId,
-                containerSlotId = slotId,
+                slotId = slotId,
                 componentId = componentId,
                 quantityDelta = quantity,
                 sourceType = sourceType,

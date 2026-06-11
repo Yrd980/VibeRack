@@ -10,11 +10,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.lcsc_android_erp.core.AppContainer
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.R
-import com.example.lcsc_android_erp.core.ble.smart.RgbColor
-import com.example.lcsc_android_erp.core.ble.smart.SmartChassisCodec
-import com.example.lcsc_android_erp.core.ble.smart.SmartChassisLightCommand
-import com.example.lcsc_android_erp.core.ble.smart.SmartChassisLightMode
-import com.example.lcsc_android_erp.core.ble.smart.SmartChassisManager
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisOperations
 import com.example.lcsc_android_erp.core.network.isNetworkAvailable
 import com.example.lcsc_android_erp.domain.model.ComponentBoxLayer
 import com.example.lcsc_android_erp.domain.model.ContainerType
@@ -38,7 +34,7 @@ class SearchViewModel(
     private val boxRepository: BoxRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val lcscCatalogRepository: LcscCatalogRepository,
-    private val smartChassisManager: SmartChassisManager,
+    private val smartChassisOperations: SmartChassisOperations,
     private val appContext: Context
 ) : ViewModel() {
     private data class BomBindingContext(
@@ -122,12 +118,12 @@ class SearchViewModel(
         currentPage,
         parsedBomDocument
     ) { bindingContext, searchMode, queryText, page, bomDocument ->
-        val allInventoryResults = groupRecords(bindingContext.records)
-        val filteredRecords = filterRecords(bindingContext.records, queryText)
-        val groupedResults = groupRecords(filteredRecords)
+        val allInventoryResults = SearchInventoryWorkflow.groupRecords(bindingContext.records)
+        val filteredRecords = SearchInventoryWorkflow.filterRecords(bindingContext.records, queryText)
+        val groupedResults = SearchInventoryWorkflow.groupRecords(filteredRecords)
         val pageCount = maxOf(1, (groupedResults.size + PAGE_SIZE - 1) / PAGE_SIZE)
         val safePage = page.coerceIn(1, pageCount)
-        val allBomRows = buildBomRows(
+        val allBomRows = BomWorkflow.buildRows(
             inventoryRecords = bindingContext.records,
             document = bomDocument,
             persistentBindings = bindingContext.persistentBindings,
@@ -230,7 +226,7 @@ class SearchViewModel(
     }
 
     fun ignoreBomEntry(entry: BomSearchEntry) {
-        ignoredBomEntryKeys.update { current -> current + bomEntryKey(entry) }
+        ignoredBomEntryKeys.update { current -> current + BomWorkflow.entryKey(entry) }
     }
 
     fun bindBomEntry(
@@ -249,10 +245,10 @@ class SearchViewModel(
             }
         } else {
             temporaryBomBindings.update { current ->
-                current + (bomEntryKey(entry) to normalizedPartNumber)
+                current + (BomWorkflow.entryKey(entry) to normalizedPartNumber)
             }
         }
-        ignoredBomEntryKeys.update { current -> current - bomEntryKey(entry) }
+        ignoredBomEntryKeys.update { current -> current - BomWorkflow.entryKey(entry) }
     }
 
     fun lookupBomDirectInbound(
@@ -366,7 +362,7 @@ class SearchViewModel(
                 component = component,
                 quantity = entry.quantity?.coerceAtLeast(0) ?: 0,
                 sourceType = "BOM",
-                rawPayload = entry.toRawPayload()
+                rawPayload = BomWorkflow.rawPayload(entry)
             )
             if (assignedLayer == null) {
                 onCompleted(
@@ -430,7 +426,7 @@ class SearchViewModel(
     }
 
     fun startBomPickToLight() {
-        val session = buildBomPickSession(uiState.value.bomRows)
+        val session = BomWorkflow.buildPickSession(uiState.value.bomRows)
         if (session == null || session.groups.isEmpty()) {
             bomPickMessage.value = appContext.getString(R.string.search_bom_pick_no_targets)
             return
@@ -450,7 +446,7 @@ class SearchViewModel(
                     session.groups.size
                 )
             } else {
-                bomPickMessage.value = smartChassisManager.lastOperationError.value?.message
+                bomPickMessage.value = smartChassisOperations.lastOperationError.value?.message
                     ?: appContext.getString(R.string.search_bom_pick_failed, failedGroup.containerCode)
             }
         }
@@ -461,18 +457,7 @@ class SearchViewModel(
         viewModelScope.launch {
             isBomPickBusy.value = true
             session.groups.forEach { group ->
-                if (!smartChassisManager.connectionState.value.isConnected ||
-                    smartChassisManager.connectionState.value.device?.address?.uppercase(Locale.ROOT) != group.macAddress
-                ) {
-                    smartChassisManager.connect(group.macAddress)
-                }
-                smartChassisManager.sendLightCommand(
-                    SmartChassisLightCommand(
-                        mode = SmartChassisLightMode.OFF,
-                        maskA = 0,
-                        colorA = RgbColor(red = 0, green = 0, blue = 0)
-                    )
-                )
+                smartChassisOperations.lightsOff(group.macAddress)
             }
             bomPickSession.value = null
             bomPickMessage.value = appContext.getString(R.string.search_bom_pick_cancelled)
@@ -495,29 +480,9 @@ class SearchViewModel(
         }
 
         viewModelScope.launch {
-            if (!smartChassisManager.connectionState.value.isConnected ||
-                smartChassisManager.connectionState.value.device?.address?.uppercase(Locale.ROOT) != macAddress
-            ) {
-                val connected = smartChassisManager.connect(macAddress)
-                if (connected == null) {
-                    onCompleted(
-                        smartChassisManager.lastOperationError.value?.message
-                            ?: appContext.getString(R.string.search_find_light_failed)
-                    )
-                    return@launch
-                }
-            }
-            val status = smartChassisManager.sendLightCommand(
-                SmartChassisLightCommand(
-                    mode = SmartChassisLightMode.FIND,
-                    maskA = SmartChassisCodec.slotMask(slotNumber),
-                    colorA = RgbColor(red = 40, green = 180, blue = 255),
-                    timeoutSeconds = 30
-                )
-            )
             onCompleted(
-                if (status == null) {
-                    smartChassisManager.lastOperationError.value?.message
+                if (!smartChassisOperations.findSlot(macAddress, slotNumber)) {
+                    smartChassisOperations.lastOperationError.value?.message
                         ?: appContext.getString(R.string.search_find_light_failed)
                 } else {
                     null
@@ -527,26 +492,7 @@ class SearchViewModel(
     }
 
     private suspend fun sendPickMask(group: BomPickGroupUiModel): Boolean {
-        if (!smartChassisManager.connectionState.value.isConnected ||
-            smartChassisManager.connectionState.value.device?.address?.uppercase(Locale.ROOT) != group.macAddress
-        ) {
-            val connected = smartChassisManager.connect(group.macAddress)
-            if (connected == null) {
-                return false
-            }
-        }
-        val mask = group.slots.fold(0) { currentMask, slotNumber ->
-            currentMask or SmartChassisCodec.slotMask(slotNumber)
-        }
-        val status = smartChassisManager.sendLightCommand(
-            SmartChassisLightCommand(
-                mode = SmartChassisLightMode.PICK,
-                maskA = mask,
-                colorA = RgbColor(red = 255, green = 180, blue = 40),
-                timeoutSeconds = 300
-            )
-        )
-        return status != null
+        return smartChassisOperations.pickSlots(group.macAddress, group.slots)
     }
 
     companion object {
@@ -559,327 +505,11 @@ class SearchViewModel(
                     boxRepository = appContainer.boxRepository,
                     userPreferencesRepository = appContainer.userPreferencesRepository,
                     lcscCatalogRepository = appContainer.lcscCatalogRepository,
-                    smartChassisManager = appContainer.smartChassisManager,
+                    smartChassisOperations = appContainer.smartChassisOperations,
                     appContext = appContainer.appContext
                 )
             }
         }
     }
 
-    private fun filterRecords(
-        records: List<SearchInventoryRecord>,
-        queryText: String
-    ): List<SearchInventoryRecord> {
-        val normalizedQuery = queryText.trim().lowercase(Locale.ROOT)
-        if (normalizedQuery.isBlank()) {
-            return records
-        }
-
-        return records.filter { record ->
-            buildSearchTokens(record).any { token ->
-                token.contains(normalizedQuery)
-            }
-        }
-    }
-
-    private fun buildSearchTokens(record: SearchInventoryRecord): List<String> {
-        return buildList {
-            add(record.partNumber)
-            record.mpn?.let(::add)
-            record.name?.let(::add)
-            record.brand?.let(::add)
-            record.packageName?.let(::add)
-            record.category?.let(::add)
-            record.description?.let(::add)
-            add(record.locationCode)
-            record.locationDisplayName?.let(::add)
-            record.specifications.forEach { (key, value) ->
-                add(key)
-                add(value)
-            }
-        }.mapNotNull { value ->
-            value.trim()
-                .takeIf { it.isNotEmpty() }
-                ?.lowercase(Locale.ROOT)
-        }
-    }
-
-    private fun groupRecords(records: List<SearchInventoryRecord>): List<SearchResultUiModel> {
-        return records
-            .groupBy { "${it.partNumber}|${it.mpn.orEmpty()}" }
-            .values
-            .map { group ->
-                val first = group.first()
-                SearchResultUiModel(
-                    partNumber = first.partNumber,
-                    mpn = first.mpn,
-                    name = first.name,
-                    brand = first.brand,
-                    packageName = first.packageName,
-                    category = first.category,
-                    description = first.description,
-                    sourceUrl = first.sourceUrl,
-                    specifications = first.specifications,
-                    imageLocalPath = first.imageLocalPath,
-                    totalQuantity = group.sumOf { it.quantity },
-                    locations = group
-                        .sortedBy { it.locationCode }
-                        .map { record ->
-                            SearchResultLocationUiModel(
-                                code = record.locationCode,
-                                displayName = record.locationDisplayName,
-                                colorHex = record.locationColorHex,
-                                quantity = record.quantity,
-                                containerType = record.containerType,
-                                slotNumber = record.slotNumber,
-                                canFindByLight = record.canFindByLight
-                            )
-                        },
-                    records = group.sortedWith(
-                        compareBy<SearchInventoryRecord> { it.locationCode }
-                            .thenBy { it.slotNumber ?: 0 }
-                    )
-                )
-            }
-            .sortedWith(
-                compareBy<SearchResultUiModel> {
-                    it.name?.trim()?.takeIf(String::isNotEmpty)
-                        ?: it.mpn?.trim()?.takeIf(String::isNotEmpty)
-                        ?: it.partNumber
-                }.thenBy { it.partNumber }
-            )
-    }
-
-    private fun buildBomRows(
-        inventoryRecords: List<SearchInventoryRecord>,
-        document: ParsedBomDocument?,
-        persistentBindings: Map<String, String>,
-        temporaryBindings: Map<String, String>,
-        ignoredEntryKeys: Set<String>,
-        boxLayers: List<ComponentBoxLayer>
-    ): List<BomSearchRowUiModel> {
-        if (document == null) {
-            return emptyList()
-        }
-
-        return document.entries.map { entry ->
-            val entryKey = bomEntryKey(entry)
-            if (entryKey in ignoredEntryKeys) {
-                null
-            } else {
-                val persistentBindingPartNumber = entry.supplierPart
-                    ?.trim()
-                    ?.uppercase(Locale.ROOT)
-                    ?.let(persistentBindings::get)
-                val temporaryBindingPartNumber = temporaryBindings[entryKey]
-                val boundPartNumber = persistentBindingPartNumber ?: temporaryBindingPartNumber
-                val resolvedPartNumber = boundPartNumber
-                    ?: entry.supplierPart
-                        ?.trim()
-                        ?.uppercase(Locale.ROOT)
-                        ?.takeIf { it.isNotBlank() }
-                val matchedRecords = inventoryRecords.filter { record ->
-                    matchesBomEntry(
-                        record = record,
-                        entry = entry,
-                        boundPartNumber = boundPartNumber
-                    )
-                }
-                val assignedLayers = resolvedPartNumber?.let { partNumber ->
-                    boxLayers.filter { layer ->
-                        layer.partNumber?.trim()?.uppercase(Locale.ROOT) == partNumber
-                    }
-                }.orEmpty()
-                BomSearchRowUiModel(
-                    entry = entry,
-                    matchedResults = groupRecords(matchedRecords),
-                    assignedLayers = assignedLayers,
-                    isBound = boundPartNumber != null,
-                    isPersistentBinding = persistentBindingPartNumber != null
-                )
-            }
-        }.filterNotNull()
-    }
-
-    private fun buildBomPickSession(rows: List<BomSearchRowUiModel>): BomPickSessionUiModel? {
-        val targets = rows.flatMap { row ->
-            row.matchedResults.flatMap { result ->
-                result.records.mapNotNull { record ->
-                    val macAddress = record.containerMacAddress?.trim()?.uppercase(Locale.ROOT)
-                    val slotNumber = record.slotNumber ?: 0
-                    if (record.containerType != ContainerType.SMART_CHASSIS ||
-                        macAddress.isNullOrBlank() ||
-                        slotNumber !in 1..25
-                    ) {
-                        null
-                    } else {
-                        PickTargetCandidate(
-                            containerCode = record.locationCode,
-                            macAddress = macAddress,
-                            slotNumber = slotNumber,
-                            partNumber = record.partNumber,
-                            designator = row.entry.designator
-                        )
-                    }
-                }
-            }
-        }
-            .distinctBy { "${it.macAddress}:${it.slotNumber}:${it.partNumber}" }
-
-        if (targets.isEmpty()) {
-            return null
-        }
-
-        val groups = targets
-            .groupBy { it.macAddress }
-            .map { (macAddress, groupTargets) ->
-                BomPickGroupUiModel(
-                    containerCode = groupTargets.first().containerCode,
-                    macAddress = macAddress,
-                    slots = groupTargets.map { it.slotNumber }.distinct().sorted(),
-                    targets = groupTargets
-                        .sortedWith(compareBy<PickTargetCandidate> { it.slotNumber }.thenBy { it.partNumber })
-                        .map { target ->
-                            BomPickTargetUiModel(
-                                partNumber = target.partNumber,
-                                slotNumber = target.slotNumber,
-                                designator = target.designator
-                            )
-                        }
-                )
-            }
-            .sortedBy { it.containerCode }
-
-        return BomPickSessionUiModel(groups)
-    }
-
-    private fun matchesBomEntry(
-        record: SearchInventoryRecord,
-        entry: BomSearchEntry,
-        boundPartNumber: String?
-    ): Boolean {
-        if (!boundPartNumber.isNullOrBlank()) {
-            return record.partNumber.trim().uppercase(Locale.ROOT) == boundPartNumber
-        }
-        val supplierPart = entry.supplierPart?.trim()?.uppercase(Locale.ROOT)
-        if (!supplierPart.isNullOrEmpty()) {
-            return record.partNumber.trim().uppercase(Locale.ROOT) == supplierPart
-        }
-
-        val manufacturerPart = entry.manufacturerPart?.trim()?.uppercase(Locale.ROOT)
-        if (!manufacturerPart.isNullOrEmpty()) {
-            val mpn = record.mpn?.trim()?.uppercase(Locale.ROOT)
-            return mpn == manufacturerPart
-        }
-
-        return matchesPassiveFootprintEntry(record, entry)
-    }
-
-    private fun matchesPassiveFootprintEntry(
-        record: SearchInventoryRecord,
-        entry: BomSearchEntry
-    ): Boolean {
-        val footprint = entry.footprint?.trim()?.uppercase(Locale.ROOT).orEmpty()
-        val passiveType = parsePassiveFootprintType(footprint) ?: return false
-        val normalizedPackage = parsePassiveFootprintPackage(footprint) ?: return false
-        val recordPackage = normalizePackageName(record.packageName) ?: return false
-        if (recordPackage != normalizedPackage) {
-            return false
-        }
-
-        val category = record.category?.trim().orEmpty()
-        val matchesCategory = when (passiveType) {
-            PassiveFootprintType.Resistor -> category.contains("电阻", ignoreCase = true)
-            PassiveFootprintType.Capacitor -> category.contains("电容", ignoreCase = true)
-        }
-        if (!matchesCategory) {
-            return false
-        }
-
-        val bomValue = normalizePassiveValue(
-            entry.value?.takeIf { it.isNotBlank() } ?: entry.comment.orEmpty()
-        )
-        if (bomValue.isEmpty()) {
-            return false
-        }
-
-        val specificationKeys = when (passiveType) {
-            PassiveFootprintType.Resistor -> listOf("阻值")
-            PassiveFootprintType.Capacitor -> listOf("容值")
-        }
-
-        val recordValue = specificationKeys.asSequence()
-            .mapNotNull { key -> record.specifications[key] }
-            .map(::normalizePassiveValue)
-            .firstOrNull { it.isNotEmpty() }
-            ?: return false
-
-        return recordValue == bomValue
-    }
-
-    private fun parsePassiveFootprintType(footprint: String): PassiveFootprintType? {
-        return when {
-            footprint.matches(Regex("^R\\d{4}$")) -> PassiveFootprintType.Resistor
-            footprint.matches(Regex("^C\\d{4}$")) -> PassiveFootprintType.Capacitor
-            else -> null
-        }
-    }
-
-    private fun parsePassiveFootprintPackage(footprint: String): String? {
-        return footprint.drop(1).takeIf { it.length == 4 && it.all(Char::isDigit) }
-    }
-
-    private fun normalizePackageName(packageName: String?): String? {
-        val normalized = packageName?.trim()?.uppercase(Locale.ROOT).orEmpty()
-        val match = Regex("(\\d{4})").find(normalized)
-        return match?.groupValues?.getOrNull(1)
-    }
-
-    private fun normalizePassiveValue(value: String): String {
-        return value
-            .trim()
-            .uppercase(Locale.ROOT)
-            .replace(" ", "")
-            .replace("Ω", "")
-            .replace("OHM", "")
-            .replace("欧姆", "")
-            .replace("µ", "U")
-            .replace("μ", "U")
-    }
-
-    private enum class PassiveFootprintType {
-        Resistor,
-        Capacitor
-    }
-
-    private data class PickTargetCandidate(
-        val containerCode: String,
-        val macAddress: String,
-        val slotNumber: Int,
-        val partNumber: String,
-        val designator: String?
-    )
-
-    private fun bomEntryKey(entry: BomSearchEntry): String {
-        return listOf(
-            entry.rowNumber,
-            entry.supplierPart.orEmpty(),
-            entry.manufacturerPart.orEmpty(),
-            entry.designator.orEmpty(),
-            entry.value.orEmpty()
-        ).joinToString("|") { it.trim().uppercase(Locale.ROOT) }
-    }
-
-    private fun BomSearchEntry.toRawPayload(): String {
-        return listOf(
-            "row=$rowNumber",
-            "quantity=${quantity ?: 0}",
-            "supplierPart=${supplierPart.orEmpty()}",
-            "manufacturerPart=${manufacturerPart.orEmpty()}",
-            "manufacturer=${manufacturer.orEmpty()}",
-            "value=${value.orEmpty()}",
-            "footprint=${footprint.orEmpty()}",
-            "designator=${designator.orEmpty()}"
-        ).joinToString(";")
-    }
 }

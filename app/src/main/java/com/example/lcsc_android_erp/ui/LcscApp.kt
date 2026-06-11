@@ -35,7 +35,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
-import com.example.lcsc_android_erp.core.nfc.NfcLabelKind
 import com.example.lcsc_android_erp.core.nfc.NfcScanResult
 import com.example.lcsc_android_erp.feature.boxes.BoxesOpenRequest
 import com.example.lcsc_android_erp.feature.boxes.BoxesRoute
@@ -66,70 +65,40 @@ fun LcscApp() {
     var containersOpenRequestSignal by remember { mutableIntStateOf(0) }
     var containersOpenRequest by remember { mutableStateOf<ContainersOpenRequest?>(null) }
 
+    fun navigateTo(destination: Destination) {
+        navController.navigate(destination.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    val openPhysicalTarget: (PhysicalTarget) -> Unit = { target ->
+        when (val route = PhysicalTargetRouting.toRoute(target)) {
+            is PhysicalTargetRoute.Inventory -> {
+                inventoryOpenRequest = route.request
+                inventoryOpenRequestSignal++
+                navigateTo(Destination.Inventory)
+            }
+
+            is PhysicalTargetRoute.Boxes -> {
+                boxesOpenRequest = route.request
+                boxesOpenRequestSignal++
+                navigateTo(Destination.Boxes)
+            }
+
+            is PhysicalTargetRoute.Containers -> {
+                containersOpenRequest = route.request
+                containersOpenRequestSignal++
+                navigateTo(Destination.Containers)
+            }
+        }
+    }
+
     val jumpToInventoryItem: (String, String) -> Unit = { locationCode, partNumber ->
-        inventoryOpenRequest = InventoryOpenRequest(
-            locationCode = locationCode,
-            partNumber = partNumber
-        )
-        inventoryOpenRequestSignal++
-        navController.navigate(Destination.Inventory.route) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
-    val jumpToInventoryLocation: (String) -> Unit = { locationCode ->
-        inventoryOpenRequest = InventoryOpenRequest(locationCode = locationCode)
-        inventoryOpenRequestSignal++
-        navController.navigate(Destination.Inventory.route) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
-    val jumpToInventoryPartNumber: (String) -> Unit = { partNumber ->
-        inventoryOpenRequest = InventoryOpenRequest(partNumber = partNumber)
-        inventoryOpenRequestSignal++
-        navController.navigate(Destination.Inventory.route) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
-    val jumpToBoxLayer: (String, String) -> Unit = { boxCode, layerCode ->
-        boxesOpenRequest = BoxesOpenRequest(
-            boxCode = boxCode,
-            layerCode = layerCode
-        )
-        boxesOpenRequestSignal++
-        navController.navigate(Destination.Boxes.route) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
-    val jumpToDevice: (String, Int?, Int?) -> Unit = { macAddress, batchId, protoVersion ->
-        containersOpenRequest = ContainersOpenRequest(
-            macAddress = macAddress,
-            batchId = batchId,
-            protoVersion = protoVersion
-        )
-        containersOpenRequestSignal++
-        navController.navigate(Destination.Containers.route) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
-        }
+        openPhysicalTarget(PhysicalTargetRouting.inventoryItem(locationCode, partNumber))
     }
 
     DisposableEffect(activity, appContainer) {
@@ -137,35 +106,8 @@ fun LcscApp() {
             activity?.runOnUiThread {
                 when (result) {
                     is NfcScanResult.Label -> {
-                        when (result.payload.kind) {
-                            NfcLabelKind.LOCATION -> {
-                                result.payload.locationCode?.let(jumpToInventoryLocation)
-                            }
-
-                            NfcLabelKind.MATERIAL -> {
-                                val locationCode = result.payload.locationCode
-                                val partNumber = result.payload.partNumber
-                                val boxCode = result.payload.boxCode
-                                val layerCode = result.payload.layerCode
-                                if (boxCode != null && layerCode != null) {
-                                    jumpToBoxLayer(boxCode, layerCode)
-                                } else if (locationCode != null && partNumber != null) {
-                                    jumpToInventoryItem(locationCode, partNumber)
-                                } else if (partNumber != null) {
-                                    jumpToInventoryPartNumber(partNumber)
-                                }
-                            }
-
-                            NfcLabelKind.DEVICE -> {
-                                result.payload.macAddress?.let { macAddress ->
-                                    jumpToDevice(
-                                        macAddress,
-                                        result.payload.batchId,
-                                        result.payload.protoVersion
-                                    )
-                                }
-                            }
-                        }
+                        PhysicalTargetRouting.fromNfcPayload(result.payload)
+                            ?.let(openPhysicalTarget)
                     }
 
                     is NfcScanResult.Unsupported -> {
@@ -221,13 +163,7 @@ fun LcscApp() {
                             if (destination.route == Destination.Inventory.route) {
                                 inventoryResetToOverviewSignal++
                             }
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            navigateTo(destination)
                         },
                         icon = {
                             Icon(
@@ -262,9 +198,7 @@ fun LcscApp() {
                     openRequest = containersOpenRequest,
                     openRequestSignal = containersOpenRequestSignal,
                     onOpenBoxes = {
-                        navController.navigate(Destination.Boxes.route) {
-                            launchSingleTop = true
-                        }
+                        navigateTo(Destination.Boxes)
                     }
                 )
             }
@@ -287,13 +221,7 @@ fun LcscApp() {
             composable(Destination.Settings.route) {
                 SettingsRoute(
                     onOpenHardwareRestore = {
-                        navController.navigate(Destination.Containers.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navigateTo(Destination.Containers)
                     }
                 )
             }
