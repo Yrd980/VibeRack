@@ -47,6 +47,7 @@ private const val GITEE_URL = "https://gitee.com/BrokenClient/LCSC_android_erp"
 
 @Composable
 fun SettingsRoute(
+    onOpenHardwareRestore: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val appContainer = (LocalContext.current.applicationContext as LcscApplication).appContainer
@@ -60,6 +61,7 @@ fun SettingsRoute(
         onLanguageSelected = viewModel::onLanguageSelected,
         onExportInventory = viewModel::exportInventory,
         onImportInventory = viewModel::importInventory,
+        onOpenHardwareRestore = onOpenHardwareRestore,
         onClearInventoryBackupMessage = viewModel::clearInventoryBackupMessage
     )
 }
@@ -70,6 +72,7 @@ fun SettingsScreen(
     onLanguageSelected: (String) -> Unit,
     onExportInventory: (android.net.Uri) -> Unit,
     onImportInventory: (android.net.Uri) -> Unit,
+    onOpenHardwareRestore: () -> Unit,
     onClearInventoryBackupMessage: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -136,6 +139,13 @@ fun SettingsScreen(
                             )
                         )
                     },
+                    enabled = !uiState.isProcessingInventoryBackup
+                )
+                HorizontalDivider()
+                SettingsActionRow(
+                    title = stringResource(R.string.settings_hardware_restore),
+                    subtitle = stringResource(R.string.settings_hardware_restore_summary),
+                    onClick = onOpenHardwareRestore,
                     enabled = !uiState.isProcessingInventoryBackup
                 )
             }

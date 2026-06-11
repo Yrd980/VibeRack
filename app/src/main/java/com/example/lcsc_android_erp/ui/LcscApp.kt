@@ -39,6 +39,8 @@ import com.example.lcsc_android_erp.core.nfc.NfcLabelKind
 import com.example.lcsc_android_erp.core.nfc.NfcScanResult
 import com.example.lcsc_android_erp.feature.boxes.BoxesOpenRequest
 import com.example.lcsc_android_erp.feature.boxes.BoxesRoute
+import com.example.lcsc_android_erp.feature.containers.ContainersOpenRequest
+import com.example.lcsc_android_erp.feature.containers.ContainersRoute
 import com.example.lcsc_android_erp.feature.home.HomeRoute
 import com.example.lcsc_android_erp.feature.inbound.InboundRoute
 import com.example.lcsc_android_erp.feature.inventory.InventoryOpenRequest
@@ -61,6 +63,8 @@ fun LcscApp() {
     var inventoryOpenRequest by remember { mutableStateOf<InventoryOpenRequest?>(null) }
     var boxesOpenRequestSignal by remember { mutableIntStateOf(0) }
     var boxesOpenRequest by remember { mutableStateOf<BoxesOpenRequest?>(null) }
+    var containersOpenRequestSignal by remember { mutableIntStateOf(0) }
+    var containersOpenRequest by remember { mutableStateOf<ContainersOpenRequest?>(null) }
 
     val jumpToInventoryItem: (String, String) -> Unit = { locationCode, partNumber ->
         inventoryOpenRequest = InventoryOpenRequest(
@@ -112,6 +116,21 @@ fun LcscApp() {
             restoreState = true
         }
     }
+    val jumpToDevice: (String, Int?, Int?) -> Unit = { macAddress, batchId, protoVersion ->
+        containersOpenRequest = ContainersOpenRequest(
+            macAddress = macAddress,
+            batchId = batchId,
+            protoVersion = protoVersion
+        )
+        containersOpenRequestSignal++
+        navController.navigate(Destination.Containers.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     DisposableEffect(activity, appContainer) {
         appContainer.nfcLabelManager.setOnScanResult { result ->
@@ -134,6 +153,16 @@ fun LcscApp() {
                                     jumpToInventoryItem(locationCode, partNumber)
                                 } else if (partNumber != null) {
                                     jumpToInventoryPartNumber(partNumber)
+                                }
+                            }
+
+                            NfcLabelKind.DEVICE -> {
+                                result.payload.macAddress?.let { macAddress ->
+                                    jumpToDevice(
+                                        macAddress,
+                                        result.payload.batchId,
+                                        result.payload.protoVersion
+                                    )
                                 }
                             }
                         }
@@ -228,6 +257,17 @@ fun LcscApp() {
                     openRequestSignal = boxesOpenRequestSignal
                 )
             }
+            composable(Destination.Containers.route) {
+                ContainersRoute(
+                    openRequest = containersOpenRequest,
+                    openRequestSignal = containersOpenRequestSignal,
+                    onOpenBoxes = {
+                        navController.navigate(Destination.Boxes.route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
             composable(Destination.Inbound.route) {
                 InboundRoute(onViewInventoryItem = jumpToInventoryItem)
             }
@@ -245,7 +285,17 @@ fun LcscApp() {
                 )
             }
             composable(Destination.Settings.route) {
-                SettingsRoute()
+                SettingsRoute(
+                    onOpenHardwareRestore = {
+                        navController.navigate(Destination.Containers.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
         }
     }
@@ -258,6 +308,7 @@ private sealed class Destination(
 ) {
     data object Home : Destination("home", R.string.nav_home, Icons.Outlined.Home)
     data object Boxes : Destination("boxes", R.string.nav_boxes, Icons.Outlined.Inventory2)
+    data object Containers : Destination("containers", R.string.nav_containers, Icons.Outlined.Inventory2)
     data object Inbound : Destination("inbound", R.string.nav_inbound, Icons.Outlined.QrCodeScanner)
     data object Search : Destination("search", R.string.nav_search, Icons.Outlined.Search)
     data object Printer : Destination("printer", R.string.nav_printer, Icons.Outlined.Print)
@@ -267,7 +318,7 @@ private sealed class Destination(
 
 private val topLevelDestinations = listOf(
     Destination.Home,
-    Destination.Boxes,
+    Destination.Containers,
     Destination.Inbound,
     Destination.Search,
     Destination.Printer,
