@@ -16,12 +16,14 @@ import com.example.lcsc_android_erp.data.repository.ComponentEnrichmentManager
 import com.example.lcsc_android_erp.data.repository.BoxRepositoryImpl
 import com.example.lcsc_android_erp.data.remote.LcscCatalogRemoteDataSource
 import com.example.lcsc_android_erp.data.repository.ComponentImageStore
+import com.example.lcsc_android_erp.data.repository.ContainerRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.InventoryBackupManager
 import com.example.lcsc_android_erp.data.repository.InventoryRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.LcscCatalogRepositoryImpl
 import com.example.lcsc_android_erp.domain.model.LocationCategoryProfile
 import com.example.lcsc_android_erp.domain.model.calculateDominantLocationCategoryProfile
 import com.example.lcsc_android_erp.domain.repository.BoxRepository
+import com.example.lcsc_android_erp.domain.repository.ContainerRepository
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
 import com.example.lcsc_android_erp.domain.repository.LcscCatalogRepository
 import java.io.File
@@ -111,6 +113,11 @@ class AppContainer(context: Context) {
     val boxRepository: BoxRepository = BoxRepositoryImpl(
         database = database,
         boxDao = database.boxDao(),
+        componentDao = database.componentDao()
+    )
+
+    val containerRepository: ContainerRepository = ContainerRepositoryImpl(
+        containerDao = database.containerDao(),
         componentDao = database.componentDao()
     )
 

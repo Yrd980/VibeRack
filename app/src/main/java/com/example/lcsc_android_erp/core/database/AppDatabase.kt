@@ -4,9 +4,12 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.example.lcsc_android_erp.core.database.dao.BoxDao
 import com.example.lcsc_android_erp.core.database.dao.ComponentDao
+import com.example.lcsc_android_erp.core.database.dao.ContainerDao
 import com.example.lcsc_android_erp.core.database.dao.DashboardDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryItemDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryTransactionDao
+import com.example.lcsc_android_erp.core.database.dao.StockItemDao
+import com.example.lcsc_android_erp.core.database.dao.StockOperationDao
 import com.example.lcsc_android_erp.core.database.dao.StorageLocationDao
 import com.example.lcsc_android_erp.core.database.entity.BoxEntity
 import com.example.lcsc_android_erp.core.database.entity.BoxLayerEntity
@@ -44,4 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun inventoryTransactionDao(): InventoryTransactionDao
     abstract fun dashboardDao(): DashboardDao
     abstract fun boxDao(): BoxDao
+    abstract fun containerDao(): ContainerDao
+    abstract fun stockItemDao(): StockItemDao
+    abstract fun stockOperationDao(): StockOperationDao
 }

@@ -24,6 +24,9 @@ interface ComponentDao {
     @Query("SELECT * FROM component_master WHERE part_number = :partNumber LIMIT 1")
     suspend fun findByPartNumber(partNumber: String): ComponentEntity?
 
+    @Query("SELECT * FROM component_master WHERE protocol_part_id = :protocolPartId LIMIT 1")
+    suspend fun findByProtocolPartId(protocolPartId: String): ComponentEntity?
+
     @Update
     suspend fun update(component: ComponentEntity)
 
