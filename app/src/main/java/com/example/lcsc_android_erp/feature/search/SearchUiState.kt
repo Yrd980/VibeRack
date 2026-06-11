@@ -2,6 +2,7 @@ package com.example.lcsc_android_erp.feature.search
 
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
 import com.example.lcsc_android_erp.domain.model.ComponentBoxLayer
+import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
 import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
 import com.example.lcsc_android_erp.domain.model.StorageLocation
@@ -23,7 +24,10 @@ data class SearchUiState(
     val bomMatchedCount: Int = 0,
     val emptyBoxLayers: List<ComponentBoxLayer> = emptyList(),
     val bomError: String? = null,
-    val isParsingBom: Boolean = false
+    val isParsingBom: Boolean = false,
+    val bomPickSession: BomPickSessionUiModel? = null,
+    val bomPickMessage: String? = null,
+    val isBomPickBusy: Boolean = false
 )
 
 enum class SearchMode {
@@ -57,7 +61,10 @@ data class SearchResultLocationUiModel(
     val code: String,
     val displayName: String?,
     val colorHex: String?,
-    val quantity: Int
+    val quantity: Int,
+    val containerType: ContainerType = ContainerType.LEGACY_LOCATION,
+    val slotNumber: Int? = null,
+    val canFindByLight: Boolean = false
 )
 
 data class BomSearchEntry(
@@ -84,6 +91,29 @@ data class BomSearchRowUiModel(
     val assignedLayers: List<ComponentBoxLayer> = emptyList(),
     val isBound: Boolean = false,
     val isPersistentBinding: Boolean = false
+)
+
+data class BomPickSessionUiModel(
+    val groups: List<BomPickGroupUiModel>
+) {
+    val targetCount: Int
+        get() = groups.sumOf { it.targets.size }
+
+    val slotCount: Int
+        get() = groups.sumOf { it.slots.size }
+}
+
+data class BomPickGroupUiModel(
+    val containerCode: String,
+    val macAddress: String,
+    val slots: List<Int>,
+    val targets: List<BomPickTargetUiModel>
+)
+
+data class BomPickTargetUiModel(
+    val partNumber: String,
+    val slotNumber: Int,
+    val designator: String?
 )
 
 data class BomDirectInboundLookupResult(

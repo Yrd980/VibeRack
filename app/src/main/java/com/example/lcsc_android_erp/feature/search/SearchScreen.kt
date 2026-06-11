@@ -68,9 +68,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.lcsc_android_erp.LcscApplication
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.ui.ComponentInfoDialog
 import com.example.lcsc_android_erp.core.ui.MaterialListCard
 import com.example.lcsc_android_erp.core.ui.performCopyFeedback
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
+import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.LocationInventoryItem
 import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
 import com.example.lcsc_android_erp.domain.model.StockLocationCell
@@ -110,6 +112,9 @@ fun SearchRoute(
         onUpdateInventoryItemSource = viewModel::updateInventoryItemSource,
         onTransferInventoryItem = viewModel::transferInventoryItem,
         onDeleteInventoryItem = viewModel::deleteInventoryItem,
+        onFindSmartChassisRecord = viewModel::findSmartChassisRecord,
+        onStartBomPickToLight = viewModel::startBomPickToLight,
+        onCancelBomPickToLight = viewModel::cancelBomPickToLight,
         onBomImportStarted = viewModel::startBomImport,
         onBomImportSuccess = viewModel::onBomImportSuccess,
         onBomImportFailed = viewModel::onBomImportFailed,
@@ -134,6 +139,9 @@ fun SearchScreen(
     onUpdateInventoryItemSource: (Long, String?, (String?) -> Unit) -> Unit,
     onTransferInventoryItem: (Long, String, (String?) -> Unit) -> Unit,
     onDeleteInventoryItem: (Long, (String?) -> Unit) -> Unit,
+    onFindSmartChassisRecord: (SearchInventoryRecord, (String?) -> Unit) -> Unit,
+    onStartBomPickToLight: () -> Unit,
+    onCancelBomPickToLight: () -> Unit,
     onBomImportStarted: () -> Unit,
     onBomImportSuccess: (ParsedBomDocument) -> Unit,
     onBomImportFailed: (String) -> Unit,
@@ -370,6 +378,17 @@ fun SearchScreen(
                             )
                         }
 
+                        item {
+                            BomPickControlCard(
+                                session = uiState.bomPickSession,
+                                message = uiState.bomPickMessage,
+                                isBusy = uiState.isBomPickBusy,
+                                hasTargets = uiState.bomRows.any(BomSearchRowUiModel::hasPickTargets),
+                                onStart = onStartBomPickToLight,
+                                onCancel = onCancelBomPickToLight
+                            )
+                        }
+
                         items(uiState.bomRows, key = { it.entry.rowNumber + "|" + (it.entry.supplierPart ?: it.entry.manufacturerPart ?: "") }) { row ->
                             val rowActionKey = bomEntryActionKey(row.entry)
                             BomSearchRowCard(
@@ -458,16 +477,24 @@ fun SearchScreen(
     }
 
     selectedSearchRecord?.let { record ->
-        InventoryItemManageDialog(
-            item = record.toLocationInventoryItem(),
-            currentLocation = record.toStockLocationCell(),
-            availableLocations = uiState.locations.map(StorageLocation::toStockLocationCell),
-            onUpdateQuantity = onUpdateInventoryItemQuantity,
-            onUpdateSource = onUpdateInventoryItemSource,
-            onTransfer = onTransferInventoryItem,
-            onDelete = onDeleteInventoryItem,
-            onDismiss = { selectedSearchRecord = null }
-        )
+        if (record.isLegacyEditable) {
+            InventoryItemManageDialog(
+                item = record.toLocationInventoryItem(),
+                currentLocation = record.toStockLocationCell(),
+                availableLocations = uiState.locations.map(StorageLocation::toStockLocationCell),
+                onUpdateQuantity = onUpdateInventoryItemQuantity,
+                onUpdateSource = onUpdateInventoryItemSource,
+                onTransfer = onTransferInventoryItem,
+                onDelete = onDeleteInventoryItem,
+                onDismiss = { selectedSearchRecord = null }
+            )
+        } else {
+            SearchContainerRecordDialog(
+                record = record,
+                onFindByLight = onFindSmartChassisRecord,
+                onDismiss = { selectedSearchRecord = null }
+            )
+        }
     }
 
     bindingTargetEntry?.let { entry ->
@@ -967,7 +994,7 @@ private fun SearchResultCard(
                                 .background(parseSearchColor(location.colorHex))
                         )
                         Text(
-                            text = formatSearchLocationLabel(location.code, location.displayName),
+                            text = formatSearchResultLocationLabel(location),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f)
                         )
@@ -1006,7 +1033,12 @@ private fun SearchRecordPickerDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(item.records, key = { it.inventoryItemId }) { record ->
+                    items(
+                        item.records,
+                        key = { record ->
+                            "${record.containerType}-${record.inventoryItemId}-${record.stockItemId ?: 0}-${record.slotId ?: 0}"
+                        }
+                    ) { record ->
                         SearchLocationRecordCard(
                             record = record,
                             selected = false,
@@ -1020,6 +1052,111 @@ private fun SearchRecordPickerDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(text = stringResource(R.string.common_cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun SearchContainerRecordDialog(
+    record: SearchInventoryRecord,
+    onFindByLight: (SearchInventoryRecord, (String?) -> Unit) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val imageModel = record.imageLocalPath
+        ?.takeIf { it.isNotBlank() }
+        ?.let(::File)
+        ?.takeIf { it.exists() && it.length() > 0L }
+    var actionError by remember(record.stockItemId, record.inventoryItemId) { mutableStateOf<String?>(null) }
+    var isSubmitting by remember(record.stockItemId, record.inventoryItemId) { mutableStateOf(false) }
+    val containerTypeLabel = record.containerType.searchLabel()
+    val locationLabel = formatSearchRecordLocationLabel(record)
+    val quantityText = displaySearchQuantity(record.quantity)
+    val firstPropertyRows = listOf(
+        stringResource(R.string.inbound_component_number) to record.partNumber,
+        stringResource(R.string.inbound_component_brand) to (record.brand ?: stringResource(R.string.inbound_field_empty)),
+        stringResource(R.string.inbound_component_package) to (record.packageName ?: stringResource(R.string.inbound_field_empty)),
+        stringResource(R.string.inbound_component_category) to (record.category ?: stringResource(R.string.inbound_field_empty))
+    )
+    val secondPropertyRows = buildList {
+        add(stringResource(R.string.inbound_component_name) to (record.name ?: stringResource(R.string.inbound_field_empty)))
+        record.specifications.forEach { (key, value) ->
+            val normalizedKey = key.trim()
+            val normalizedValue = value.trim()
+            if (normalizedKey.isNotEmpty() && normalizedValue.isNotEmpty()) {
+                add(normalizedKey to normalizedValue)
+            }
+        }
+        record.description?.takeIf { it.isNotBlank() }?.let {
+            add(stringResource(R.string.inbound_component_description) to it)
+        }
+        add(stringResource(R.string.search_container_type) to containerTypeLabel)
+        add(stringResource(R.string.search_container_location) to locationLabel)
+        record.slotNumber?.let { slotNumber ->
+            add(stringResource(R.string.search_container_slot) to slotNumber.toString())
+        }
+        record.containerMacAddress?.takeIf { it.isNotBlank() }?.let { macAddress ->
+            add(stringResource(R.string.search_container_mac) to macAddress)
+        }
+        add(stringResource(R.string.inventory_quantity_label) to quantityText)
+    }
+
+    ComponentInfoDialog(
+        title = record.name ?: record.mpn ?: record.partNumber,
+        imageModel = imageModel,
+        contentDescription = record.name ?: record.partNumber,
+        fallbackText = record.partNumber,
+        firstPropertyRows = firstPropertyRows,
+        secondPropertyRows = secondPropertyRows,
+        onDismiss = onDismiss,
+        dismissButtons = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (record.canFindByLight) {
+                    TextButton(
+                        onClick = {
+                            actionError = null
+                            isSubmitting = true
+                            onFindByLight(record) { error ->
+                                isSubmitting = false
+                                actionError = error
+                                if (error == null) {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(
+                                            R.string.search_find_light_started,
+                                            record.slotNumber ?: 0
+                                        ),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        },
+                        enabled = !isSubmitting
+                    ) {
+                        Text(text = stringResource(R.string.search_find_light))
+                    }
+                }
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isSubmitting
+                ) {
+                    Text(text = stringResource(R.string.common_close))
+                }
+            }
+        },
+        extraContent = {
+            Text(
+                text = stringResource(R.string.search_container_read_only),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            actionError?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     )
@@ -1048,7 +1185,7 @@ private fun SearchLocationRecordCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = formatSearchLocationLabel(record.locationCode, record.locationDisplayName),
+                text = formatSearchRecordLocationLabel(record),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -1067,6 +1204,79 @@ private fun searchResultSecondarySummary(item: SearchResultUiModel): String? {
         .distinct()
         .joinToString(" · ")
         .takeIf { it.isNotBlank() }
+}
+
+@Composable
+private fun BomPickControlCard(
+    session: BomPickSessionUiModel?,
+    message: String?,
+    isBusy: Boolean,
+    hasTargets: Boolean,
+    onStart: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.search_bom_pick_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = session?.let {
+                    stringResource(
+                        R.string.search_bom_pick_active_summary,
+                        it.slotCount,
+                        it.groups.size
+                    )
+                } ?: stringResource(R.string.search_bom_pick_summary),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            session?.groups?.forEach { group ->
+                Text(
+                    text = stringResource(
+                        R.string.search_bom_pick_group,
+                        group.containerCode,
+                        group.slots.joinToString(", ")
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            message?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                if (session == null) {
+                    Button(
+                        onClick = onStart,
+                        enabled = hasTargets && !isBusy
+                    ) {
+                        Text(text = stringResource(R.string.search_bom_pick_start))
+                    }
+                } else {
+                    TextButton(
+                        onClick = onCancel,
+                        enabled = !isBusy
+                    ) {
+                        Text(text = stringResource(R.string.search_bom_pick_cancel))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1115,6 +1325,52 @@ private fun formatSearchLocationLabel(code: String, displayName: String?): Strin
     }
 }
 
+private fun BomSearchRowUiModel.hasPickTargets(): Boolean {
+    return matchedResults.any { result ->
+        result.records.any(SearchInventoryRecord::canFindByLight)
+    }
+}
+
+@Composable
+private fun formatSearchResultLocationLabel(location: SearchResultLocationUiModel): String {
+    val baseLabel = formatSearchLocationLabel(location.code, location.displayName)
+    return when (location.containerType) {
+        ContainerType.LEGACY_LOCATION -> baseLabel
+        ContainerType.BOX -> location.slotNumber
+            ?.let { "$baseLabel / ${location.containerType.searchLabel()} $it" }
+            ?: baseLabel
+        ContainerType.SMART_CHASSIS -> location.slotNumber
+            ?.let { "$baseLabel / ${location.containerType.searchLabel()} $it" }
+            ?: baseLabel
+    }
+}
+
+@Composable
+private fun formatSearchRecordLocationLabel(record: SearchInventoryRecord): String {
+    val baseLabel = formatSearchLocationLabel(record.locationCode, record.locationDisplayName)
+    return when (record.containerType) {
+        ContainerType.LEGACY_LOCATION -> baseLabel
+        ContainerType.BOX -> record.slotCode
+            ?.takeIf { it.isNotBlank() && !baseLabel.contains(it) }
+            ?.let { "$baseLabel / $it" }
+            ?: baseLabel
+        ContainerType.SMART_CHASSIS -> record.slotNumber
+            ?.let { "$baseLabel / ${record.containerType.searchLabel()} $it" }
+            ?: baseLabel
+    }
+}
+
+@Composable
+private fun ContainerType.searchLabel(): String {
+    return stringResource(
+        when (this) {
+            ContainerType.LEGACY_LOCATION -> R.string.search_container_type_location
+            ContainerType.BOX -> R.string.search_container_type_box
+            ContainerType.SMART_CHASSIS -> R.string.search_container_type_smart_chassis
+        }
+    )
+}
+
 private fun bomEntryActionKey(entry: BomSearchEntry): String {
     return listOf(
         entry.rowNumber,
@@ -1126,7 +1382,7 @@ private fun bomEntryActionKey(entry: BomSearchEntry): String {
 
 @Composable
 private fun displaySearchQuantity(quantity: Int): String {
-    return if (quantity == 0) stringResource(R.string.inventory_unknown_quantity) else quantity.toString()
+    return quantity.toString()
 }
 
 private fun SearchInventoryRecord.toLocationInventoryItem(): LocationInventoryItem {

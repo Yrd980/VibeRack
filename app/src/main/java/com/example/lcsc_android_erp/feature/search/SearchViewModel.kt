@@ -10,8 +10,14 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.lcsc_android_erp.core.AppContainer
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.R
+import com.example.lcsc_android_erp.core.ble.smart.RgbColor
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisCodec
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisLightCommand
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisLightMode
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisManager
 import com.example.lcsc_android_erp.core.network.isNetworkAvailable
 import com.example.lcsc_android_erp.domain.model.ComponentBoxLayer
+import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.InboundRecord
 import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
 import com.example.lcsc_android_erp.domain.repository.BoxRepository
@@ -32,6 +38,7 @@ class SearchViewModel(
     private val boxRepository: BoxRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val lcscCatalogRepository: LcscCatalogRepository,
+    private val smartChassisManager: SmartChassisManager,
     private val appContext: Context
 ) : ViewModel() {
     private data class BomBindingContext(
@@ -40,6 +47,17 @@ class SearchViewModel(
         val temporaryBindings: Map<String, String>,
         val ignoredEntryKeys: Set<String>,
         val boxLayers: List<ComponentBoxLayer>
+    )
+
+    private data class BomPickState(
+        val session: BomPickSessionUiModel?,
+        val message: String?,
+        val isBusy: Boolean
+    )
+
+    private data class BomScreenStatus(
+        val errorMessage: String?,
+        val isParsing: Boolean
     )
 
     private val inventoryRecords = inventoryRepository.observeSearchInventoryRecords()
@@ -57,6 +75,29 @@ class SearchViewModel(
     private val ignoredBomEntryKeys = MutableStateFlow<Set<String>>(emptySet())
     private val bomError = MutableStateFlow<String?>(null)
     private val isParsingBom = MutableStateFlow(false)
+    private val bomPickSession = MutableStateFlow<BomPickSessionUiModel?>(null)
+    private val bomPickMessage = MutableStateFlow<String?>(null)
+    private val isBomPickBusy = MutableStateFlow(false)
+    private val bomPickState = combine(
+        bomPickSession,
+        bomPickMessage,
+        isBomPickBusy
+    ) { session, pickMessage, pickBusy ->
+        BomPickState(
+            session = session,
+            message = pickMessage,
+            isBusy = pickBusy
+        )
+    }
+    private val bomScreenStatus = combine(
+        bomError,
+        isParsingBom
+    ) { errorMessage, parsingBom ->
+        BomScreenStatus(
+            errorMessage = errorMessage,
+            isParsing = parsingBom
+        )
+    }
 
     private val bomBindingContext = combine(
         inventoryRecords,
@@ -134,16 +175,19 @@ class SearchViewModel(
 
     val uiState: StateFlow<SearchUiState> = combine(
         baseUiStateWithEmptyLayers,
-        bomError,
-        isParsingBom,
+        bomScreenStatus,
         locations,
-        defaultLocationCode
-    ) { baseState, bomErrorMessage, parsingBom, storageLocations, defaultCode ->
+        defaultLocationCode,
+        bomPickState
+    ) { baseState, bomStatus, storageLocations, defaultCode, pickState ->
         baseState.copy(
             defaultLocationCode = defaultCode,
             locations = storageLocations,
-            bomError = bomErrorMessage,
-            isParsingBom = parsingBom
+            bomError = bomStatus.errorMessage,
+            isParsingBom = bomStatus.isParsing,
+            bomPickSession = pickState.session,
+            bomPickMessage = pickState.message,
+            isBomPickBusy = pickState.isBusy
         )
     }.stateIn(
         scope = viewModelScope,
@@ -170,6 +214,8 @@ class SearchViewModel(
         bomFilter.value = BomMatchFilter.All
         temporaryBomBindings.value = emptyMap()
         ignoredBomEntryKeys.value = emptySet()
+        bomPickSession.value = null
+        bomPickMessage.value = null
         bomError.value = null
         isParsingBom.value = false
     }
@@ -383,6 +429,126 @@ class SearchViewModel(
         }
     }
 
+    fun startBomPickToLight() {
+        val session = buildBomPickSession(uiState.value.bomRows)
+        if (session == null || session.groups.isEmpty()) {
+            bomPickMessage.value = appContext.getString(R.string.search_bom_pick_no_targets)
+            return
+        }
+        viewModelScope.launch {
+            isBomPickBusy.value = true
+            bomPickMessage.value = null
+            val failedGroup = session.groups.firstOrNull { group ->
+                !sendPickMask(group)
+            }
+            isBomPickBusy.value = false
+            if (failedGroup == null) {
+                bomPickSession.value = session
+                bomPickMessage.value = appContext.getString(
+                    R.string.search_bom_pick_started,
+                    session.slotCount,
+                    session.groups.size
+                )
+            } else {
+                bomPickMessage.value = smartChassisManager.lastOperationError.value?.message
+                    ?: appContext.getString(R.string.search_bom_pick_failed, failedGroup.containerCode)
+            }
+        }
+    }
+
+    fun cancelBomPickToLight() {
+        val session = bomPickSession.value ?: return
+        viewModelScope.launch {
+            isBomPickBusy.value = true
+            session.groups.forEach { group ->
+                if (!smartChassisManager.connectionState.value.isConnected ||
+                    smartChassisManager.connectionState.value.device?.address?.uppercase(Locale.ROOT) != group.macAddress
+                ) {
+                    smartChassisManager.connect(group.macAddress)
+                }
+                smartChassisManager.sendLightCommand(
+                    SmartChassisLightCommand(
+                        mode = SmartChassisLightMode.OFF,
+                        maskA = 0,
+                        colorA = RgbColor(red = 0, green = 0, blue = 0)
+                    )
+                )
+            }
+            bomPickSession.value = null
+            bomPickMessage.value = appContext.getString(R.string.search_bom_pick_cancelled)
+            isBomPickBusy.value = false
+        }
+    }
+
+    fun findSmartChassisRecord(
+        record: SearchInventoryRecord,
+        onCompleted: (String?) -> Unit
+    ) {
+        val slotNumber = record.slotNumber ?: 0
+        val macAddress = record.containerMacAddress?.trim()?.uppercase(Locale.ROOT)
+        if (record.containerType != ContainerType.SMART_CHASSIS ||
+            macAddress.isNullOrBlank() ||
+            slotNumber !in 1..25
+        ) {
+            onCompleted(appContext.getString(R.string.search_find_light_unavailable))
+            return
+        }
+
+        viewModelScope.launch {
+            if (!smartChassisManager.connectionState.value.isConnected ||
+                smartChassisManager.connectionState.value.device?.address?.uppercase(Locale.ROOT) != macAddress
+            ) {
+                val connected = smartChassisManager.connect(macAddress)
+                if (connected == null) {
+                    onCompleted(
+                        smartChassisManager.lastOperationError.value?.message
+                            ?: appContext.getString(R.string.search_find_light_failed)
+                    )
+                    return@launch
+                }
+            }
+            val status = smartChassisManager.sendLightCommand(
+                SmartChassisLightCommand(
+                    mode = SmartChassisLightMode.FIND,
+                    maskA = SmartChassisCodec.slotMask(slotNumber),
+                    colorA = RgbColor(red = 40, green = 180, blue = 255),
+                    timeoutSeconds = 30
+                )
+            )
+            onCompleted(
+                if (status == null) {
+                    smartChassisManager.lastOperationError.value?.message
+                        ?: appContext.getString(R.string.search_find_light_failed)
+                } else {
+                    null
+                }
+            )
+        }
+    }
+
+    private suspend fun sendPickMask(group: BomPickGroupUiModel): Boolean {
+        if (!smartChassisManager.connectionState.value.isConnected ||
+            smartChassisManager.connectionState.value.device?.address?.uppercase(Locale.ROOT) != group.macAddress
+        ) {
+            val connected = smartChassisManager.connect(group.macAddress)
+            if (connected == null) {
+                return false
+            }
+        }
+        val mask = group.slots.fold(0) { currentMask, slotNumber ->
+            currentMask or SmartChassisCodec.slotMask(slotNumber)
+        }
+        val status = smartChassisManager.sendLightCommand(
+            SmartChassisLightCommand(
+                mode = SmartChassisLightMode.PICK,
+                maskA = mask,
+                colorA = RgbColor(red = 255, green = 180, blue = 40),
+                timeoutSeconds = 300
+            )
+        )
+        return status != null
+    }
+
     companion object {
         private const val PAGE_SIZE = 10
 
@@ -393,6 +559,7 @@ class SearchViewModel(
                     boxRepository = appContainer.boxRepository,
                     userPreferencesRepository = appContainer.userPreferencesRepository,
                     lcscCatalogRepository = appContainer.lcscCatalogRepository,
+                    smartChassisManager = appContainer.smartChassisManager,
                     appContext = appContainer.appContext
                 )
             }
@@ -462,10 +629,16 @@ class SearchViewModel(
                                 code = record.locationCode,
                                 displayName = record.locationDisplayName,
                                 colorHex = record.locationColorHex,
-                                quantity = record.quantity
+                                quantity = record.quantity,
+                                containerType = record.containerType,
+                                slotNumber = record.slotNumber,
+                                canFindByLight = record.canFindByLight
                             )
                         },
-                    records = group.sortedBy { it.locationCode }
+                    records = group.sortedWith(
+                        compareBy<SearchInventoryRecord> { it.locationCode }
+                            .thenBy { it.slotNumber ?: 0 }
+                    )
                 )
             }
             .sortedWith(
@@ -526,6 +699,58 @@ class SearchViewModel(
                 )
             }
         }.filterNotNull()
+    }
+
+    private fun buildBomPickSession(rows: List<BomSearchRowUiModel>): BomPickSessionUiModel? {
+        val targets = rows.flatMap { row ->
+            row.matchedResults.flatMap { result ->
+                result.records.mapNotNull { record ->
+                    val macAddress = record.containerMacAddress?.trim()?.uppercase(Locale.ROOT)
+                    val slotNumber = record.slotNumber ?: 0
+                    if (record.containerType != ContainerType.SMART_CHASSIS ||
+                        macAddress.isNullOrBlank() ||
+                        slotNumber !in 1..25
+                    ) {
+                        null
+                    } else {
+                        PickTargetCandidate(
+                            containerCode = record.locationCode,
+                            macAddress = macAddress,
+                            slotNumber = slotNumber,
+                            partNumber = record.partNumber,
+                            designator = row.entry.designator
+                        )
+                    }
+                }
+            }
+        }
+            .distinctBy { "${it.macAddress}:${it.slotNumber}:${it.partNumber}" }
+
+        if (targets.isEmpty()) {
+            return null
+        }
+
+        val groups = targets
+            .groupBy { it.macAddress }
+            .map { (macAddress, groupTargets) ->
+                BomPickGroupUiModel(
+                    containerCode = groupTargets.first().containerCode,
+                    macAddress = macAddress,
+                    slots = groupTargets.map { it.slotNumber }.distinct().sorted(),
+                    targets = groupTargets
+                        .sortedWith(compareBy<PickTargetCandidate> { it.slotNumber }.thenBy { it.partNumber })
+                        .map { target ->
+                            BomPickTargetUiModel(
+                                partNumber = target.partNumber,
+                                slotNumber = target.slotNumber,
+                                designator = target.designator
+                            )
+                        }
+                )
+            }
+            .sortedBy { it.containerCode }
+
+        return BomPickSessionUiModel(groups)
     }
 
     private fun matchesBomEntry(
@@ -626,6 +851,14 @@ class SearchViewModel(
         Resistor,
         Capacitor
     }
+
+    private data class PickTargetCandidate(
+        val containerCode: String,
+        val macAddress: String,
+        val slotNumber: Int,
+        val partNumber: String,
+        val designator: String?
+    )
 
     private fun bomEntryKey(entry: BomSearchEntry): String {
         return listOf(
