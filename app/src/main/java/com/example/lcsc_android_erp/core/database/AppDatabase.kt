@@ -11,9 +11,13 @@ import com.example.lcsc_android_erp.core.database.dao.StorageLocationDao
 import com.example.lcsc_android_erp.core.database.entity.BoxEntity
 import com.example.lcsc_android_erp.core.database.entity.BoxLayerEntity
 import com.example.lcsc_android_erp.core.database.entity.ComponentEntity
+import com.example.lcsc_android_erp.core.database.entity.ContainerEntity
+import com.example.lcsc_android_erp.core.database.entity.ContainerSlotEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryItemEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryTransactionEntity
 import com.example.lcsc_android_erp.core.database.entity.LayerMaterialEntity
+import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
+import com.example.lcsc_android_erp.core.database.entity.StockOperationEntity
 import com.example.lcsc_android_erp.core.database.entity.StorageLocationEntity
 
 @Database(
@@ -24,9 +28,13 @@ import com.example.lcsc_android_erp.core.database.entity.StorageLocationEntity
         InventoryTransactionEntity::class,
         BoxEntity::class,
         BoxLayerEntity::class,
-        LayerMaterialEntity::class
+        LayerMaterialEntity::class,
+        ContainerEntity::class,
+        ContainerSlotEntity::class,
+        StockItemEntity::class,
+        StockOperationEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

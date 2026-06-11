@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
     tableName = "component_master",
     indices = [
         Index(value = ["part_number"], unique = true),
+        Index(value = ["protocol_part_id"], unique = true),
         Index(value = ["mpn"]),
         Index(value = ["brand"]),
         Index(value = ["package_name"])
@@ -19,6 +20,8 @@ data class ComponentEntity(
     val id: Long = 0,
     @ColumnInfo(name = "part_number")
     val partNumber: String,
+    @ColumnInfo(name = "protocol_part_id")
+    val protocolPartId: String? = null,
     val mpn: String? = null,
     val name: String? = null,
     val brand: String? = null,
