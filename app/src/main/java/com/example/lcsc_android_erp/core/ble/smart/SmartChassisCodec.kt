@@ -45,6 +45,7 @@ object SmartChassisCodec {
         require(quantity in 0..0xFFFF) { "quantity must fit uint16" }
         require(flags in 0..0xFF) { "flags must fit uint8" }
         val normalizedPartId = partId.trim().uppercase(Locale.ROOT)
+        require(normalizedPartId.isNotEmpty()) { "part_id must not be empty" }
         require(normalizedPartId.length <= 10) { "part_id must be at most 10 ASCII bytes" }
         require(normalizedPartId.all { it.code in 0x21..0x7E }) { "part_id must be printable ASCII" }
 
@@ -68,13 +69,30 @@ object SmartChassisCodec {
         if (requireValidCrc && crc != computed) {
             return null
         }
+        val slot = bytes.u8(0)
+        if (slot > SmartChassisProtocol.SLOT_COUNT) {
+            return null
+        }
         return SmartChassisSlotRecord(
-            slot = bytes.u8(0),
+            slot = slot,
             partId = bytes.decodePartId(),
             quantity = bytes.u16Le(11),
             flags = bytes.u8(13),
             crc8 = crc
         )
+    }
+
+    fun encodeSlotRecordForTable(record: SmartChassisSlotRecord): ByteArray {
+        return if (record.isEmpty) {
+            ByteArray(SmartChassisProtocol.SLOT_RECORD_SIZE)
+        } else {
+            encodeSlotRecord(
+                slot = record.slot,
+                partId = record.partId,
+                quantity = record.quantity,
+                flags = record.flags
+            )
+        }
     }
 
     fun encodeReadOne(slot: Int): ByteArray {

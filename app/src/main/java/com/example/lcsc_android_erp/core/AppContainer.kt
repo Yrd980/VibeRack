@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
 import androidx.room.withTransaction
+import com.example.lcsc_android_erp.core.ble.smart.FakeSmartChassisClient
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisManager
 import com.example.lcsc_android_erp.core.database.AppDatabase
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.core.nfc.NfcLabelManager
@@ -128,6 +130,10 @@ class AppContainer(context: Context) {
     val containerRepository: ContainerRepository = ContainerRepositoryImpl(
         containerDao = database.containerDao(),
         componentDao = database.componentDao()
+    )
+
+    val smartChassisManager = SmartChassisManager(
+        client = FakeSmartChassisClient()
     )
 
     val inventoryBackupManager = InventoryBackupManager(
