@@ -119,7 +119,10 @@ class AppContainer(context: Context) {
     val boxRepository: BoxRepository = BoxRepositoryImpl(
         database = database,
         boxDao = database.boxDao(),
-        componentDao = database.componentDao()
+        componentDao = database.componentDao(),
+        containerDao = database.containerDao(),
+        stockItemDao = database.stockItemDao(),
+        stockOperationDao = database.stockOperationDao()
     )
 
     val containerRepository: ContainerRepository = ContainerRepositoryImpl(

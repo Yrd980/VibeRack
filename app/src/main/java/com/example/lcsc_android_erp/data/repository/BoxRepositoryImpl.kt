@@ -4,15 +4,25 @@ import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import com.example.lcsc_android_erp.core.database.dao.BoxDao
 import com.example.lcsc_android_erp.core.database.dao.ComponentDao
+import com.example.lcsc_android_erp.core.database.dao.ContainerDao
+import com.example.lcsc_android_erp.core.database.dao.StockItemDao
+import com.example.lcsc_android_erp.core.database.dao.StockOperationDao
 import com.example.lcsc_android_erp.core.database.entity.BoxEntity
 import com.example.lcsc_android_erp.core.database.entity.BoxLayerEntity
 import com.example.lcsc_android_erp.core.database.entity.ComponentEntity
+import com.example.lcsc_android_erp.core.database.entity.ContainerEntity
+import com.example.lcsc_android_erp.core.database.entity.ContainerSlotEntity
 import com.example.lcsc_android_erp.core.database.entity.LayerMaterialEntity
+import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
+import com.example.lcsc_android_erp.core.database.entity.StockOperationEntity
 import com.example.lcsc_android_erp.core.database.model.BoxLayerProjection
 import com.example.lcsc_android_erp.core.database.model.BoxSummaryProjection
 import com.example.lcsc_android_erp.domain.model.ComponentBox
 import com.example.lcsc_android_erp.domain.model.ComponentBoxLayer
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
+import com.example.lcsc_android_erp.domain.model.ContainerType
+import com.example.lcsc_android_erp.domain.model.QuantityState
+import com.example.lcsc_android_erp.domain.model.StockOperationType
 import com.example.lcsc_android_erp.domain.repository.BoxRepository
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
@@ -22,10 +32,17 @@ import org.json.JSONObject
 class BoxRepositoryImpl(
     private val database: RoomDatabase,
     private val boxDao: BoxDao,
-    private val componentDao: ComponentDao
+    private val componentDao: ComponentDao,
+    private val containerDao: ContainerDao,
+    private val stockItemDao: StockItemDao,
+    private val stockOperationDao: StockOperationDao
 ) : BoxRepository {
     private companion object {
         private val BOX_CODE_REGEX = Regex("[A-Z0-9_-]+")
+        private const val BOX_CONTAINER_ID_OFFSET = 1_000_000_000L
+        private const val BOX_SLOT_ID_OFFSET = 2_000_000_000L
+        private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
+        private val MANUAL_INBOUND_PART_NUMBER_REGEX = Regex("^C0\\d+$")
         private const val ERROR_INVALID_CODE = "invalid_code"
         private const val ERROR_INVALID_LAYER_COUNT = "invalid_layer_count"
         private const val ERROR_DUPLICATE_CODE = "duplicate_code"
@@ -68,6 +85,9 @@ class BoxRepositoryImpl(
 
         return database.withTransaction<String?> {
             val now = System.currentTimeMillis()
+            if (containerDao.findContainerByCode(normalizedCode) != null) {
+                return@withTransaction ERROR_DUPLICATE_CODE
+            }
             val boxId = boxDao.insertBox(
                 BoxEntity(
                     code = normalizedCode,
@@ -81,18 +101,29 @@ class BoxRepositoryImpl(
                 return@withTransaction ERROR_DUPLICATE_CODE
             }
 
-            boxDao.insertLayers(
-                (1..layerCount).map { index ->
-                    val layerCode = "L%02d".format(Locale.ROOT, index)
-                    BoxLayerEntity(
-                        boxId = boxId,
-                        layerCode = layerCode,
-                        displayName = layerCode,
-                        sortOrder = index,
-                        createdAt = now,
-                        updatedAt = now
-                    )
-                }
+            val layers = (1..layerCount).map { index ->
+                val layerCode = "L%02d".format(Locale.ROOT, index)
+                BoxLayerEntity(
+                    boxId = boxId,
+                    layerCode = layerCode,
+                    displayName = layerCode,
+                    sortOrder = index,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            }
+            boxDao.insertLayers(layers)
+            val insertedLayers = boxDao.getLayerEntitiesForBox(boxId)
+            ensureBoxContainer(
+                box = BoxEntity(
+                    id = boxId,
+                    code = normalizedCode,
+                    name = name?.trim()?.ifBlank { null },
+                    layerCount = layerCount,
+                    createdAt = now,
+                    updatedAt = now
+                ),
+                layers = insertedLayers
             )
             null
         }
@@ -127,6 +158,19 @@ class BoxRepositoryImpl(
                 ?: return@withTransaction ERROR_LAYER_NOT_FOUND
             val componentId = upsertComponent(component)
             val now = System.currentTimeMillis()
+            val box = boxDao.findBoxById(layer.boxId)
+                ?: return@withTransaction ERROR_LAYER_NOT_FOUND
+            val slot = ensureBoxSlot(
+                box = box,
+                layer = BoxLayerEntity(
+                    id = layer.id,
+                    boxId = layer.boxId,
+                    layerCode = layer.layerCode,
+                    displayName = layer.displayName,
+                    sortOrder = layer.sortOrder,
+                    updatedAt = now
+                )
+            )
             boxDao.replaceLayerMaterial(
                 LayerMaterialEntity(
                     layerId = layer.id,
@@ -137,6 +181,16 @@ class BoxRepositoryImpl(
                     createdAt = now,
                     updatedAt = now
                 )
+            )
+            replaceSlotStock(
+                containerId = boxContainerId(box.id),
+                slotId = slot.id,
+                componentId = componentId,
+                quantity = quantity,
+                sourceType = sourceType,
+                sourceRef = component.partNumber,
+                rawPayload = rawPayload,
+                updatedAt = now
             )
             null
         }
@@ -156,6 +210,18 @@ class BoxRepositoryImpl(
             val layer = boxDao.findFirstEmptyLayer() ?: return@withTransaction null
             val componentId = upsertComponent(component)
             val now = System.currentTimeMillis()
+            val box = boxDao.findBoxById(layer.boxId) ?: return@withTransaction null
+            val slot = ensureBoxSlot(
+                box = box,
+                layer = BoxLayerEntity(
+                    id = layer.id,
+                    boxId = layer.boxId,
+                    layerCode = layer.layerCode,
+                    displayName = layer.displayName,
+                    sortOrder = layer.sortOrder,
+                    updatedAt = now
+                )
+            )
             boxDao.replaceLayerMaterial(
                 LayerMaterialEntity(
                     layerId = layer.id,
@@ -166,6 +232,16 @@ class BoxRepositoryImpl(
                     createdAt = now,
                     updatedAt = now
                 )
+            )
+            replaceSlotStock(
+                containerId = boxContainerId(box.id),
+                slotId = slot.id,
+                componentId = componentId,
+                quantity = quantity,
+                sourceType = sourceType,
+                sourceRef = component.partNumber,
+                rawPayload = rawPayload,
+                updatedAt = now
             )
             boxDao.findLayerById(layer.id)?.let(::toComponentBoxLayer)
         }
@@ -196,6 +272,118 @@ class BoxRepositoryImpl(
         )
     }
 
+    private suspend fun ensureBoxContainer(
+        box: BoxEntity,
+        layers: List<BoxLayerEntity>
+    ) {
+        val containerId = boxContainerId(box.id)
+        val now = System.currentTimeMillis()
+        val existing = containerDao.findContainerById(containerId)
+        val container = ContainerEntity(
+            id = containerId,
+            code = box.code,
+            displayName = box.name ?: box.code,
+            type = ContainerType.BOX.name,
+            slotCount = box.layerCount,
+            createdAt = box.createdAt,
+            updatedAt = now
+        )
+        if (existing == null) {
+            containerDao.insertContainer(container)
+        } else {
+            containerDao.updateContainer(
+                existing.copy(
+                    code = box.code,
+                    displayName = box.name ?: box.code,
+                    type = ContainerType.BOX.name,
+                    slotCount = box.layerCount,
+                    updatedAt = now
+                )
+            )
+        }
+        layers.forEach { layer ->
+            ensureBoxSlot(box, layer)
+        }
+    }
+
+    private suspend fun ensureBoxSlot(
+        box: BoxEntity,
+        layer: BoxLayerEntity
+    ): ContainerSlotEntity {
+        val containerId = boxContainerId(box.id)
+        if (containerDao.findContainerById(containerId) == null) {
+            ensureBoxContainer(box, emptyList())
+        }
+        val now = System.currentTimeMillis()
+        val slot = containerDao.findSlotByContainerAndNumber(containerId, layer.sortOrder)
+        if (slot != null) {
+            val updatedSlot = slot.copy(
+                slotCode = layer.layerCode,
+                displayName = layer.displayName ?: layer.layerCode,
+                sortOrder = layer.sortOrder,
+                updatedAt = now
+            )
+            if (updatedSlot != slot) {
+                containerDao.updateSlot(updatedSlot)
+            }
+            return updatedSlot
+        }
+        val newSlot = ContainerSlotEntity(
+            id = boxSlotId(layer.id),
+            containerId = containerId,
+            slotNumber = layer.sortOrder,
+            slotCode = layer.layerCode,
+            displayName = layer.displayName ?: layer.layerCode,
+            sortOrder = layer.sortOrder,
+            createdAt = layer.createdAt,
+            updatedAt = now
+        )
+        val insertId = containerDao.insertSlot(newSlot)
+        return containerDao.findSlotByContainerAndNumber(containerId, layer.sortOrder)
+            ?: newSlot.copy(id = if (insertId > 0) insertId else 0)
+    }
+
+    private suspend fun replaceSlotStock(
+        containerId: Long,
+        slotId: Long,
+        componentId: Long,
+        quantity: Int,
+        sourceType: String,
+        sourceRef: String,
+        rawPayload: String?,
+        updatedAt: Long
+    ) {
+        stockItemDao.deleteBySlotId(slotId)
+        stockItemDao.insert(
+            StockItemEntity(
+                componentId = componentId,
+                containerId = containerId,
+                containerSlotId = slotId,
+                quantity = quantity,
+                quantityState = QuantityState.KNOWN.name,
+                lastInboundAt = updatedAt,
+                updatedAt = updatedAt
+            )
+        )
+        stockOperationDao.insert(
+            StockOperationEntity(
+                type = StockOperationType.INBOUND.name,
+                containerId = containerId,
+                containerSlotId = slotId,
+                componentId = componentId,
+                quantityDelta = quantity,
+                sourceType = sourceType,
+                sourceRef = sourceRef,
+                rawPayload = rawPayload,
+                createdAt = updatedAt
+            )
+        )
+    }
+
+    private fun boxContainerId(boxId: Long): Long = BOX_CONTAINER_ID_OFFSET + boxId
+
+    private fun boxSlotId(layerId: Long): Long = BOX_SLOT_ID_OFFSET + layerId
+
     private suspend fun upsertComponent(component: ComponentDetail): Long {
         val normalizedPartNumber = component.partNumber.trim().uppercase(Locale.ROOT)
         val specJson = component.specifications
@@ -203,8 +391,11 @@ class BoxRepositoryImpl(
             ?.let { JSONObject(it).toString() }
         val existing = componentDao.findByPartNumber(normalizedPartNumber)
         if (existing != null) {
+            val protocolPartId = existing.protocolPartId
+                ?: protocolPartIdForComponent(existing.id, normalizedPartNumber)
             val updated = existing.copy(
                 partNumber = normalizedPartNumber,
+                protocolPartId = protocolPartId,
                 mpn = existing.mpn ?: component.mpn,
                 name = existing.name ?: component.name,
                 brand = existing.brand ?: component.brand,
@@ -225,6 +416,7 @@ class BoxRepositoryImpl(
         val insertId = componentDao.insert(
             ComponentEntity(
                 partNumber = normalizedPartNumber,
+                protocolPartId = protocolPartIdForComponent(null, normalizedPartNumber),
                 mpn = component.mpn,
                 name = component.name,
                 brand = component.brand,
@@ -237,9 +429,38 @@ class BoxRepositoryImpl(
             )
         )
         if (insertId > 0) {
+            val resolvedProtocolPartId = protocolPartIdForComponent(insertId, normalizedPartNumber)
+            val insertedProtocolPartId = protocolPartIdForComponent(null, normalizedPartNumber)
+            if (resolvedProtocolPartId != insertedProtocolPartId) {
+                componentDao.update(
+                    ComponentEntity(
+                        id = insertId,
+                        partNumber = normalizedPartNumber,
+                        protocolPartId = resolvedProtocolPartId,
+                        mpn = component.mpn,
+                        name = component.name,
+                        brand = component.brand,
+                        packageName = component.packageName,
+                        category = component.category,
+                        specJson = specJson,
+                        description = component.description,
+                        sourceUrl = component.productUrl,
+                        imageLocalPath = component.imageLocalPath
+                    )
+                )
+            }
             return insertId
         }
         return componentDao.findByPartNumber(normalizedPartNumber)?.id
             ?: error("Failed to resolve component id for $normalizedPartNumber")
+    }
+
+    private fun protocolPartIdForComponent(componentId: Long?, partNumber: String): String? {
+        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
+        val isManual = normalizedPartNumber.matches(MANUAL_INBOUND_PART_NUMBER_REGEX)
+        if (!isManual && normalizedPartNumber.matches(PROTOCOL_PART_ID_REGEX)) {
+            return normalizedPartNumber
+        }
+        return componentId?.let { id -> "M%09d".format(Locale.ROOT, id) }
     }
 }

@@ -21,10 +21,16 @@ interface BoxDao {
             b.code AS code,
             b.name AS name,
             b.layerCount AS layerCount,
-            CAST(COUNT(lm.id) AS INTEGER) AS occupiedLayerCount
+            CAST(COUNT(si.id) AS INTEGER) AS occupiedLayerCount
         FROM component_box b
         LEFT JOIN box_layer bl ON bl.box_id = b.id
-        LEFT JOIN layer_material lm ON lm.layer_id = bl.id
+        LEFT JOIN `container` cn
+            ON cn.id = 1000000000 + b.id
+            AND cn.type = 'BOX'
+        LEFT JOIN container_slot cs
+            ON cs.container_id = cn.id
+            AND cs.slot_number = bl.sortOrder
+        LEFT JOIN stock_item si ON si.container_slot_id = cs.id
         GROUP BY b.id
         ORDER BY b.code ASC
         """
@@ -58,11 +64,17 @@ interface BoxDao {
             c.id AS componentId,
             c.part_number AS partNumber,
             c.name AS componentName,
-            lm.quantity AS quantity
+            si.quantity AS quantity
         FROM box_layer bl
         INNER JOIN component_box b ON b.id = bl.box_id
-        LEFT JOIN layer_material lm ON lm.layer_id = bl.id
-        LEFT JOIN component_master c ON c.id = lm.component_id
+        LEFT JOIN `container` cn
+            ON cn.id = 1000000000 + b.id
+            AND cn.type = 'BOX'
+        LEFT JOIN container_slot cs
+            ON cs.container_id = cn.id
+            AND cs.slot_number = bl.sortOrder
+        LEFT JOIN stock_item si ON si.container_slot_id = cs.id
+        LEFT JOIN component_master c ON c.id = si.component_id
         WHERE bl.box_id = :boxId
         ORDER BY bl.sortOrder ASC, bl.layer_code ASC
         """
@@ -81,11 +93,17 @@ interface BoxDao {
             c.id AS componentId,
             c.part_number AS partNumber,
             c.name AS componentName,
-            lm.quantity AS quantity
+            si.quantity AS quantity
         FROM box_layer bl
         INNER JOIN component_box b ON b.id = bl.box_id
-        LEFT JOIN layer_material lm ON lm.layer_id = bl.id
-        LEFT JOIN component_master c ON c.id = lm.component_id
+        LEFT JOIN `container` cn
+            ON cn.id = 1000000000 + b.id
+            AND cn.type = 'BOX'
+        LEFT JOIN container_slot cs
+            ON cs.container_id = cn.id
+            AND cs.slot_number = bl.sortOrder
+        LEFT JOIN stock_item si ON si.container_slot_id = cs.id
+        LEFT JOIN component_master c ON c.id = si.component_id
         ORDER BY b.code ASC, bl.sortOrder ASC, bl.layer_code ASC
         """
     )
@@ -103,12 +121,18 @@ interface BoxDao {
             c.id AS componentId,
             c.part_number AS partNumber,
             c.name AS componentName,
-            lm.quantity AS quantity
+            si.quantity AS quantity
         FROM box_layer bl
         INNER JOIN component_box b ON b.id = bl.box_id
-        LEFT JOIN layer_material lm ON lm.layer_id = bl.id
-        LEFT JOIN component_master c ON c.id = lm.component_id
-        WHERE lm.id IS NULL
+        LEFT JOIN `container` cn
+            ON cn.id = 1000000000 + b.id
+            AND cn.type = 'BOX'
+        LEFT JOIN container_slot cs
+            ON cs.container_id = cn.id
+            AND cs.slot_number = bl.sortOrder
+        LEFT JOIN stock_item si ON si.container_slot_id = cs.id
+        LEFT JOIN component_master c ON c.id = si.component_id
+        WHERE si.id IS NULL
         ORDER BY b.code ASC, bl.sortOrder ASC, bl.layer_code ASC
         """
     )
@@ -126,11 +150,17 @@ interface BoxDao {
             c.id AS componentId,
             c.part_number AS partNumber,
             c.name AS componentName,
-            lm.quantity AS quantity
+            si.quantity AS quantity
         FROM box_layer bl
         INNER JOIN component_box b ON b.id = bl.box_id
-        LEFT JOIN layer_material lm ON lm.layer_id = bl.id
-        LEFT JOIN component_master c ON c.id = lm.component_id
+        LEFT JOIN `container` cn
+            ON cn.id = 1000000000 + b.id
+            AND cn.type = 'BOX'
+        LEFT JOIN container_slot cs
+            ON cs.container_id = cn.id
+            AND cs.slot_number = bl.sortOrder
+        LEFT JOIN stock_item si ON si.container_slot_id = cs.id
+        LEFT JOIN component_master c ON c.id = si.component_id
         WHERE bl.id = :layerId
         LIMIT 1
         """
@@ -149,11 +179,17 @@ interface BoxDao {
             c.id AS componentId,
             c.part_number AS partNumber,
             c.name AS componentName,
-            lm.quantity AS quantity
+            si.quantity AS quantity
         FROM box_layer bl
         INNER JOIN component_box b ON b.id = bl.box_id
-        LEFT JOIN layer_material lm ON lm.layer_id = bl.id
-        LEFT JOIN component_master c ON c.id = lm.component_id
+        LEFT JOIN `container` cn
+            ON cn.id = 1000000000 + b.id
+            AND cn.type = 'BOX'
+        LEFT JOIN container_slot cs
+            ON cs.container_id = cn.id
+            AND cs.slot_number = bl.sortOrder
+        LEFT JOIN stock_item si ON si.container_slot_id = cs.id
+        LEFT JOIN component_master c ON c.id = si.component_id
         WHERE UPPER(b.code) = UPPER(:boxCode)
             AND UPPER(bl.layer_code) = UPPER(:layerCode)
         LIMIT 1
@@ -173,12 +209,18 @@ interface BoxDao {
             c.id AS componentId,
             c.part_number AS partNumber,
             c.name AS componentName,
-            lm.quantity AS quantity
+            si.quantity AS quantity
         FROM box_layer bl
         INNER JOIN component_box b ON b.id = bl.box_id
-        LEFT JOIN layer_material lm ON lm.layer_id = bl.id
-        LEFT JOIN component_master c ON c.id = lm.component_id
-        WHERE lm.id IS NULL
+        LEFT JOIN `container` cn
+            ON cn.id = 1000000000 + b.id
+            AND cn.type = 'BOX'
+        LEFT JOIN container_slot cs
+            ON cs.container_id = cn.id
+            AND cs.slot_number = bl.sortOrder
+        LEFT JOIN stock_item si ON si.container_slot_id = cs.id
+        LEFT JOIN component_master c ON c.id = si.component_id
+        WHERE si.id IS NULL
         ORDER BY b.code ASC, bl.sortOrder ASC, bl.layer_code ASC
         LIMIT 1
         """
@@ -187,6 +229,9 @@ interface BoxDao {
 
     @Query("SELECT COUNT(*) FROM box_layer WHERE box_id = :boxId")
     suspend fun countLayersForBox(boxId: Long): Int
+
+    @Query("SELECT * FROM box_layer WHERE box_id = :boxId ORDER BY sortOrder ASC, layer_code ASC")
+    suspend fun getLayerEntitiesForBox(boxId: Long): List<BoxLayerEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun replaceLayerMaterial(layerMaterial: LayerMaterialEntity)

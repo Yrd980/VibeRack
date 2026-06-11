@@ -39,6 +39,9 @@ interface StockItemDao {
     @Query("DELETE FROM stock_item WHERE id = :stockItemId")
     suspend fun deleteById(stockItemId: Long)
 
+    @Query("DELETE FROM stock_item WHERE container_slot_id = :containerSlotId")
+    suspend fun deleteBySlotId(containerSlotId: Long)
+
     @Query(
         """
         DELETE FROM stock_item
