@@ -9,17 +9,23 @@ data class NfcLabelPayload(
     val partNumber: String? = null,
     val boxCode: String? = null,
     val layerCode: String? = null,
+    val macAddress: String? = null,
+    val batchId: Int? = null,
+    val protoVersion: Int? = null,
 )
 
 enum class NfcLabelKind {
     LOCATION,
     MATERIAL,
+    DEVICE,
 }
 
 object NfcLabelPayloadCodec {
     private const val scheme = "lcscerp"
     private const val hostLocation = "location"
     private const val hostMaterial = "material"
+    private const val hostDevice = "device"
+    private val macRegex = Regex("^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
 
     fun locationUri(locationCode: String): String {
         return Uri.Builder()
@@ -56,6 +62,21 @@ object NfcLabelPayloadCodec {
             ?.takeIf { it.isNotBlank() }
             ?.let { builder.appendQueryParameter("layer", it) }
         return builder.build().toString()
+    }
+
+    fun deviceUri(
+        macAddress: String,
+        batchId: Int,
+        protoVersion: Int
+    ): String {
+        return Uri.Builder()
+            .scheme(scheme)
+            .authority(hostDevice)
+            .appendQueryParameter("mac", macAddress.trim().uppercase(Locale.ROOT))
+            .appendQueryParameter("batch", batchId.toString())
+            .appendQueryParameter("ver", protoVersion.toString())
+            .build()
+            .toString()
     }
 
     fun parse(value: String): NfcLabelPayload? {
@@ -97,6 +118,28 @@ object NfcLabelPayloadCodec {
                     partNumber = partNumber,
                     boxCode = boxCode,
                     layerCode = layerCode,
+                )
+            }
+
+            hostDevice -> {
+                val macAddress = uri.getQueryParameter("mac")
+                    ?.trim()
+                    ?.uppercase(Locale.ROOT)
+                    ?.takeIf { it.matches(macRegex) }
+                    ?: return null
+                val batchId = uri.getQueryParameter("batch")
+                    ?.toIntOrNull()
+                    ?.takeIf { it in 0..0xFFFF }
+                    ?: return null
+                val protoVersion = uri.getQueryParameter("ver")
+                    ?.toIntOrNull()
+                    ?.takeIf { it in 0..0xFF }
+                    ?: return null
+                NfcLabelPayload(
+                    kind = NfcLabelKind.DEVICE,
+                    macAddress = macAddress,
+                    batchId = batchId,
+                    protoVersion = protoVersion
                 )
             }
 
