@@ -1,10 +1,20 @@
 package com.example.lcsc_android_erp.data.repository
 
+import androidx.room.withTransaction
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisBindingOp
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisProtocol
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisSlotRecord
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisTableInfo
+import com.example.lcsc_android_erp.core.database.AppDatabase
 import com.example.lcsc_android_erp.core.database.dao.ComponentDao
 import com.example.lcsc_android_erp.core.database.dao.ContainerDao
+import com.example.lcsc_android_erp.core.database.dao.StockItemDao
+import com.example.lcsc_android_erp.core.database.dao.StockOperationDao
 import com.example.lcsc_android_erp.core.database.entity.ComponentEntity
 import com.example.lcsc_android_erp.core.database.entity.ContainerEntity
 import com.example.lcsc_android_erp.core.database.entity.ContainerSlotEntity
+import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
+import com.example.lcsc_android_erp.core.database.entity.StockOperationEntity
 import com.example.lcsc_android_erp.core.database.model.ContainerSlotStockProjection
 import com.example.lcsc_android_erp.core.database.model.ContainerSummaryProjection
 import com.example.lcsc_android_erp.domain.model.ComponentDetail
@@ -14,6 +24,7 @@ import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.QuantityState
 import com.example.lcsc_android_erp.domain.model.SlotStockItem
 import com.example.lcsc_android_erp.domain.model.StockContainer
+import com.example.lcsc_android_erp.domain.model.StockOperationType
 import com.example.lcsc_android_erp.domain.repository.ContainerRepository
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
@@ -21,8 +32,11 @@ import kotlinx.coroutines.flow.map
 import org.json.JSONObject
 
 class ContainerRepositoryImpl(
+    private val database: AppDatabase,
     private val containerDao: ContainerDao,
-    private val componentDao: ComponentDao
+    private val componentDao: ComponentDao,
+    private val stockItemDao: StockItemDao,
+    private val stockOperationDao: StockOperationDao
 ) : ContainerRepository {
     override fun observeContainers(): Flow<List<StockContainer>> {
         return containerDao.observeContainerSummaries().map { containers ->
@@ -54,10 +68,138 @@ class ContainerRepositoryImpl(
         return containerDao.findContainerByMacAddress(normalizedMac)?.let(::toStockContainer)
     }
 
+    override suspend fun ensureSmartChassisContainer(
+        macAddress: String,
+        batchId: Int,
+        protoVersion: Int,
+        batteryPct: Int?,
+        statusFlags: Int?,
+        tableSeqLow16: Int?
+    ): StockContainer? {
+        val normalizedMac = macAddress.trim().uppercase(Locale.ROOT)
+        if (!normalizedMac.matches(MAC_ADDRESS_REGEX) || batchId !in 0..0xFFFF || protoVersion !in 0..0xFF) {
+            return null
+        }
+        val now = System.currentTimeMillis()
+        val existing = containerDao.findContainerByMacAddress(normalizedMac)
+        val code = smartChassisCode(normalizedMac, batchId)
+        val containerId = if (existing == null) {
+            containerDao.insertContainer(
+                ContainerEntity(
+                    code = code,
+                    displayName = "VibeRack ${normalizedMac.takeLast(5).replace(":", "")}",
+                    type = ContainerType.SMART_CHASSIS.name,
+                    slotCount = 25,
+                    macAddress = normalizedMac,
+                    batchId = batchId,
+                    protoVersion = protoVersion,
+                    batteryPct = batteryPct,
+                    statusFlags = statusFlags,
+                    tableSeq = tableSeqLow16?.toLong(),
+                    lastSeenAt = now,
+                    updatedAt = now
+                )
+            )
+        } else {
+            containerDao.updateContainer(
+                existing.copy(
+                    code = existing.code.ifBlank { code },
+                    type = ContainerType.SMART_CHASSIS.name,
+                    slotCount = 25,
+                    macAddress = normalizedMac,
+                    batchId = batchId,
+                    protoVersion = protoVersion,
+                    batteryPct = batteryPct ?: existing.batteryPct,
+                    statusFlags = statusFlags ?: existing.statusFlags,
+                    tableSeq = tableSeqLow16?.toLong() ?: existing.tableSeq,
+                    lastSeenAt = now,
+                    updatedAt = now
+                )
+            )
+            existing.id
+        }
+        if (containerId <= 0) {
+            return containerDao.findContainerByMacAddress(normalizedMac)?.let(::toStockContainer)
+        }
+        val slots = (1..25).map { slotNumber ->
+            ContainerSlotEntity(
+                containerId = containerId,
+                slotNumber = slotNumber,
+                slotCode = "S%02d".format(slotNumber),
+                displayName = "%02d".format(slotNumber),
+                sortOrder = slotNumber,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
+        containerDao.insertSlots(slots)
+        return containerDao.findContainerById(containerId)?.let(::toStockContainer)
+    }
+
     override suspend fun getSlots(containerId: Long): List<ContainerSlot> {
         val container = containerDao.findContainerById(containerId) ?: return emptyList()
         return containerDao.getSlots(containerId).map { slot ->
             toContainerSlot(container, slot)
+        }
+    }
+
+    override suspend fun restoreSmartChassisTable(
+        containerId: Long,
+        records: List<SmartChassisSlotRecord>,
+        tableInfo: SmartChassisTableInfo
+    ): Int {
+        if (records.size != SmartChassisProtocol.SLOT_COUNT || tableInfo.slotCount != SmartChassisProtocol.SLOT_COUNT) {
+            return 0
+        }
+        return database.withTransaction {
+            val container = containerDao.findContainerById(containerId) ?: return@withTransaction 0
+            if (container.type != ContainerType.SMART_CHASSIS.name) {
+                return@withTransaction 0
+            }
+            val slots = containerDao.getSlots(containerId).associateBy { it.slotNumber }
+            val now = System.currentTimeMillis()
+            var restoredCount = 0
+            records.forEachIndexed { index, record ->
+                val slotNumber = index + 1
+                val slot = slots[slotNumber] ?: return@forEachIndexed
+                if (record.isEmpty) {
+                    stockItemDao.deleteBySlotId(slot.id)
+                    return@forEachIndexed
+                }
+                val protocolPartId = normalizeProtocolPartId(record.partId) ?: return@forEachIndexed
+                val component = findOrCreateComponentEntity(protocolPartId, now) ?: return@forEachIndexed
+                stockItemDao.deleteBySlotId(slot.id)
+                stockItemDao.insert(
+                    StockItemEntity(
+                        componentId = component.id,
+                        containerId = containerId,
+                        containerSlotId = slot.id,
+                        quantity = record.quantity,
+                        updatedAt = now,
+                        lastInboundAt = now
+                    )
+                )
+                restoredCount++
+            }
+            containerDao.updateContainer(
+                container.copy(
+                    tableSeq = tableInfo.tableSeq,
+                    tableCrc16 = tableInfo.crc16,
+                    lastSyncedAt = now,
+                    updatedAt = now
+                )
+            )
+            stockOperationDao.insert(
+                StockOperationEntity(
+                    type = StockOperationType.READ_ALL_RESTORE.name,
+                    containerId = containerId,
+                    rawPayload = "records=$restoredCount crc=${tableInfo.crc16}",
+                    bleOpcode = SmartChassisBindingOp.READ_ALL.code,
+                    tableSeqAfter = tableInfo.tableSeq,
+                    createdAt = now
+                )
+            )
+            restoredCount
         }
     }
 
@@ -97,6 +239,34 @@ class ContainerRepositoryImpl(
                 ?: error("Failed to resolve placeholder component for $normalizedPartId")
         }
         return toComponentDetail(resolved)
+    }
+
+    private suspend fun findOrCreateComponentEntity(
+        protocolPartId: String,
+        now: Long
+    ): ComponentEntity? {
+        componentDao.findByProtocolPartId(protocolPartId)?.let { return it }
+        componentDao.findByPartNumber(protocolPartId)?.let { existing ->
+            if (existing.protocolPartId == protocolPartId) {
+                return existing
+            }
+            val updated = existing.copy(protocolPartId = protocolPartId, updatedAt = now)
+            componentDao.update(updated)
+            return updated
+        }
+        val placeholder = ComponentEntity(
+            partNumber = protocolPartId,
+            protocolPartId = protocolPartId,
+            name = protocolPartId,
+            updatedAt = now
+        )
+        val insertedId = componentDao.insert(placeholder)
+        return if (insertedId > 0) {
+            placeholder.copy(id = insertedId)
+        } else {
+            componentDao.findByProtocolPartId(protocolPartId)
+                ?: componentDao.findByPartNumber(protocolPartId)
+        }
     }
 
     private fun toStockContainer(projection: ContainerSummaryProjection): StockContainer {
@@ -247,6 +417,11 @@ class ContainerRepositoryImpl(
             .takeIf { it.matches(PROTOCOL_PART_ID_REGEX) }
     }
 
+    private fun smartChassisCode(macAddress: String, batchId: Int): String {
+        val suffix = macAddress.replace(":", "").takeLast(4)
+        return "VBRK-$suffix-$batchId"
+    }
+
     private fun parseSpecifications(specJson: String?): Map<String, String> {
         if (specJson.isNullOrBlank()) {
             return emptyMap()
@@ -263,5 +438,6 @@ class ContainerRepositoryImpl(
 
     private companion object {
         private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
+        private val MAC_ADDRESS_REGEX = Regex("^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
     }
 }

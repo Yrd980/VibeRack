@@ -133,8 +133,11 @@ class AppContainer(context: Context) {
     )
 
     val containerRepository: ContainerRepository = ContainerRepositoryImpl(
+        database = database,
         containerDao = database.containerDao(),
-        componentDao = database.componentDao()
+        componentDao = database.componentDao(),
+        stockItemDao = database.stockItemDao(),
+        stockOperationDao = database.stockOperationDao()
     )
 
     val smartChassisManager = SmartChassisManager(
