@@ -44,6 +44,17 @@ interface InventoryItemDao {
     @Query("SELECT DISTINCT location_id FROM inventory_item WHERE component_id = :componentId")
     suspend fun getLocationIdsByComponent(componentId: Long): List<Long>
 
+    @Query(
+        """
+        SELECT DISTINCT si.container_id
+        FROM stock_item si
+        INNER JOIN `container` c ON c.id = si.container_id
+        WHERE si.component_id = :componentId
+            AND c.type = 'LEGACY_LOCATION'
+        """
+    )
+    suspend fun getLegacyLocationIdsByComponentFromStock(componentId: Long): List<Long>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: InventoryItemEntity): Long
 
@@ -74,10 +85,16 @@ interface InventoryItemDao {
         SELECT
             sl.code AS locationCode,
             sl.displayName AS locationDisplayName,
-            ii.quantity AS quantity
-        FROM inventory_item ii
-        INNER JOIN component_master cm ON cm.id = ii.component_id
-        INNER JOIN storage_location sl ON sl.id = ii.location_id
+            si.quantity AS quantity
+        FROM stock_item si
+        INNER JOIN component_master cm ON cm.id = si.component_id
+        INNER JOIN `container` c
+            ON c.id = si.container_id
+            AND c.type = 'LEGACY_LOCATION'
+        INNER JOIN storage_location sl ON sl.id = c.id
+        INNER JOIN inventory_item ii
+            ON ii.component_id = si.component_id
+            AND ii.location_id = sl.id
         WHERE cm.part_number = :partNumber
         ORDER BY sl.code ASC
         """
@@ -87,8 +104,11 @@ interface InventoryItemDao {
     @Query(
         """
         SELECT DISTINCT cm.part_number
-        FROM inventory_item ii
-        INNER JOIN component_master cm ON cm.id = ii.component_id
+        FROM stock_item si
+        INNER JOIN component_master cm ON cm.id = si.component_id
+        INNER JOIN `container` c
+            ON c.id = si.container_id
+            AND c.type = 'LEGACY_LOCATION'
         WHERE cm.part_number LIKE 'C0%'
         ORDER BY cm.part_number ASC
         """
@@ -110,11 +130,18 @@ interface InventoryItemDao {
             cm.source_url AS sourceUrl,
             cm.spec_json AS specJson,
             cm.image_local_path AS imageLocalPath,
-            ii.quantity AS quantity,
-            ii.last_inbound_at AS lastInboundAt
-        FROM inventory_item ii
-        INNER JOIN component_master cm ON cm.id = ii.component_id
-        WHERE ii.location_id = :locationId
+            si.quantity AS quantity,
+            si.last_inbound_at AS lastInboundAt
+        FROM stock_item si
+        INNER JOIN `container` c
+            ON c.id = si.container_id
+            AND c.type = 'LEGACY_LOCATION'
+        INNER JOIN storage_location sl ON sl.id = c.id
+        INNER JOIN component_master cm ON cm.id = si.component_id
+        INNER JOIN inventory_item ii
+            ON ii.component_id = si.component_id
+            AND ii.location_id = sl.id
+        WHERE c.id = :locationId
         ORDER BY cm.part_number ASC
         """
     )
@@ -135,14 +162,20 @@ interface InventoryItemDao {
             cm.source_url AS sourceUrl,
             cm.spec_json AS specJson,
             cm.image_local_path AS imageLocalPath,
-            ii.quantity AS quantity,
+            si.quantity AS quantity,
             sl.id AS locationId,
             sl.code AS locationCode,
             sl.displayName AS locationDisplayName,
             sl.colorHex AS locationColorHex
-        FROM inventory_item ii
-        INNER JOIN component_master cm ON cm.id = ii.component_id
-        INNER JOIN storage_location sl ON sl.id = ii.location_id
+        FROM stock_item si
+        INNER JOIN `container` c
+            ON c.id = si.container_id
+            AND c.type = 'LEGACY_LOCATION'
+        INNER JOIN storage_location sl ON sl.id = c.id
+        INNER JOIN component_master cm ON cm.id = si.component_id
+        INNER JOIN inventory_item ii
+            ON ii.component_id = si.component_id
+            AND ii.location_id = sl.id
         ORDER BY cm.part_number ASC, sl.code ASC
         """
     )
@@ -151,12 +184,15 @@ interface InventoryItemDao {
     @Query(
         """
         SELECT
-            ii.location_id AS locationId,
+            si.container_id AS locationId,
             cm.category AS category,
             cm.package_name AS packageName,
-            ii.quantity AS quantity
-        FROM inventory_item ii
-        INNER JOIN component_master cm ON cm.id = ii.component_id
+            si.quantity AS quantity
+        FROM stock_item si
+        INNER JOIN component_master cm ON cm.id = si.component_id
+        INNER JOIN `container` c
+            ON c.id = si.container_id
+            AND c.type = 'LEGACY_LOCATION'
         """
     )
     fun observeLocationCategoryProfiles(): Flow<List<LocationCategoryProfileProjection>>
@@ -164,13 +200,16 @@ interface InventoryItemDao {
     @Query(
         """
         SELECT
-            ii.location_id AS locationId,
+            si.container_id AS locationId,
             cm.category AS category,
             cm.package_name AS packageName,
-            ii.quantity AS quantity
-        FROM inventory_item ii
-        INNER JOIN component_master cm ON cm.id = ii.component_id
-        WHERE ii.location_id = :locationId
+            si.quantity AS quantity
+        FROM stock_item si
+        INNER JOIN component_master cm ON cm.id = si.component_id
+        INNER JOIN `container` c
+            ON c.id = si.container_id
+            AND c.type = 'LEGACY_LOCATION'
+        WHERE si.container_id = :locationId
         """
     )
     suspend fun getLocationCategoryProfiles(locationId: Long): List<LocationCategoryProfileProjection>
@@ -178,12 +217,15 @@ interface InventoryItemDao {
     @Query(
         """
         SELECT
-            ii.location_id AS locationId,
+            si.container_id AS locationId,
             cm.category AS category,
             cm.package_name AS packageName,
-            ii.quantity AS quantity
-        FROM inventory_item ii
-        INNER JOIN component_master cm ON cm.id = ii.component_id
+            si.quantity AS quantity
+        FROM stock_item si
+        INNER JOIN component_master cm ON cm.id = si.component_id
+        INNER JOIN `container` c
+            ON c.id = si.container_id
+            AND c.type = 'LEGACY_LOCATION'
         """
     )
     suspend fun getAllLocationCategoryProfiles(): List<LocationCategoryProfileProjection>

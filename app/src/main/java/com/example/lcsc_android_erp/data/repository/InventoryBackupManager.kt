@@ -8,18 +8,27 @@ import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.database.dao.ComponentDao
+import com.example.lcsc_android_erp.core.database.dao.ContainerDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryItemDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryTransactionDao
+import com.example.lcsc_android_erp.core.database.dao.StockItemDao
+import com.example.lcsc_android_erp.core.database.dao.StockOperationDao
 import com.example.lcsc_android_erp.core.database.dao.StorageLocationDao
 import com.example.lcsc_android_erp.core.database.entity.ComponentEntity
+import com.example.lcsc_android_erp.core.database.entity.ContainerEntity
+import com.example.lcsc_android_erp.core.database.entity.ContainerSlotEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryItemEntity
+import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
 import com.example.lcsc_android_erp.core.database.entity.StorageLocationEntity
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
+import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.LocationCategoryProfile
+import com.example.lcsc_android_erp.domain.model.QuantityState
 import com.example.lcsc_android_erp.domain.model.StorageLocationSortMode
 import com.example.lcsc_android_erp.domain.model.calculateDominantLocationCategoryProfile
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -42,12 +51,17 @@ class InventoryBackupManager(
     private val componentDao: ComponentDao,
     private val inventoryItemDao: InventoryItemDao,
     private val inventoryTransactionDao: InventoryTransactionDao,
+    private val containerDao: ContainerDao,
+    private val stockItemDao: StockItemDao,
+    private val stockOperationDao: StockOperationDao,
     private val componentEnrichmentManager: ComponentEnrichmentManager,
     private val componentImageStore: ComponentImageStore,
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
     private companion object {
         const val TAG = "InventoryBackupManager"
+        val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
+        val MANUAL_INBOUND_PART_NUMBER_REGEX = Regex("^C0\\d+$")
     }
 
     private data class ImportedComponentRow(
@@ -225,6 +239,9 @@ class InventoryBackupManager(
                 val inventoryItems = wb.getSheet("inventory_items").toInventoryItems()
 
                 database.withTransaction {
+                    stockOperationDao.deleteAll()
+                    stockItemDao.deleteAll()
+                    containerDao.deleteContainersByType(ContainerType.LEGACY_LOCATION.name)
                     inventoryTransactionDao.deleteAll()
                     inventoryItemDao.deleteAll()
                     componentDao.deleteAll()
@@ -239,6 +256,7 @@ class InventoryBackupManager(
                     if (inventoryItems.isNotEmpty()) {
                         inventoryItemDao.insertAll(inventoryItems)
                     }
+                    rebuildLegacyContainerStock(storageLocations, inventoryItems)
                     refreshAllLocationCategoryProfilesInternal()
                 }
                 if (recentLocationColors.isNotEmpty()) {
@@ -310,6 +328,55 @@ class InventoryBackupManager(
         }
     }
 
+    private suspend fun rebuildLegacyContainerStock(
+        locations: List<StorageLocationEntity>,
+        inventoryItems: List<InventoryItemEntity>
+    ) {
+        val slotsByLocationId = mutableMapOf<Long, ContainerSlotEntity>()
+        locations.forEach { location ->
+            containerDao.insertContainer(
+                ContainerEntity(
+                    id = location.id,
+                    code = location.code,
+                    displayName = location.displayName,
+                    type = ContainerType.LEGACY_LOCATION.name,
+                    slotCount = 1,
+                    colorHex = location.colorHex,
+                    sortMode = location.sortMode,
+                    remark = location.remark,
+                    createdAt = location.createdAt,
+                    updatedAt = location.createdAt
+                )
+            )
+            val slot = ContainerSlotEntity(
+                containerId = location.id,
+                slotNumber = 1,
+                slotCode = location.code,
+                displayName = location.displayName ?: location.code,
+                sortOrder = 1,
+                createdAt = location.createdAt,
+                updatedAt = location.createdAt
+            )
+            val slotId = containerDao.insertSlot(slot)
+            slotsByLocationId[location.id] =
+                containerDao.findSlotByContainerAndNumber(location.id, 1) ?: slot.copy(id = slotId)
+        }
+        inventoryItems.forEach { item ->
+            val slot = slotsByLocationId[item.locationId] ?: return@forEach
+            stockItemDao.insert(
+                StockItemEntity(
+                    componentId = item.componentId,
+                    containerId = item.locationId,
+                    containerSlotId = slot.id,
+                    quantity = item.quantity,
+                    quantityState = QuantityState.KNOWN.name,
+                    lastInboundAt = item.lastInboundAt,
+                    updatedAt = item.updatedAt
+                )
+            )
+        }
+    }
+
     private fun org.apache.poi.ss.usermodel.Sheet?.toRecentLocationColors(): List<String> {
         val sheet = this ?: return emptyList()
         val rawValue = (0..sheet.lastRowNum)
@@ -349,6 +416,10 @@ class InventoryBackupManager(
                 entity = ComponentEntity(
                     id = row.long("id"),
                     partNumber = partNumber,
+                    protocolPartId = protocolPartIdForImportedComponent(
+                        componentId = row.long("id"),
+                        partNumber = partNumber
+                    ),
                     mpn = null,
                     name = row.stringOrNull("name"),
                     brand = row.stringOrNull("brand"),
@@ -363,6 +434,18 @@ class InventoryBackupManager(
                 requiresEnrichment = false
             )
         }
+    }
+
+    private fun protocolPartIdForImportedComponent(
+        componentId: Long,
+        partNumber: String
+    ): String? {
+        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
+        val isManual = normalizedPartNumber.matches(MANUAL_INBOUND_PART_NUMBER_REGEX)
+        if (!isManual && normalizedPartNumber.matches(PROTOCOL_PART_ID_REGEX)) {
+            return normalizedPartNumber
+        }
+        return componentId.takeIf { it > 0 }?.let { id -> "M%09d".format(Locale.ROOT, id) }
     }
 
     private fun org.apache.poi.ss.usermodel.Sheet?.extractPreviewImagesByRow(): Map<Int, ImportedSheetImage> {

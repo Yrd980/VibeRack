@@ -72,11 +72,14 @@ class AppContainer(context: Context) {
         componentImageStore = componentImageStore,
         onComponentEnriched = { componentId ->
             database.withTransaction {
-                database.inventoryItemDao()
-                    .getLocationIdsByComponent(componentId)
+                val inventoryItemDao = database.inventoryItemDao()
+                val locationIds = inventoryItemDao
+                    .getLegacyLocationIdsByComponentFromStock(componentId)
+                    .ifEmpty { inventoryItemDao.getLocationIdsByComponent(componentId) }
+                locationIds
                     .forEach { locationId ->
                         val profile = calculateDominantLocationCategoryProfile(
-                            database.inventoryItemDao()
+                            inventoryItemDao
                                 .getLocationCategoryProfiles(locationId)
                                 .map { projection ->
                                     LocationCategoryProfile(
@@ -106,6 +109,9 @@ class AppContainer(context: Context) {
         storageLocationDao = database.storageLocationDao(),
         inventoryItemDao = database.inventoryItemDao(),
         inventoryTransactionDao = database.inventoryTransactionDao(),
+        containerDao = database.containerDao(),
+        stockItemDao = database.stockItemDao(),
+        stockOperationDao = database.stockOperationDao(),
         componentEnrichmentManager = componentEnrichmentManager,
         componentImageStore = componentImageStore
     )
@@ -128,6 +134,9 @@ class AppContainer(context: Context) {
         componentDao = database.componentDao(),
         inventoryItemDao = database.inventoryItemDao(),
         inventoryTransactionDao = database.inventoryTransactionDao(),
+        containerDao = database.containerDao(),
+        stockItemDao = database.stockItemDao(),
+        stockOperationDao = database.stockOperationDao(),
         componentEnrichmentManager = componentEnrichmentManager,
         componentImageStore = componentImageStore,
         userPreferencesRepository = userPreferencesRepository

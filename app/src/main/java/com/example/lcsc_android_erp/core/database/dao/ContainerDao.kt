@@ -68,8 +68,29 @@ interface ContainerDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertSlots(slots: List<ContainerSlotEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertSlot(slot: ContainerSlotEntity): Long
+
+    @Update
+    suspend fun updateSlot(slot: ContainerSlotEntity)
+
     @Query("SELECT * FROM container_slot WHERE container_id = :containerId ORDER BY sortOrder ASC, slot_number ASC")
     suspend fun getSlots(containerId: Long): List<ContainerSlotEntity>
+
+    @Query(
+        """
+        SELECT * FROM container_slot
+        WHERE container_id = :containerId AND slot_number = :slotNumber
+        LIMIT 1
+        """
+    )
+    suspend fun findSlotByContainerAndNumber(containerId: Long, slotNumber: Int): ContainerSlotEntity?
+
+    @Query("DELETE FROM `container` WHERE id = :containerId")
+    suspend fun deleteContainerById(containerId: Long)
+
+    @Query("DELETE FROM `container` WHERE type = :type")
+    suspend fun deleteContainersByType(type: String)
 
     @Query(
         """

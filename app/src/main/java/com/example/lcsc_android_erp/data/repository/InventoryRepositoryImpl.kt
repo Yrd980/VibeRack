@@ -6,26 +6,37 @@ import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import com.example.lcsc_android_erp.R
 import com.example.lcsc_android_erp.core.database.dao.ComponentDao
+import com.example.lcsc_android_erp.core.database.dao.ContainerDao
 import com.example.lcsc_android_erp.core.database.dao.DashboardDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryItemDao
 import com.example.lcsc_android_erp.core.database.dao.InventoryTransactionDao
+import com.example.lcsc_android_erp.core.database.dao.StockItemDao
+import com.example.lcsc_android_erp.core.database.dao.StockOperationDao
 import com.example.lcsc_android_erp.core.database.dao.StorageLocationDao
 import com.example.lcsc_android_erp.core.database.entity.ComponentEntity
+import com.example.lcsc_android_erp.core.database.entity.ContainerEntity
+import com.example.lcsc_android_erp.core.database.entity.ContainerSlotEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryItemEntity
 import com.example.lcsc_android_erp.core.database.entity.InventoryTransactionEntity
+import com.example.lcsc_android_erp.core.database.entity.StockItemEntity
+import com.example.lcsc_android_erp.core.database.entity.StockOperationEntity
 import com.example.lcsc_android_erp.core.database.entity.StorageLocationEntity
+import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.DashboardSummary
 import com.example.lcsc_android_erp.domain.model.ExistingStockLocation
 import com.example.lcsc_android_erp.domain.model.InboundRecord
 import com.example.lcsc_android_erp.domain.model.LocationCategoryProfile
 import com.example.lcsc_android_erp.domain.model.LocationInventoryItem
+import com.example.lcsc_android_erp.domain.model.QuantityState
 import com.example.lcsc_android_erp.domain.model.SearchInventoryRecord
 import com.example.lcsc_android_erp.domain.model.StockLocationCell
+import com.example.lcsc_android_erp.domain.model.StockOperationType
 import com.example.lcsc_android_erp.domain.model.StorageLocation
 import com.example.lcsc_android_erp.domain.model.StorageLocationSortMode
 import com.example.lcsc_android_erp.domain.model.calculateDominantLocationCategoryProfile
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
@@ -38,12 +49,17 @@ class InventoryRepositoryImpl(
     private val storageLocationDao: StorageLocationDao,
     private val inventoryItemDao: InventoryItemDao,
     private val inventoryTransactionDao: InventoryTransactionDao,
+    private val containerDao: ContainerDao,
+    private val stockItemDao: StockItemDao,
+    private val stockOperationDao: StockOperationDao,
     private val componentEnrichmentManager: ComponentEnrichmentManager,
     private val componentImageStore: ComponentImageStore
 ) : InventoryRepository {
     private companion object {
         private const val TAG = "InventoryRepository"
         private val LOCATION_CODE_REGEX = Regex("^[A-Z]\\d+$")
+        private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
+        private val MANUAL_INBOUND_PART_NUMBER_REGEX = Regex("^C0\\d+$")
     }
 
     override fun observeDashboardSummary(): Flow<DashboardSummary> {
@@ -214,7 +230,11 @@ class InventoryRepositoryImpl(
     }
 
     override suspend fun bootstrapDefaults() {
-        if (storageLocationDao.count() > 0) {
+        val existingLocations = storageLocationDao.getAll()
+        if (existingLocations.isNotEmpty()) {
+            existingLocations.forEach { location ->
+                ensureLegacyLocationContainer(location)
+            }
             return
         }
 
@@ -234,6 +254,9 @@ class InventoryRepositoryImpl(
                 )
             )
         )
+        storageLocationDao.getAll().forEach { location ->
+            ensureLegacyLocationContainer(location)
+        }
     }
 
     override suspend fun addInbound(record: InboundRecord) {
@@ -242,27 +265,46 @@ class InventoryRepositoryImpl(
         database.withTransaction {
             val location = findOrCreateLocation(preparedRecord.locationCode)
             val componentId = upsertComponent(preparedRecord)
+            val slot = ensureLegacyLocationContainer(location)
             val existingItem = inventoryItemDao.findByComponentAndLocation(componentId, location.id)
 
-            if (existingItem == null) {
-                inventoryItemDao.insert(
-                    InventoryItemEntity(
-                        componentId = componentId,
-                        locationId = location.id,
-                        quantity = record.quantity,
-                        lastInboundAt = inboundAt,
-                        updatedAt = inboundAt
-                    )
+            val resolvedInventoryItem = if (existingItem == null) {
+                val item = InventoryItemEntity(
+                    componentId = componentId,
+                    locationId = location.id,
+                    quantity = preparedRecord.quantity,
+                    lastInboundAt = inboundAt,
+                    updatedAt = inboundAt
                 )
+                inventoryItemDao.insert(item)
+                item
             } else {
-                inventoryItemDao.update(
-                    existingItem.copy(
-                        quantity = existingItem.quantity + record.quantity,
-                        lastInboundAt = inboundAt,
-                        updatedAt = inboundAt
-                    )
-                )
+                existingItem.copy(
+                    quantity = existingItem.quantity + preparedRecord.quantity,
+                    lastInboundAt = inboundAt,
+                    updatedAt = inboundAt
+                ).also { updated ->
+                    inventoryItemDao.update(updated)
+                }
             }
+            upsertStockItemForLegacyInventoryItem(
+                item = resolvedInventoryItem,
+                slot = slot,
+                updatedAt = inboundAt
+            )
+            stockOperationDao.insert(
+                StockOperationEntity(
+                    type = StockOperationType.INBOUND.name,
+                    containerId = location.id,
+                    containerSlotId = slot.id,
+                    componentId = componentId,
+                    quantityDelta = preparedRecord.quantity,
+                    sourceType = preparedRecord.sourceType,
+                    sourceRef = preparedRecord.component.partNumber,
+                    rawPayload = preparedRecord.rawPayload,
+                    createdAt = inboundAt
+                )
+            )
 
             inventoryTransactionDao.insert(
                 InventoryTransactionEntity(
@@ -305,14 +347,20 @@ class InventoryRepositoryImpl(
         if (duplicated != null && duplicated.id != locationId) {
             return context.getString(R.string.inventory_error_location_code_exists)
         }
-        storageLocationDao.update(
-            location.copy(
-                code = normalizedCode,
-                displayName = displayName?.ifBlank { null },
-                colorHex = colorHex?.ifBlank { null },
-                sortMode = sortMode
-            )
+        val duplicatedContainer = containerDao.findContainerByCode(normalizedCode)
+        if (duplicatedContainer != null && duplicatedContainer.id != locationId) {
+            return context.getString(R.string.inventory_error_location_code_exists)
+        }
+        val updatedLocation = location.copy(
+            code = normalizedCode,
+            displayName = displayName?.ifBlank { null },
+            colorHex = colorHex?.ifBlank { null },
+            sortMode = sortMode
         )
+        database.withTransaction {
+            storageLocationDao.update(updatedLocation)
+            ensureLegacyLocationContainer(updatedLocation)
+        }
         return null
     }
 
@@ -324,14 +372,26 @@ class InventoryRepositoryImpl(
         if (storageLocationDao.findByCode(normalizedCode) != null) {
             return false
         }
-        return storageLocationDao.insert(
-            StorageLocationEntity(
+        if (containerDao.findContainerByCode(normalizedCode) != null) {
+            return false
+        }
+        return database.withTransaction {
+            val location = StorageLocationEntity(
                 code = normalizedCode,
                 displayName = displayName?.ifBlank { normalizedCode } ?: normalizedCode,
                 colorHex = colorHex?.ifBlank { null },
                 sortMode = StorageLocationSortMode.NONE
             )
-        ) > 0
+            val id = storageLocationDao.insert(location)
+            if (id <= 0) {
+                false
+            } else {
+                ensureLegacyLocationContainer(
+                    location.copy(id = id)
+                )
+                true
+            }
+        }
     }
 
     override suspend fun deleteLocation(locationId: Long): String? {
@@ -342,6 +402,7 @@ class InventoryRepositoryImpl(
                 return@withTransaction context.getString(R.string.inventory_error_location_has_items)
             }
             inventoryTransactionDao.deleteByLocationId(location.id)
+            containerDao.deleteContainerById(location.id)
             storageLocationDao.deleteById(location.id)
             null
         }
@@ -351,9 +412,29 @@ class InventoryRepositoryImpl(
         return database.withTransaction<String?> {
             val location = storageLocationDao.findById(locationId)
                 ?: return@withTransaction context.getString(R.string.inventory_error_location_not_found)
+            val slot = ensureLegacyLocationContainer(location)
+            val items = inventoryItemDao.getAll().filter { it.locationId == location.id }
+            val now = System.currentTimeMillis()
+            items.forEach { item ->
+                val component = componentDao.findById(item.componentId)
+                stockOperationDao.insert(
+                    StockOperationEntity(
+                        type = StockOperationType.DELETE.name,
+                        containerId = location.id,
+                        containerSlotId = slot.id,
+                        componentId = item.componentId,
+                        quantityDelta = -item.quantity,
+                        sourceType = "MANUAL_DELETE_LOCATION",
+                        sourceRef = component?.partNumber,
+                        createdAt = now
+                    )
+                )
+            }
             inventoryTransactionDao.deleteByLocationId(location.id)
             inventoryItemDao.deleteByLocationId(location.id)
+            stockItemDao.deleteByContainerId(location.id)
             refreshLocationCategoryProfileInternal(location.id)
+            containerDao.deleteContainerById(location.id)
             storageLocationDao.deleteById(location.id)
             null
         }
@@ -372,11 +453,31 @@ class InventoryRepositoryImpl(
             }
 
             val delta = quantity - item.quantity
+            val now = System.currentTimeMillis()
             val component = componentDao.findById(item.componentId)
-            inventoryItemDao.update(
-                item.copy(
-                    quantity = quantity,
-                    updatedAt = System.currentTimeMillis()
+            val updatedItem = item.copy(
+                quantity = quantity,
+                updatedAt = now
+            )
+            inventoryItemDao.update(updatedItem)
+            val location = storageLocationDao.findById(item.locationId)
+                ?: return@withTransaction context.getString(R.string.inventory_error_location_not_found)
+            val slot = ensureLegacyLocationContainer(location)
+            upsertStockItemForLegacyInventoryItem(
+                item = updatedItem,
+                slot = slot,
+                updatedAt = now
+            )
+            stockOperationDao.insert(
+                StockOperationEntity(
+                    type = StockOperationType.ADJUST.name,
+                    containerId = item.locationId,
+                    containerSlotId = slot.id,
+                    componentId = item.componentId,
+                    quantityDelta = delta,
+                    sourceType = "MANUAL_EDIT",
+                    sourceRef = component?.partNumber,
+                    createdAt = now
                 )
             )
             inventoryTransactionDao.insert(
@@ -430,23 +531,62 @@ class InventoryRepositoryImpl(
             }
 
             val component = componentDao.findById(item.componentId)
+            val sourceLocation = storageLocationDao.findById(item.locationId)
+                ?: return@withTransaction context.getString(R.string.inventory_error_location_not_found)
+            val sourceSlot = ensureLegacyLocationContainer(sourceLocation)
+            val targetSlot = ensureLegacyLocationContainer(targetLocation)
             val targetItem = inventoryItemDao.findByComponentAndLocation(item.componentId, targetLocation.id)
+            val now = System.currentTimeMillis()
             if (targetItem == null) {
-                inventoryItemDao.update(
-                    item.copy(
-                        locationId = targetLocation.id,
-                        updatedAt = System.currentTimeMillis()
-                    )
+                val movedItem = item.copy(
+                    locationId = targetLocation.id,
+                    updatedAt = now
+                )
+                inventoryItemDao.update(movedItem)
+                stockItemDao.deleteByComponentAndSlot(item.componentId, sourceSlot.id)
+                upsertStockItemForLegacyInventoryItem(
+                    item = movedItem,
+                    slot = targetSlot,
+                    updatedAt = now
                 )
             } else {
-                inventoryItemDao.update(
-                    targetItem.copy(
-                        quantity = targetItem.quantity + item.quantity,
-                        updatedAt = System.currentTimeMillis()
-                    )
+                val mergedItem = targetItem.copy(
+                    quantity = targetItem.quantity + item.quantity,
+                    updatedAt = now
                 )
+                inventoryItemDao.update(mergedItem)
                 inventoryItemDao.deleteById(item.id)
+                stockItemDao.deleteByComponentAndSlot(item.componentId, sourceSlot.id)
+                upsertStockItemForLegacyInventoryItem(
+                    item = mergedItem,
+                    slot = targetSlot,
+                    updatedAt = now
+                )
             }
+            stockOperationDao.insert(
+                StockOperationEntity(
+                    type = StockOperationType.TRANSFER_OUT.name,
+                    containerId = item.locationId,
+                    containerSlotId = sourceSlot.id,
+                    componentId = item.componentId,
+                    quantityDelta = -item.quantity,
+                    sourceType = "MANUAL_TRANSFER",
+                    sourceRef = component?.partNumber,
+                    createdAt = now
+                )
+            )
+            stockOperationDao.insert(
+                StockOperationEntity(
+                    type = StockOperationType.TRANSFER_IN.name,
+                    containerId = targetLocation.id,
+                    containerSlotId = targetSlot.id,
+                    componentId = item.componentId,
+                    quantityDelta = item.quantity,
+                    sourceType = "MANUAL_TRANSFER",
+                    sourceRef = component?.partNumber,
+                    createdAt = now
+                )
+            )
 
             inventoryTransactionDao.insert(
                 InventoryTransactionEntity(
@@ -479,7 +619,24 @@ class InventoryRepositoryImpl(
             val item = inventoryItemDao.findById(inventoryItemId)
                 ?: return@withTransaction context.getString(R.string.inventory_error_item_not_found)
             val component = componentDao.findById(item.componentId)
+            val location = storageLocationDao.findById(item.locationId)
+                ?: return@withTransaction context.getString(R.string.inventory_error_location_not_found)
+            val slot = ensureLegacyLocationContainer(location)
+            val now = System.currentTimeMillis()
             inventoryItemDao.deleteById(item.id)
+            stockItemDao.deleteByComponentAndSlot(item.componentId, slot.id)
+            stockOperationDao.insert(
+                StockOperationEntity(
+                    type = StockOperationType.DELETE.name,
+                    containerId = item.locationId,
+                    containerSlotId = slot.id,
+                    componentId = item.componentId,
+                    quantityDelta = -item.quantity,
+                    sourceType = "MANUAL_DELETE",
+                    sourceRef = component?.partNumber,
+                    createdAt = now
+                )
+            )
             inventoryTransactionDao.insert(
                 InventoryTransactionEntity(
                     componentId = item.componentId,
@@ -520,7 +677,14 @@ class InventoryRepositoryImpl(
 
     private suspend fun findOrCreateLocation(code: String): StorageLocationEntity {
         val normalizedCode = code.trim().uppercase()
-        storageLocationDao.findByCode(normalizedCode)?.let { return it }
+        storageLocationDao.findByCode(normalizedCode)?.let { location ->
+            ensureLegacyLocationContainer(location)
+            return location
+        }
+        val duplicatedContainer = containerDao.findContainerByCode(normalizedCode)
+        require(duplicatedContainer == null) {
+            "Container code already exists without a legacy storage location: $normalizedCode"
+        }
 
         val newId = storageLocationDao.insert(
             StorageLocationEntity(
@@ -530,13 +694,131 @@ class InventoryRepositoryImpl(
             )
         )
 
-        return storageLocationDao.findByCode(normalizedCode)
+        val location = storageLocationDao.findByCode(normalizedCode)
             ?: StorageLocationEntity(
                 id = newId,
                 code = normalizedCode,
                 displayName = normalizedCode,
                 sortMode = StorageLocationSortMode.NONE
             )
+        ensureLegacyLocationContainer(location)
+        return location
+    }
+
+    private suspend fun ensureLegacyLocationContainer(location: StorageLocationEntity): ContainerSlotEntity {
+        val now = System.currentTimeMillis()
+        val container = containerDao.findContainerById(location.id)
+        if (container == null) {
+            val insertId = containerDao.insertContainer(
+                ContainerEntity(
+                    id = location.id,
+                    code = location.code,
+                    displayName = location.displayName,
+                    type = ContainerType.LEGACY_LOCATION.name,
+                    slotCount = 1,
+                    colorHex = location.colorHex,
+                    sortMode = location.sortMode,
+                    remark = location.remark,
+                    createdAt = location.createdAt,
+                    updatedAt = now
+                )
+            )
+            if (insertId <= 0) {
+                containerDao.findContainerById(location.id)?.let { existing ->
+                    containerDao.updateContainer(existing.toLegacyContainer(location, now))
+                }
+            }
+        } else {
+            containerDao.updateContainer(container.toLegacyContainer(location, now))
+        }
+
+        val slot = containerDao.findSlotByContainerAndNumber(location.id, 1)
+        if (slot != null) {
+            val updatedSlot = slot.copy(
+                slotCode = location.code,
+                displayName = location.displayName ?: location.code,
+                sortOrder = 1,
+                updatedAt = now
+            )
+            if (updatedSlot != slot) {
+                containerDao.updateSlot(updatedSlot)
+            }
+            return updatedSlot
+        }
+
+        val newSlot = ContainerSlotEntity(
+            containerId = location.id,
+            slotNumber = 1,
+            slotCode = location.code,
+            displayName = location.displayName ?: location.code,
+            sortOrder = 1,
+            createdAt = location.createdAt,
+            updatedAt = now
+        )
+        val slotId = containerDao.insertSlot(newSlot)
+        return containerDao.findSlotByContainerAndNumber(location.id, 1)
+            ?: newSlot.copy(id = slotId)
+    }
+
+    private fun ContainerEntity.toLegacyContainer(
+        location: StorageLocationEntity,
+        updatedAt: Long
+    ): ContainerEntity {
+        return copy(
+            code = location.code,
+            displayName = location.displayName,
+            type = ContainerType.LEGACY_LOCATION.name,
+            slotCount = 1,
+            colorHex = location.colorHex,
+            sortMode = location.sortMode,
+            remark = location.remark,
+            updatedAt = updatedAt
+        )
+    }
+
+    private suspend fun upsertStockItemForLegacyInventoryItem(
+        item: InventoryItemEntity,
+        slot: ContainerSlotEntity,
+        updatedAt: Long
+    ) {
+        val existing = stockItemDao.findByComponentAndSlot(item.componentId, slot.id)
+        if (existing == null) {
+            stockItemDao.insert(
+                StockItemEntity(
+                    componentId = item.componentId,
+                    containerId = item.locationId,
+                    containerSlotId = slot.id,
+                    quantity = item.quantity,
+                    quantityState = QuantityState.KNOWN.name,
+                    lastInboundAt = item.lastInboundAt,
+                    updatedAt = updatedAt
+                )
+            )
+        } else {
+            stockItemDao.update(
+                existing.copy(
+                    containerId = item.locationId,
+                    quantity = item.quantity,
+                    quantityState = QuantityState.KNOWN.name,
+                    lastInboundAt = item.lastInboundAt,
+                    updatedAt = updatedAt
+                )
+            )
+        }
+    }
+
+    private fun protocolPartIdForComponent(
+        componentId: Long?,
+        partNumber: String,
+        sourceType: String
+    ): String? {
+        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
+        val isManual = sourceType == "MANUAL_INPUT" ||
+            normalizedPartNumber.matches(MANUAL_INBOUND_PART_NUMBER_REGEX)
+        if (!isManual && normalizedPartNumber.matches(PROTOCOL_PART_ID_REGEX)) {
+            return normalizedPartNumber
+        }
+        return componentId?.let { id -> "M%09d".format(Locale.ROOT, id) }
     }
 
     private suspend fun prepareInboundRecord(record: InboundRecord): InboundRecord {
@@ -569,9 +851,20 @@ class InventoryRepositoryImpl(
         if (existing != null) {
             val shouldResetStaleManualComponent = record.sourceType == "MANUAL_INPUT" &&
                 inventoryItemDao.countByComponent(existing.id) == 0
+            val protocolPartId = existing.protocolPartId
+                ?: protocolPartIdForComponent(
+                    componentId = existing.id,
+                    partNumber = normalizedPartNumber,
+                    sourceType = record.sourceType
+                )
             val updated = if (shouldResetStaleManualComponent) {
                 existing.copy(
                     partNumber = normalizedPartNumber,
+                    protocolPartId = protocolPartIdForComponent(
+                        componentId = existing.id,
+                        partNumber = normalizedPartNumber,
+                        sourceType = record.sourceType
+                    ),
                     mpn = record.component.mpn,
                     name = record.component.name,
                     brand = record.component.brand,
@@ -586,6 +879,7 @@ class InventoryRepositoryImpl(
             } else {
                 existing.copy(
                     partNumber = normalizedPartNumber,
+                    protocolPartId = protocolPartId,
                     mpn = existing.mpn ?: record.component.mpn,
                     name = existing.name ?: record.component.name,
                     brand = existing.brand ?: record.component.brand,
@@ -612,6 +906,11 @@ class InventoryRepositoryImpl(
 
         val componentEntity = ComponentEntity(
             partNumber = normalizedPartNumber,
+            protocolPartId = protocolPartIdForComponent(
+                componentId = null,
+                partNumber = normalizedPartNumber,
+                sourceType = record.sourceType
+            ),
             mpn = record.component.mpn,
             name = record.component.name,
             brand = record.component.brand,
@@ -625,6 +924,20 @@ class InventoryRepositoryImpl(
 
         val insertId = componentDao.insert(componentEntity)
         if (insertId > 0) {
+            val resolvedProtocolPartId = protocolPartIdForComponent(
+                componentId = insertId,
+                partNumber = normalizedPartNumber,
+                sourceType = record.sourceType
+            )
+            if (resolvedProtocolPartId != componentEntity.protocolPartId) {
+                componentDao.update(
+                    componentEntity.copy(
+                        id = insertId,
+                        protocolPartId = resolvedProtocolPartId,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
             return insertId
         }
 

@@ -35,10 +35,13 @@ interface StorageLocationDao {
             sl.colorHex AS colorHex,
             sl.sortMode AS sortMode,
             sl.remark AS remark,
-            CAST(COUNT(ii.id) AS INTEGER) AS inventoryItemCount,
-            CAST(COALESCE(SUM(ii.quantity), 0) AS INTEGER) AS totalQuantity
+            CAST(COUNT(si.id) AS INTEGER) AS inventoryItemCount,
+            CAST(COALESCE(SUM(si.quantity), 0) AS INTEGER) AS totalQuantity
         FROM storage_location sl
-        LEFT JOIN inventory_item ii ON ii.location_id = sl.id
+        LEFT JOIN `container` c
+            ON c.id = sl.id
+            AND c.type = 'LEGACY_LOCATION'
+        LEFT JOIN stock_item si ON si.container_id = c.id
         GROUP BY sl.id
         ORDER BY sl.code ASC
         """
