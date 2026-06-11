@@ -150,7 +150,9 @@ interface InventoryItemDao {
     @Query(
         """
         SELECT
-            ii.id AS inventoryItemId,
+            COALESCE(ii.id, si.id) AS inventoryItemId,
+            ii.id AS legacyInventoryItemId,
+            si.id AS stockItemId,
             cm.id AS componentId,
             cm.part_number AS partNumber,
             cm.mpn AS mpn,
@@ -163,20 +165,29 @@ interface InventoryItemDao {
             cm.spec_json AS specJson,
             cm.image_local_path AS imageLocalPath,
             si.quantity AS quantity,
-            sl.id AS locationId,
-            sl.code AS locationCode,
-            sl.displayName AS locationDisplayName,
-            sl.colorHex AS locationColorHex
+            c.id AS locationId,
+            c.code AS locationCode,
+            CASE
+                WHEN c.type = 'SMART_CHASSIS' THEN COALESCE(cs.displayName, 'Slot ' || cs.slot_number)
+                WHEN c.type = 'BOX' THEN COALESCE(cs.displayName, cs.slot_code)
+                ELSE c.displayName
+            END AS locationDisplayName,
+            c.colorHex AS locationColorHex,
+            c.type AS containerType,
+            c.macAddress AS containerMacAddress,
+            cs.id AS slotId,
+            cs.slot_number AS slotNumber,
+            cs.slot_code AS slotCode,
+            cs.displayName AS slotDisplayName
         FROM stock_item si
-        INNER JOIN `container` c
-            ON c.id = si.container_id
-            AND c.type = 'LEGACY_LOCATION'
-        INNER JOIN storage_location sl ON sl.id = c.id
+        INNER JOIN `container` c ON c.id = si.container_id
+        INNER JOIN container_slot cs ON cs.id = si.container_slot_id
         INNER JOIN component_master cm ON cm.id = si.component_id
-        INNER JOIN inventory_item ii
+        LEFT JOIN inventory_item ii
             ON ii.component_id = si.component_id
-            AND ii.location_id = sl.id
-        ORDER BY cm.part_number ASC, sl.code ASC
+            AND ii.location_id = c.id
+            AND c.type = 'LEGACY_LOCATION'
+        ORDER BY cm.part_number ASC, c.type ASC, c.code ASC, cs.slot_number ASC
         """
     )
     fun observeSearchInventoryRecords(): Flow<List<SearchInventoryProjection>>

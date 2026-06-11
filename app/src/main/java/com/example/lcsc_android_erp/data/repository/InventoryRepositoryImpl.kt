@@ -152,6 +152,9 @@ class InventoryRepositoryImpl(
             items.map { item ->
                 SearchInventoryRecord(
                     inventoryItemId = item.inventoryItemId,
+                    stockItemId = item.stockItemId,
+                    isLegacyEditable = item.legacyInventoryItemId != null &&
+                        item.containerType == ContainerType.LEGACY_LOCATION.name,
                     componentId = item.componentId,
                     partNumber = item.partNumber,
                     mpn = item.mpn,
@@ -167,7 +170,13 @@ class InventoryRepositoryImpl(
                     locationId = item.locationId,
                     locationCode = item.locationCode,
                     locationDisplayName = item.locationDisplayName,
-                    locationColorHex = item.locationColorHex
+                    locationColorHex = item.locationColorHex,
+                    containerType = item.containerType.toContainerType(),
+                    containerMacAddress = item.containerMacAddress,
+                    slotId = item.slotId,
+                    slotNumber = item.slotNumber,
+                    slotCode = item.slotCode,
+                    slotDisplayName = item.slotDisplayName
                 )
             }
         }
@@ -958,6 +967,11 @@ class InventoryRepositoryImpl(
                 value.isNotBlank() && value != "null"
             }
         }.getOrDefault(emptyMap())
+    }
+
+    private fun String.toContainerType(): ContainerType {
+        return runCatching { ContainerType.valueOf(this) }
+            .getOrDefault(ContainerType.LEGACY_LOCATION)
     }
 }
 

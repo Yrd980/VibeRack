@@ -2,6 +2,8 @@ package com.example.lcsc_android_erp.core.database.model
 
 data class SearchInventoryProjection(
     val inventoryItemId: Long,
+    val legacyInventoryItemId: Long?,
+    val stockItemId: Long,
     val componentId: Long,
     val partNumber: String,
     val mpn: String?,
@@ -17,5 +19,11 @@ data class SearchInventoryProjection(
     val locationId: Long,
     val locationCode: String,
     val locationDisplayName: String?,
-    val locationColorHex: String?
+    val locationColorHex: String?,
+    val containerType: String,
+    val containerMacAddress: String?,
+    val slotId: Long,
+    val slotNumber: Int,
+    val slotCode: String,
+    val slotDisplayName: String?
 )
