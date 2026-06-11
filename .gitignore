@@ -28,6 +28,7 @@ __pycache__/
 
 docs/update/
 h5/
+hardware/
 tools/output/
 uni-appX/
 .backup/
