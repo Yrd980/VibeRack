@@ -9,9 +9,7 @@ class SmartChassisManager(
 ) {
     val discoveredChassis: StateFlow<List<SmartChassisDevice>> = client.discoveredChassis
     val connectionState: StateFlow<SmartChassisConnectionState> = client.connectionState
-
-    private val _activeTableInfo = MutableStateFlow<SmartChassisTableInfo?>(null)
-    val activeTableInfo: StateFlow<SmartChassisTableInfo?> = _activeTableInfo.asStateFlow()
+    val activeTableInfo: StateFlow<SmartChassisTableInfo?> = client.tableInfoUpdates
 
     private val _lastOperationError = MutableStateFlow<SmartChassisOperationError?>(null)
     val lastOperationError: StateFlow<SmartChassisOperationError?> = _lastOperationError.asStateFlow()
@@ -52,7 +50,6 @@ class SmartChassisManager(
     suspend fun disconnect() {
         when (val result = client.disconnect()) {
             is SmartChassisClientResult.Success -> {
-                _activeTableInfo.value = null
                 clearError()
             }
             is SmartChassisClientResult.Failure -> recordError(result)
@@ -62,7 +59,6 @@ class SmartChassisManager(
     suspend fun refreshTableInfo(): SmartChassisTableInfo? {
         return when (val result = client.readTableInfo()) {
             is SmartChassisClientResult.Success -> {
-                _activeTableInfo.value = result.value
                 clearError()
                 result.value
             }
@@ -89,7 +85,6 @@ class SmartChassisManager(
     suspend fun readAll(): SmartChassisTableSnapshot? {
         return when (val result = client.readAll()) {
             is SmartChassisClientResult.Success -> {
-                _activeTableInfo.value = result.value.tableInfo
                 clearError()
                 result.value
             }
@@ -142,7 +137,6 @@ class SmartChassisManager(
     ): SmartChassisTableInfo? {
         return when (result) {
             is SmartChassisClientResult.Success -> {
-                _activeTableInfo.value = result.value
                 clearError()
                 result.value
             }

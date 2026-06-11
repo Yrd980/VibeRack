@@ -40,6 +40,9 @@ class FakeSmartChassisClient(
     private val _connectionState = MutableStateFlow(SmartChassisConnectionState())
     override val connectionState: StateFlow<SmartChassisConnectionState> = _connectionState.asStateFlow()
 
+    private val _tableInfoUpdates = MutableStateFlow<SmartChassisTableInfo?>(null)
+    override val tableInfoUpdates: StateFlow<SmartChassisTableInfo?> = _tableInfoUpdates.asStateFlow()
+
     init {
         initialRecords.forEach { record ->
             if (record.slot in 1..SmartChassisProtocol.SLOT_COUNT && !record.isEmpty) {
@@ -88,11 +91,14 @@ class FakeSmartChassisClient(
 
     override suspend fun disconnect(): SmartChassisClientResult<Unit> {
         _connectionState.value = SmartChassisConnectionState()
+        _tableInfoUpdates.value = null
         return SmartChassisClientResult.Success(Unit)
     }
 
     override suspend fun readTableInfo(): SmartChassisClientResult<SmartChassisTableInfo> {
-        return connectedResult { tableInfo() }
+        return connectedResult {
+            tableInfo().also { _tableInfoUpdates.value = it }
+        }
     }
 
     override suspend fun readOne(slot: Int): SmartChassisClientResult<SmartChassisSlotRecord> {
@@ -301,6 +307,7 @@ class FakeSmartChassisClient(
 
     private fun commitTable() {
         tableSeq++
+        _tableInfoUpdates.value = tableInfo()
         _discoveredChassis.value = listOf(fakeDevice)
         _connectionState.value = _connectionState.value.copy(device = fakeDevice)
     }

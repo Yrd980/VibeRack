@@ -6,7 +6,11 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
 import androidx.room.withTransaction
-import com.example.lcsc_android_erp.core.ble.smart.FakeSmartChassisClient
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisGattClient
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisManager
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisScanner
 import com.example.lcsc_android_erp.core.database.AppDatabase
@@ -134,7 +138,10 @@ class AppContainer(context: Context) {
     )
 
     val smartChassisManager = SmartChassisManager(
-        client = FakeSmartChassisClient()
+        client = SmartChassisGattClient(
+            appContext = appContext,
+            hasBluetoothPermission = ::hasSmartChassisBluetoothPermission
+        )
     )
     val smartChassisScanner = SmartChassisScanner(appContext)
 
@@ -164,6 +171,17 @@ class AppContainer(context: Context) {
         return when (printerType) {
             UserPreferencesRepository.PRINTER_TYPE_YINLIFANG_P0 -> p0PrinterManager
             else -> q5PrinterManager
+        }
+    }
+
+    private fun hasSmartChassisBluetoothPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(
+                appContext,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
         }
     }
 }

@@ -16,6 +16,7 @@ import android.os.Build
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,6 +56,9 @@ class SmartChassisGattClient(
     private val _connectionState = MutableStateFlow(SmartChassisConnectionState())
     override val connectionState: StateFlow<SmartChassisConnectionState> = _connectionState.asStateFlow()
 
+    private val _tableInfoUpdates = MutableStateFlow<SmartChassisTableInfo?>(null)
+    override val tableInfoUpdates: StateFlow<SmartChassisTableInfo?> = _tableInfoUpdates.asStateFlow()
+
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
@@ -80,8 +84,9 @@ class SmartChassisGattClient(
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                gatt.discoverServices()
+            if (!gatt.discoverServices()) {
+                failConnect("Service discovery failed to start")
+                closeGatt()
             }
         }
 
@@ -286,13 +291,25 @@ class SmartChassisGattClient(
         return when (recordsResult) {
             is SmartChassisClientResult.Success -> {
                 when (val infoResult = readTableInfo()) {
-                    is SmartChassisClientResult.Success -> SmartChassisClientResult.Success(
-                        value = SmartChassisTableSnapshot(
-                            records = recordsResult.value,
-                            tableInfo = infoResult.value
-                        ),
-                        op = SmartChassisBindingOp.READ_ALL
-                    )
+                    is SmartChassisClientResult.Success -> {
+                        val records = recordsResult.value
+                        val validationError = validateReadAll(records, infoResult.value)
+                        if (validationError != null) {
+                            SmartChassisClientResult.Failure(
+                                message = validationError,
+                                op = SmartChassisBindingOp.READ_ALL,
+                                status = SmartChassisBindingStatus.ERR_CRC
+                            )
+                        } else {
+                            SmartChassisClientResult.Success(
+                                value = SmartChassisTableSnapshot(
+                                    records = records,
+                                    tableInfo = infoResult.value
+                                ),
+                                op = SmartChassisBindingOp.READ_ALL
+                            )
+                        }
+                    }
                     is SmartChassisClientResult.Failure -> infoResult
                 }
             }
@@ -419,6 +436,26 @@ class SmartChassisGattClient(
         op: SmartChassisBindingOp,
         payload: ByteArray
     ): SmartChassisClientResult<ByteArray> {
+        var attempt = 0
+        while (true) {
+            val result = sendBindingCommandOnce(op, payload)
+            if (
+                result is SmartChassisClientResult.Failure &&
+                result.status == SmartChassisBindingStatus.ERR_FLASH_BUSY &&
+                attempt < FLASH_BUSY_MAX_RETRIES
+            ) {
+                attempt++
+                delay(FLASH_BUSY_RETRY_DELAY_MS)
+                continue
+            }
+            return result
+        }
+    }
+
+    private suspend fun sendBindingCommandOnce(
+        op: SmartChassisBindingOp,
+        payload: ByteArray
+    ): SmartChassisClientResult<ByteArray> {
         return operationMutex.withLock {
             val characteristic = bindingControlPoint
                 ?: return@withLock SmartChassisClientResult.Failure("Binding Control Point is unavailable", op)
@@ -514,6 +551,9 @@ class SmartChassisGattClient(
                 return
             }
             val parsed = SmartChassisCodec.parseTableInfo(value)
+            if (parsed != null) {
+                _tableInfoUpdates.value = parsed
+            }
             deferred.complete(
                 if (parsed != null) {
                     SmartChassisClientResult.Success(parsed)
@@ -543,7 +583,9 @@ class SmartChassisGattClient(
         if (uuid == SmartChassisUuids.bindingControlPoint) {
             handleBindingNotification(value)
         } else if (uuid == SmartChassisUuids.tableInfo) {
-            SmartChassisCodec.parseTableInfo(value)
+            SmartChassisCodec.parseTableInfo(value)?.let { tableInfo ->
+                _tableInfoUpdates.value = tableInfo
+            }
         } else if (uuid == SmartChassisUuids.lightStatus) {
             SmartChassisCodec.parseLightStatus(value)
         }
@@ -565,6 +607,17 @@ class SmartChassisGattClient(
                 return
             }
             if (SmartChassisCodec.isReadAllEndPayload(result.payload)) {
+                if (readAll.records.size != SmartChassisProtocol.SLOT_COUNT) {
+                    pendingReadAll = null
+                    readAll.deferred.complete(
+                        SmartChassisClientResult.Failure(
+                            message = "READ_ALL returned ${readAll.records.size} records, expected ${SmartChassisProtocol.SLOT_COUNT}",
+                            op = SmartChassisBindingOp.READ_ALL,
+                            status = SmartChassisBindingStatus.ERR_PARAM
+                        )
+                    )
+                    return
+                }
                 pendingReadAll = null
                 readAll.deferred.complete(
                     SmartChassisClientResult.Success(
@@ -677,8 +730,37 @@ class SmartChassisGattClient(
         lightCommand = null
         lightStatus = null
         connectedDevice = null
+        _tableInfoUpdates.value = null
         pendingDescriptors.clear()
         pendingDescriptorSetup = null
+    }
+
+    private fun validateReadAll(
+        records: List<SmartChassisSlotRecord>,
+        tableInfo: SmartChassisTableInfo
+    ): String? {
+        if (tableInfo.slotCount != SmartChassisProtocol.SLOT_COUNT) {
+            return "Table Info slot_count ${tableInfo.slotCount} does not match ${SmartChassisProtocol.SLOT_COUNT}"
+        }
+        if (records.size != tableInfo.slotCount) {
+            return "READ_ALL returned ${records.size} records, table reports ${tableInfo.slotCount}"
+        }
+        records.forEachIndexed { index, record ->
+            if (record.slot != 0 && record.slot != index + 1) {
+                return "READ_ALL record ${index + 1} contains slot ${record.slot}"
+            }
+        }
+        val tableBytes = records
+            .flatMap { record ->
+                SmartChassisCodec.encodeSlotRecordForTable(record).asIterable()
+            }
+            .toByteArray()
+        val crc16 = SmartChassisCodec.crc16CcittFalse(tableBytes)
+        return if (crc16 == tableInfo.crc16) {
+            null
+        } else {
+            "READ_ALL CRC $crc16 does not match table CRC ${tableInfo.crc16}"
+        }
     }
 
     private suspend fun <T> withBleTimeout(
@@ -704,6 +786,8 @@ class SmartChassisGattClient(
 
     private companion object {
         private const val OPERATION_TIMEOUT_MS = 12_000L
+        private const val FLASH_BUSY_MAX_RETRIES = 3
+        private const val FLASH_BUSY_RETRY_DELAY_MS = 100L
         private val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID =
             UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }

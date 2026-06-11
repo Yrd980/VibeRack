@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 interface SmartChassisClient {
     val discoveredChassis: StateFlow<List<SmartChassisDevice>>
     val connectionState: StateFlow<SmartChassisConnectionState>
+    val tableInfoUpdates: StateFlow<SmartChassisTableInfo?>
 
     suspend fun startScan(): SmartChassisClientResult<List<SmartChassisDevice>>
     suspend fun stopScan(): SmartChassisClientResult<Unit>
