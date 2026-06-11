@@ -4,9 +4,22 @@ Date: 2026-06-10
 
 This document captures the findings and engineering decisions from the printer/NFC/BOM discussion and the physical P0 printer test session.
 
-Related product-direction note:
+## 2026-06-11 Status
 
-- `docs/superpowers/specs/2026-06-10-box-layer-material-label-design.md`
+This remains the implementation record for P0/Yinlifang printing, app NFC payload handling, and the first Boxes/BoxLayer slices.
+
+Product and protocol decisions are now consolidated in:
+
+- `docs/智能物料管理系统_项目技术文档_v1.0.md`
+- `docs/智能底盘BLE接口规格_v0.1.md`
+
+Use this document for verified device behavior and implementation history. Use the two current design documents for roadmap priority, smart chassis BLE/NFC protocol, and the final container model. If there is a conflict, the current v1.0/v0.1 design documents win.
+
+Current app priority from the v1.0 technical document:
+
+- P0: unify the container model and add an operation semantics layer for insert/remove/block-move
+- P1: ship the read-only digital twin view and hardware restore flow
+- P2: add BOM pick-to-light and demote paper labels for smart chassis slots
 
 ## Product Direction
 

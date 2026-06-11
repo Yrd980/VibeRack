@@ -12,6 +12,17 @@ This repository is a single-module Android app in `app/`. Kotlin source lives un
 
 Resources are in `app/src/main/res`. Room schemas are exported to `app/schemas`. Design and planning notes live in `docs/`. Crash logs are stored in `log/`.
 
+## Current Product Baseline
+
+Treat these two documents as the current source of truth for product and protocol decisions:
+
+- `docs/智能物料管理系统_项目技术文档_v1.0.md` — product positioning, VibeRack system architecture, hardware/firmware/app priorities, container model direction, algorithms, roadmap, and risks
+- `docs/智能底盘BLE接口规格_v0.1.md` — BLE/NFC advertising, GATT services, slot-binding record layout, binding-table operation codes, light command format, pairing/security rules, and end-to-end hardware flows
+
+When the remaining implementation record under `docs/superpowers/` disagrees with these two documents, follow the two current design documents unless the user explicitly says otherwise.
+
+The active product direction is no longer only a generic offline warehouse ERP. It is the Android app for a smart component management system: scanned inbound, NFC wake-up, digital twin container/slot view, find-by-light, BOM pick-to-light, local/cloud stock ledger, label printing, and hardware restore from smart chassis binding tables.
+
 ## Build, Test, and Development Commands
 
 Use the Gradle wrapper from the repo root:
@@ -30,6 +41,10 @@ For local Android Studio work, open the root project and run the `app` configura
 - Name screens and dialogs with `...Screen`, `...Dialog`, `...Route`
 - Name view models `...ViewModel`, UI state models `...UiState`, and shared Compose cards `...Card`
 - Reuse existing shared components such as `MaterialInboundDialog` and `core/ui/MaterialListCard` before adding new UI variants
+- For new inventory modeling work, align with the unified container model in the v1.0 technical document: legacy storage locations are 1-slot containers, boxes are N-layer containers, and smart chassis are 25-slot BLE/NFC containers
+- Keep BLE smart chassis protocol code byte-accurate with the v0.1 BLE interface spec. Do not invent alternate opcodes, record layouts, UUID semantics, or light command payloads without updating the protocol document
+- Keep hardware as the binding-table source of truth for smart chassis flows. App-side cache updates should follow successful BLE operations and `table_seq`/CRC validation rather than independently re-numbering slots
+- Preserve verified printer behavior: P0/Yinlifang discovery can use BLE scan, but printing connects through classic Bluetooth SPP/RFCOMM. Do not regress the existing 10 mm rotated box-layer label path when changing printer UI
 
 ## Testing Guidelines
 
@@ -57,3 +72,5 @@ PRs should include:
 ## Architecture Notes
 
 This app uses Jetpack Compose + Room + DataStore + Retrofit/Jsoup. Preserve the existing flow: UI -> ViewModel -> Repository -> Room/network. Keep persisted schema changes compatible and update `app/schemas` when Room entities change.
+
+Prefer incremental vertical slices that keep existing inbound, search, inventory, printer, NFC, and backup flows usable. For smart chassis work, implement the app-side BLE layer against mocks or simulators when hardware is unavailable, but keep packet formats and state transitions aligned with the BLE spec.

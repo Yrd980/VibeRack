@@ -8,19 +8,23 @@
 -->
 # LCSC Android ERP
 
-![](docs/video16_9.jpeg)
-【【开源】告别物料丢失烦恼 立创商城物料管理手机APP】 https://www.bilibili.com/video/BV1fL9JBHEpr
+Native Android app for LCSC component inventory workflows. The project has evolved from a small offline-friendly warehouse tool into the app side of a smart component management system. It keeps the existing scanned inbound, manual inbound, location/box-layer management, inventory search, BOM matching, QR/NFC/Bluetooth label printing, and local backup/restore flows, while moving toward the VibeRack hardware workflow: scan inbound, tap NFC, find parts with lights, pick BOM rows, and maintain the stock ledger.
 
-Native Android app for LCSC component inventory workflows. The project is built for small offline-friendly warehouse scenarios and covers scanned inbound, manual inbound, storage location management, inventory search, BOM matching, QR label export, and local backup/restore.
+Current product and protocol direction is defined by:
+
+- [Smart Component Management System Technical Document v1.0](./docs/智能物料管理系统_项目技术文档_v1.0.md): product positioning, architecture, hardware/firmware/app priorities, algorithms, and roadmap
+- [Smart Chassis BLE Interface Specification v0.1](./docs/智能底盘BLE接口规格_v0.1.md): BLE/NFC advertising, GATT services, binding-table records, light commands, and security constraints
 
 ## Features
 
 - Scan inbound: parse LCSC QR payloads and look up material data by `pc`
 - Manual inbound: search LCSC catalog entries by keyword and confirm inbound
-- Location management: edit location code, name, color, and item sort rules
+- Location / box-layer management: edit legacy locations plus component boxes and layers; the codebase already includes the first Boxes/BoxLayer data and UI slice
 - Inventory management: inspect location items, edit quantity, transfer, and delete
 - BOM search: import Excel BOM files, review matched / unmatched rows, and inbound directly
-- QR label export: preview a material QR label and save it to the system gallery
+- Labels and printing: generate material/layer labels and use the verified P0/Yinlifang narrow-label print path
+- NFC: read/write app-specific NFC payloads and plan the smart chassis device URI route
+- Smart chassis direction: planned 25-slot BLE chassis, NFC wake-up, find-by-light, BOM pick-to-light, multi-slot binding table, and hardware restore
 - Import / export: back up and restore inventory data with Excel files
 - Localization: switch between Chinese and English
 
@@ -73,10 +77,9 @@ app/schemas/  exported Room schemas
 
 ## Documentation
 
-- [Technical plan](./docs/AIGC_project.md)
-- [Popup inventory](./docs/AIGC_Popup.md)
-- [Component inventory](./docs/AIGC_component.md)
-- [Original requirement note](./docs/project.md)
+- [Smart Component Management System Technical Document v1.0](./docs/智能物料管理系统_项目技术文档_v1.0.md)
+- [Smart Chassis BLE Interface Specification v0.1](./docs/智能底盘BLE接口规格_v0.1.md)
+- [P0 printing, NFC, and BOM integration record](./docs/superpowers/specs/2026-06-10-printer-nfc-bom-session-findings.md)
 
 ## License
 
@@ -91,3 +94,5 @@ This project is licensed under the `GNU General Public License v3.0` (`GPLv3`).
 - Network access is used to query material information from LCSC
 - Inventory, locations, cached images, and language preferences are stored locally
 - The codebase is currently a single `app` module with package-based layering
+- Future app work should align with the unified container model: a legacy location is a 1-slot container, a box is an N-layer container, and a smart chassis is a 25-slot BLE/NFC container
+- `docs/superpowers/` only keeps still-useful P0 printing, NFC, and BOM integration notes; if they conflict with the two current design documents above, the current design documents win
