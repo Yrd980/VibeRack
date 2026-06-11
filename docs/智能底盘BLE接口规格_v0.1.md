@@ -46,6 +46,21 @@
 
 自定义基 UUID 定一个随机 128-bit，全产品线复用，末两字节区分服务/特征。
 
+### 3.1 开发期 UUID 常量
+
+开发期固定使用 UUID 模板 `7f510000-2b7a-4c3f-9d1e-2f3a4b5cXXXX`，其中末尾 `XXXX` 为 16-bit short id，对应上表"基 UUID + 0x0001 / 0x0002"的写法。若后续修改以下任一 UUID，必须同步提升本协议文档版本并通知 Android、固件两端。
+
+| 项 | Short id | UUID |
+|---|---:|---|
+| Binding Table Service | 0x0001 | `7f510000-2b7a-4c3f-9d1e-2f3a4b5c0001` |
+| Binding Control Point characteristic | 0x0101 | `7f510000-2b7a-4c3f-9d1e-2f3a4b5c0101` |
+| Table Info characteristic | 0x0102 | `7f510000-2b7a-4c3f-9d1e-2f3a4b5c0102` |
+| Light Service | 0x0002 | `7f510000-2b7a-4c3f-9d1e-2f3a4b5c0002` |
+| Light Command characteristic | 0x0201 | `7f510000-2b7a-4c3f-9d1e-2f3a4b5c0201` |
+| Light Status characteristic | 0x0202 | `7f510000-2b7a-4c3f-9d1e-2f3a4b5c0202` |
+
+P0/银立方（Yinlifang）打印机蓝牙行为不属于本 GATT 合约：打印机仍使用 BLE 扫描发现设备，打印连接继续走经典蓝牙 SPP/RFCOMM。
+
 ## 4. 槽位绑定记录格式（16 字节定长）
 
 | 偏移 | 长度 | 字段 | 说明 |
