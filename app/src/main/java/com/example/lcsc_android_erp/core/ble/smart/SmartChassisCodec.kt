@@ -1,5 +1,6 @@
 package com.example.lcsc_android_erp.core.ble.smart
 
+import android.bluetooth.le.ScanRecord
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
@@ -33,6 +34,19 @@ object SmartChassisCodec {
             statusFlags = payload.u8(4),
             tableSeqLow16 = payload.u16Le(5)
         )
+    }
+
+    fun parseAdvertisementFromManufacturerData(record: ScanRecord): SmartChassisAdvertisement? {
+        val manufacturerData = record.manufacturerSpecificData ?: return null
+        for (index in 0 until manufacturerData.size()) {
+            val companyId = manufacturerData.keyAt(index)
+            val payload = manufacturerData.valueAt(index) ?: continue
+            val advertisement = parseAndroidManufacturerPayload(companyId, payload) ?: continue
+            if (advertisement.companyId == SmartChassisProtocol.DEV_COMPANY_ID) {
+                return advertisement
+            }
+        }
+        return null
     }
 
     fun encodeSlotRecord(

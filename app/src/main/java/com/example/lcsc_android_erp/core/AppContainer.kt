@@ -8,6 +8,7 @@ import androidx.room.Room
 import androidx.room.withTransaction
 import com.example.lcsc_android_erp.core.ble.smart.FakeSmartChassisClient
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisManager
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisScanner
 import com.example.lcsc_android_erp.core.database.AppDatabase
 import com.example.lcsc_android_erp.core.datastore.UserPreferencesRepository
 import com.example.lcsc_android_erp.core.nfc.NfcLabelManager
@@ -135,6 +136,7 @@ class AppContainer(context: Context) {
     val smartChassisManager = SmartChassisManager(
         client = FakeSmartChassisClient()
     )
+    val smartChassisScanner = SmartChassisScanner(appContext)
 
     val inventoryBackupManager = InventoryBackupManager(
         context = appContext,
