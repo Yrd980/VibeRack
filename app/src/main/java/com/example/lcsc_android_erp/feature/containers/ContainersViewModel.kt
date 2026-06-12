@@ -10,11 +10,14 @@ import com.example.lcsc_android_erp.core.ble.smart.SmartChassisConnectionState
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisOperations
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisScanner
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisOperationError
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisRestorePreview
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisTableInfo
 import com.example.lcsc_android_erp.domain.model.ContainerSlotStock
 import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.StockContainer
 import com.example.lcsc_android_erp.domain.repository.ContainerRepository
+import com.example.lcsc_android_erp.domain.repository.SlotOperationRepository
+import com.example.lcsc_android_erp.domain.repository.SlotOperationWrite
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,11 +33,14 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContainersViewModel(
     private val containerRepository: ContainerRepository,
+    private val slotOperationRepository: SlotOperationRepository,
     private val smartChassisOperations: SmartChassisOperations,
     private val smartChassisScanner: SmartChassisScanner
 ) : ViewModel() {
     private val selectedContainerId = MutableStateFlow<Long?>(null)
     private val activeLightSlot = MutableStateFlow<Int?>(null)
+    private val restorePreview = MutableStateFlow<SmartChassisRestorePreview?>(null)
+    private val slotInboundRequest = MutableStateFlow<SlotInboundRequest?>(null)
     private val message = MutableStateFlow<String?>(null)
     private var scanRegistrationJob: Job? = null
 
@@ -72,13 +78,26 @@ class ContainersViewModel(
         )
     }
 
+    private val dialogState = combine(
+        activeLightSlot,
+        restorePreview,
+        slotInboundRequest,
+        message
+    ) { activeSlot, preview, inboundRequest, currentMessage ->
+        DialogState(
+            activeLightSlot = activeSlot,
+            restorePreview = preview,
+            slotInboundRequest = inboundRequest,
+            message = currentMessage
+        )
+    }
+
     val uiState: StateFlow<ContainersUiState> = combine(
         selectedContainerState,
         chassisState,
         smartChassisScanner.state,
-        activeLightSlot,
-        message
-    ) { selectedState, chassis, scannerState, activeSlot, currentMessage ->
+        dialogState
+    ) { selectedState, chassis, scannerState, dialogs ->
         ContainersUiState(
             containers = selectedState.containers,
             selectedContainer = selectedState.selectedContainer,
@@ -89,8 +108,10 @@ class ContainersViewModel(
             isScanning = scannerState.isScanning,
             discoveredCount = scannerState.devices.size,
             scanError = scannerState.lastError,
-            activeLightSlot = activeSlot,
-            message = currentMessage
+            activeLightSlot = dialogs.activeLightSlot,
+            restorePreview = dialogs.restorePreview,
+            slotInboundRequest = dialogs.slotInboundRequest,
+            message = dialogs.message
         )
     }.stateIn(
         scope = viewModelScope,
@@ -149,11 +170,28 @@ class ContainersViewModel(
     fun readAllSmartChassis(container: StockContainer) {
         viewModelScope.launch {
             message.value = null
-            val result = smartChassisOperations.restoreFromHardware(container)
-            if (result != null) {
-                message.value = "已读取 ${result.totalSlots} 个槽位，恢复 ${result.restoredRecords} 条记录"
+            val preview = smartChassisOperations.readRestorePreview(container)
+            if (preview != null) {
+                restorePreview.value = preview
+                message.value = "已读取 ${preview.totalSlots} 个槽位，待确认 ${preview.changedSlots} 个变更"
             }
         }
+    }
+
+    fun confirmRestorePreview() {
+        val preview = restorePreview.value ?: return
+        viewModelScope.launch {
+            message.value = null
+            val result = smartChassisOperations.confirmRestoreFromPreview(preview)
+            if (result != null) {
+                restorePreview.value = null
+                message.value = "已从硬件恢复 ${result.restoredRecords} 条记录"
+            }
+        }
+    }
+
+    fun cancelRestorePreview() {
+        restorePreview.value = null
     }
 
     fun findSlot(container: StockContainer, slotNumber: Int) {
@@ -180,6 +218,96 @@ class ContainersViewModel(
             if (smartChassisOperations.guideStockInSlot(macAddress, slotNumber)) {
                 activeLightSlot.value = slotNumber
                 message.value = "槽位 $slotNumber 已进入入库引导"
+            }
+        }
+    }
+
+    fun requestSlotInbound(container: StockContainer, slot: ContainerSlotStock) {
+        slotInboundRequest.value = SlotInboundRequest(
+            containerId = container.id,
+            containerCode = container.code,
+            slotNumber = slot.slot.slotNumber,
+            slotCode = slot.slot.slotCode,
+            existingPartNumber = slot.stockItem?.partNumber,
+            existingQuantity = slot.stockItem?.quantity
+        )
+        if (container.type == ContainerType.SMART_CHASSIS && slot.slot.slotNumber in 1..25) {
+            stockInSlot(container, slot.slot.slotNumber)
+        }
+    }
+
+    fun confirmSlotInbound(partIdOrNumber: String, quantity: Int) {
+        val request = slotInboundRequest.value ?: return
+        val normalizedPart = partIdOrNumber.trim().uppercase()
+        if (normalizedPart.isBlank() || quantity < 0) {
+            message.value = "请输入有效物料编号和数量"
+            return
+        }
+        viewModelScope.launch {
+            message.value = null
+            val container = slotOperationRepository.findContainer(request.containerId)
+            if (container?.type == ContainerType.SMART_CHASSIS) {
+                if (!normalizedPart.matches(PROTOCOL_PART_ID_REGEX)) {
+                    message.value = "智能底盘槽位需要 C... 或 M... 协议物料编号"
+                    return@launch
+                }
+                val tableInfo = smartChassisOperations.writeSlot(
+                    container = container,
+                    slotNumber = request.slotNumber,
+                    protocolPartId = normalizedPart,
+                    quantity = quantity
+                )
+                if (tableInfo == null) {
+                    message.value = "智能底盘写入失败，本地台账未修改"
+                    return@launch
+                }
+            }
+            val component = slotOperationRepository.resolveLocalComponent(normalizedPart)
+            if (component == null) {
+                message.value = "无法创建物料 $normalizedPart"
+                return@launch
+            }
+            val result = slotOperationRepository.writeOne(
+                SlotOperationWrite(
+                    containerId = request.containerId,
+                    slotNumber = request.slotNumber,
+                    component = component,
+                    quantity = quantity,
+                    sourceType = "SMART_SLOT_INBOUND",
+                    rawPayload = "slot=${request.slotNumber};part=$normalizedPart"
+                )
+            )
+            if (result.success) {
+                slotInboundRequest.value = null
+                message.value = "${request.containerCode}-${request.slotCode} 已入库 ${component.partNumber}"
+            } else {
+                message.value = result.message ?: "槽位入库失败"
+            }
+        }
+    }
+
+    fun cancelSlotInbound() {
+        slotInboundRequest.value = null
+    }
+
+    fun clearSlot(container: StockContainer, slot: ContainerSlotStock) {
+        viewModelScope.launch {
+            val result = slotOperationRepository.clearOne(container.id, slot.slot.slotNumber)
+            message.value = if (result.success) {
+                "${slot.slot.positionCode} 已清空"
+            } else {
+                result.message ?: "清空槽位失败"
+            }
+        }
+    }
+
+    fun setSlotQuantity(container: StockContainer, slot: ContainerSlotStock, quantity: Int) {
+        viewModelScope.launch {
+            val result = slotOperationRepository.setQuantity(container.id, slot.slot.slotNumber, quantity)
+            message.value = if (result.success) {
+                "${slot.slot.positionCode} 数量已更新"
+            } else {
+                result.message ?: "数量更新失败"
             }
         }
     }
@@ -227,6 +355,7 @@ class ContainersViewModel(
             initializer {
                 ContainersViewModel(
                     containerRepository = appContainer.containerRepository,
+                    slotOperationRepository = appContainer.slotOperationRepository,
                     smartChassisOperations = appContainer.smartChassisOperations,
                     smartChassisScanner = appContainer.smartChassisScanner
                 )
@@ -246,3 +375,12 @@ private data class ChassisState(
     val activeTableInfo: SmartChassisTableInfo?,
     val lastOperationError: SmartChassisOperationError?
 )
+
+private data class DialogState(
+    val activeLightSlot: Int?,
+    val restorePreview: SmartChassisRestorePreview?,
+    val slotInboundRequest: SlotInboundRequest?,
+    val message: String?
+)
+
+private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")

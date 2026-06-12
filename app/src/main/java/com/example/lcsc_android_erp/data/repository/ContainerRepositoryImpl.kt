@@ -168,7 +168,11 @@ class ContainerRepositoryImpl(
                     stockPlacementRepository.deleteSlotStock(slot.id)
                     return@forEachIndexed
                 }
-                val protocolPartId = normalizeProtocolPartId(record.partId) ?: return@forEachIndexed
+                val protocolPartId = normalizeProtocolPartId(record.partId)
+                if (protocolPartId == null) {
+                    stockPlacementRepository.deleteSlotStock(slot.id)
+                    return@forEachIndexed
+                }
                 val component = findOrCreateComponentEntity(protocolPartId, now) ?: return@forEachIndexed
                 stockPlacementRepository.replaceSlotStock(
                     StockPlacementWrite(

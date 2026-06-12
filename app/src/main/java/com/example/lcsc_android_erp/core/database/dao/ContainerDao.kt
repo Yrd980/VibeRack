@@ -165,6 +165,44 @@ interface ContainerDao {
         INNER JOIN `container` c ON c.id = cs.container_id
         LEFT JOIN stock_item si ON si.container_slot_id = cs.id
         LEFT JOIN component_master cm ON cm.id = si.component_id
+        WHERE cs.container_id = :containerId
+        ORDER BY cs.sortOrder ASC, cs.slot_number ASC
+        """
+    )
+    suspend fun getSlotStock(containerId: Long): List<ContainerSlotStockProjection>
+
+    @Query(
+        """
+        SELECT
+            cs.id AS slotId,
+            cs.container_id AS containerId,
+            c.code AS containerCode,
+            c.type AS containerType,
+            cs.slot_number AS slotNumber,
+            cs.slot_code AS slotCode,
+            cs.displayName AS slotDisplayName,
+            cs.sortOrder AS sortOrder,
+            si.id AS stockItemId,
+            cm.id AS componentId,
+            cm.part_number AS partNumber,
+            cm.protocol_part_id AS protocolPartId,
+            cm.mpn AS mpn,
+            cm.name AS name,
+            cm.brand AS brand,
+            cm.package_name AS packageName,
+            cm.category AS category,
+            cm.description AS description,
+            cm.source_url AS sourceUrl,
+            cm.spec_json AS specJson,
+            cm.image_local_path AS imageLocalPath,
+            si.quantity AS quantity,
+            si.quantity_state AS quantityState,
+            si.safety_stock_threshold AS safetyStockThreshold,
+            si.updated_at AS updatedAt
+        FROM container_slot cs
+        INNER JOIN `container` c ON c.id = cs.container_id
+        LEFT JOIN stock_item si ON si.container_slot_id = cs.id
+        LEFT JOIN component_master cm ON cm.id = si.component_id
         WHERE cs.id = :slotId
         LIMIT 1
         """

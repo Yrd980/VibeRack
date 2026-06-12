@@ -4,6 +4,7 @@ import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.StockContainer
 import com.example.lcsc_android_erp.domain.repository.ContainerRepository
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 
 class SmartChassisOperations(
@@ -22,21 +23,94 @@ class SmartChassisOperations(
         return connected
     }
 
-    suspend fun restoreFromHardware(container: StockContainer): SmartChassisRestoreResult? {
+    suspend fun readRestorePreview(container: StockContainer): SmartChassisRestorePreview? {
         val macAddress = container.validSmartChassisMacAddress() ?: return null
         if (!connectIfNeeded(macAddress)) {
             return null
         }
         val snapshot = manager.readAll() ?: return null
-        val restoredCount = containerRepository.restoreSmartChassisTable(
+        val localSlots = containerRepository.observeContainerSlotStock(container.id).first()
+        val localBySlot = localSlots.associateBy { it.slot.slotNumber }
+        var occupiedRecords = 0
+        var emptyRecords = 0
+        var invalidRecords = 0
+        var changedSlots = 0
+        snapshot.records.forEachIndexed { index, record ->
+            val slotNumber = index + 1
+            val local = localBySlot[slotNumber]?.stockItem
+            if (record.isEmpty) {
+                emptyRecords++
+                if (local != null) {
+                    changedSlots++
+                }
+                return@forEachIndexed
+            }
+            val protocolPartId = record.partId.trim().uppercase(Locale.ROOT)
+            if (!protocolPartId.matches(PROTOCOL_PART_ID_REGEX)) {
+                invalidRecords++
+                if (local != null) {
+                    changedSlots++
+                }
+                return@forEachIndexed
+            }
+            occupiedRecords++
+            if (local?.protocolPartId?.trim()?.uppercase(Locale.ROOT) != protocolPartId ||
+                local.quantity != record.quantity
+            ) {
+                changedSlots++
+            }
+        }
+        return SmartChassisRestorePreview(
             containerId = container.id,
-            records = snapshot.records,
-            tableInfo = snapshot.tableInfo
+            totalSlots = snapshot.records.size,
+            occupiedRecords = occupiedRecords,
+            emptyRecords = emptyRecords,
+            invalidRecords = invalidRecords,
+            changedSlots = changedSlots,
+            tableInfo = snapshot.tableInfo,
+            records = snapshot.records
+        )
+    }
+
+    suspend fun confirmRestoreFromPreview(preview: SmartChassisRestorePreview): SmartChassisRestoreResult? {
+        val restoredCount = containerRepository.restoreSmartChassisTable(
+            containerId = preview.containerId,
+            records = preview.records,
+            tableInfo = preview.tableInfo
         )
         return SmartChassisRestoreResult(
-            totalSlots = snapshot.records.size,
+            totalSlots = preview.totalSlots,
             restoredRecords = restoredCount,
-            tableInfo = snapshot.tableInfo
+            tableInfo = preview.tableInfo
+        )
+    }
+
+    suspend fun writeSlot(
+        container: StockContainer,
+        slotNumber: Int,
+        protocolPartId: String,
+        quantity: Int
+    ): SmartChassisTableInfo? {
+        val macAddress = container.validSmartChassisMacAddress() ?: return null
+        if (slotNumber !in 1..SmartChassisProtocol.SLOT_COUNT || quantity !in 0..0xFFFF) {
+            return null
+        }
+        val normalizedPartId = protocolPartId.trim().uppercase(Locale.ROOT)
+        if (!normalizedPartId.matches(PROTOCOL_PART_ID_REGEX) || !connectIfNeeded(macAddress)) {
+            return null
+        }
+        return manager.writeOne(
+            SmartChassisSlotRecord(
+                slot = slotNumber,
+                partId = normalizedPartId,
+                quantity = quantity,
+                flags = if (normalizedPartId.startsWith("M")) {
+                    SmartChassisProtocol.SLOT_FLAG_CUSTOM_PART
+                } else {
+                    0
+                },
+                crc8 = 0
+            )
         )
     }
 
@@ -148,3 +222,16 @@ data class SmartChassisRestoreResult(
     val restoredRecords: Int,
     val tableInfo: SmartChassisTableInfo
 )
+
+data class SmartChassisRestorePreview(
+    val containerId: Long,
+    val totalSlots: Int,
+    val occupiedRecords: Int,
+    val emptyRecords: Int,
+    val invalidRecords: Int,
+    val changedSlots: Int,
+    val tableInfo: SmartChassisTableInfo,
+    val records: List<SmartChassisSlotRecord>
+)
+
+private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")

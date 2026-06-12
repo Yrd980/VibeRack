@@ -35,6 +35,14 @@ class StockPlacementRepositoryImpl(
         }
     }
 
+    override suspend fun getContainerSlotStock(containerId: Long): List<ContainerSlotStock> {
+        return containerDao.getSlotStock(containerId).map(::toContainerSlotStock)
+    }
+
+    override suspend fun findSlotStock(slotId: Long): ContainerSlotStock? {
+        return containerDao.findSlotStock(slotId)?.let(::toContainerSlotStock)
+    }
+
     override suspend fun upsertStock(write: StockPlacementWrite): Long? {
         val existing = stockItemDao.findByComponentAndSlot(write.componentId, write.slotId)
         if (existing == null) {
@@ -57,6 +65,17 @@ class StockPlacementRepositoryImpl(
         stockItemDao.deleteBySlotId(write.slotId)
         val insertedId = stockItemDao.insert(write.toEntity())
         return if (insertedId > 0) insertedId else null
+    }
+
+    override suspend fun updateStockQuantity(stockItemId: Long, quantity: Int, updatedAt: Long) {
+        val existing = stockItemDao.findById(stockItemId) ?: return
+        stockItemDao.update(
+            existing.copy(
+                quantity = quantity,
+                quantityState = QuantityState.KNOWN.name,
+                updatedAt = updatedAt
+            )
+        )
     }
 
     override suspend fun deleteSlotStock(slotId: Long) {

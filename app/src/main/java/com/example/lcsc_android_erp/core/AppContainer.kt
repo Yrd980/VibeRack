@@ -28,6 +28,7 @@ import com.example.lcsc_android_erp.data.repository.ContainerRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.InventoryBackupManager
 import com.example.lcsc_android_erp.data.repository.InventoryRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.LcscCatalogRepositoryImpl
+import com.example.lcsc_android_erp.data.repository.SlotOperationRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.StockPlacementRepositoryImpl
 import com.example.lcsc_android_erp.domain.model.LocationCategoryProfile
 import com.example.lcsc_android_erp.domain.model.calculateDominantLocationCategoryProfile
@@ -35,6 +36,7 @@ import com.example.lcsc_android_erp.domain.repository.BoxRepository
 import com.example.lcsc_android_erp.domain.repository.ContainerRepository
 import com.example.lcsc_android_erp.domain.repository.InventoryRepository
 import com.example.lcsc_android_erp.domain.repository.LcscCatalogRepository
+import com.example.lcsc_android_erp.domain.repository.SlotOperationRepository
 import com.example.lcsc_android_erp.domain.repository.StockPlacementRepository
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -139,6 +141,13 @@ class AppContainer(context: Context) {
     )
 
     val containerRepository: ContainerRepository = ContainerRepositoryImpl(
+        database = database,
+        containerDao = database.containerDao(),
+        componentDao = database.componentDao(),
+        stockPlacementRepository = stockPlacementRepository
+    )
+
+    val slotOperationRepository: SlotOperationRepository = SlotOperationRepositoryImpl(
         database = database,
         containerDao = database.containerDao(),
         componentDao = database.componentDao(),

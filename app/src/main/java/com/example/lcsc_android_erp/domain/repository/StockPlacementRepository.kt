@@ -20,8 +20,11 @@ data class StockPlacementWrite(
 interface StockPlacementRepository {
     fun observeContainerSlotStock(containerId: Long): Flow<List<ContainerSlotStock>>
     fun observeSlotStock(containerId: Long): Flow<List<SlotStockItem>>
+    suspend fun getContainerSlotStock(containerId: Long): List<ContainerSlotStock>
+    suspend fun findSlotStock(slotId: Long): ContainerSlotStock?
     suspend fun upsertStock(write: StockPlacementWrite): Long?
     suspend fun replaceSlotStock(write: StockPlacementWrite): Long?
+    suspend fun updateStockQuantity(stockItemId: Long, quantity: Int, updatedAt: Long)
     suspend fun deleteSlotStock(slotId: Long)
     suspend fun deleteComponentFromSlot(componentId: Long, slotId: Long)
     suspend fun deleteContainerStock(containerId: Long)
