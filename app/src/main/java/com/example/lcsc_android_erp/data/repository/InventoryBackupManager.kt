@@ -61,12 +61,11 @@ class InventoryBackupManager(
     private val stockOperationDao: StockOperationDao,
     private val componentEnrichmentManager: ComponentEnrichmentManager,
     private val componentImageStore: ComponentImageStore,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val protocolPartIdStrategy: ProtocolPartIdStrategy
 ) {
     private companion object {
         const val TAG = "InventoryBackupManager"
-        val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
-        val MANUAL_INBOUND_PART_NUMBER_REGEX = Regex("^C0\\d+$")
     }
 
     private data class ImportedComponentRow(
@@ -753,7 +752,7 @@ class InventoryBackupManager(
                 entity = ComponentEntity(
                     id = row.long("id"),
                     partNumber = partNumber,
-                    protocolPartId = protocolPartIdForImportedComponent(
+                    protocolPartId = protocolPartIdStrategy.forComponent(
                         componentId = row.long("id"),
                         partNumber = partNumber
                     ),
@@ -771,18 +770,6 @@ class InventoryBackupManager(
                 requiresEnrichment = false
             )
         }
-    }
-
-    private fun protocolPartIdForImportedComponent(
-        componentId: Long,
-        partNumber: String
-    ): String? {
-        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
-        val isManual = normalizedPartNumber.matches(MANUAL_INBOUND_PART_NUMBER_REGEX)
-        if (!isManual && normalizedPartNumber.matches(PROTOCOL_PART_ID_REGEX)) {
-            return normalizedPartNumber
-        }
-        return componentId.takeIf { it > 0 }?.let { id -> "M%09d".format(Locale.ROOT, id) }
     }
 
     private fun org.apache.poi.ss.usermodel.Sheet?.extractPreviewImagesByRow(): Map<Int, ImportedSheetImage> {

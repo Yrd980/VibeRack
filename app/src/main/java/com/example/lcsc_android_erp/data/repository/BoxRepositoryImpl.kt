@@ -32,14 +32,13 @@ class BoxRepositoryImpl(
     private val boxDao: BoxDao,
     private val componentDao: ComponentDao,
     private val containerDao: ContainerDao,
-    private val stockPlacementRepository: StockPlacementRepository
+    private val stockPlacementRepository: StockPlacementRepository,
+    private val protocolPartIdStrategy: ProtocolPartIdStrategy
 ) : BoxRepository {
     private companion object {
         private val BOX_CODE_REGEX = Regex("[A-Z0-9_-]+")
         private const val BOX_CONTAINER_ID_OFFSET = 1_000_000_000L
         private const val BOX_SLOT_ID_OFFSET = 2_000_000_000L
-        private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
-        private val MANUAL_INBOUND_PART_NUMBER_REGEX = Regex("^C0\\d+$")
         private const val ERROR_INVALID_CODE = "invalid_code"
         private const val ERROR_INVALID_LAYER_COUNT = "invalid_layer_count"
         private const val ERROR_DUPLICATE_CODE = "duplicate_code"
@@ -387,7 +386,7 @@ class BoxRepositoryImpl(
         val existing = componentDao.findByPartNumber(normalizedPartNumber)
         if (existing != null) {
             val protocolPartId = existing.protocolPartId
-                ?: protocolPartIdForComponent(existing.id, normalizedPartNumber)
+                ?: protocolPartIdStrategy.forComponent(existing.id, normalizedPartNumber)
             val updated = existing.copy(
                 partNumber = normalizedPartNumber,
                 protocolPartId = protocolPartId,
@@ -411,7 +410,7 @@ class BoxRepositoryImpl(
         val insertId = componentDao.insert(
             ComponentEntity(
                 partNumber = normalizedPartNumber,
-                protocolPartId = protocolPartIdForComponent(null, normalizedPartNumber),
+                protocolPartId = protocolPartIdStrategy.forComponent(null, normalizedPartNumber),
                 mpn = component.mpn,
                 name = component.name,
                 brand = component.brand,
@@ -424,8 +423,8 @@ class BoxRepositoryImpl(
             )
         )
         if (insertId > 0) {
-            val resolvedProtocolPartId = protocolPartIdForComponent(insertId, normalizedPartNumber)
-            val insertedProtocolPartId = protocolPartIdForComponent(null, normalizedPartNumber)
+            val resolvedProtocolPartId = protocolPartIdStrategy.forComponent(insertId, normalizedPartNumber)
+            val insertedProtocolPartId = protocolPartIdStrategy.forComponent(null, normalizedPartNumber)
             if (resolvedProtocolPartId != insertedProtocolPartId) {
                 componentDao.update(
                     ComponentEntity(
@@ -450,12 +449,4 @@ class BoxRepositoryImpl(
             ?: error("Failed to resolve component id for $normalizedPartNumber")
     }
 
-    private fun protocolPartIdForComponent(componentId: Long?, partNumber: String): String? {
-        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
-        val isManual = normalizedPartNumber.matches(MANUAL_INBOUND_PART_NUMBER_REGEX)
-        if (!isManual && normalizedPartNumber.matches(PROTOCOL_PART_ID_REGEX)) {
-            return normalizedPartNumber
-        }
-        return componentId?.let { id -> "M%09d".format(Locale.ROOT, id) }
-    }
 }

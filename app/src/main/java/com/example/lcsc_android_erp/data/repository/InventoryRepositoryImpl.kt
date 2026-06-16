@@ -50,13 +50,12 @@ class InventoryRepositoryImpl(
     private val containerDao: ContainerDao,
     private val stockPlacementRepository: StockPlacementRepository,
     private val componentEnrichmentManager: ComponentEnrichmentManager,
-    private val componentImageStore: ComponentImageStore
+    private val componentImageStore: ComponentImageStore,
+    private val protocolPartIdStrategy: ProtocolPartIdStrategy
 ) : InventoryRepository {
     private companion object {
         private const val TAG = "InventoryRepository"
         private val LOCATION_CODE_REGEX = Regex("^[A-Z]\\d+$")
-        private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
-        private val MANUAL_INBOUND_PART_NUMBER_REGEX = Regex("^C0\\d+$")
     }
 
     override fun observeDashboardSummary(): Flow<DashboardSummary> {
@@ -799,20 +798,6 @@ class InventoryRepositoryImpl(
         )
     }
 
-    private fun protocolPartIdForComponent(
-        componentId: Long?,
-        partNumber: String,
-        sourceType: String
-    ): String? {
-        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
-        val isManual = sourceType == "MANUAL_INPUT" ||
-            normalizedPartNumber.matches(MANUAL_INBOUND_PART_NUMBER_REGEX)
-        if (!isManual && normalizedPartNumber.matches(PROTOCOL_PART_ID_REGEX)) {
-            return normalizedPartNumber
-        }
-        return componentId?.let { id -> "M%09d".format(Locale.ROOT, id) }
-    }
-
     private suspend fun prepareInboundRecord(record: InboundRecord): InboundRecord {
         val existingLocalPath = record.component.imageLocalPath
             ?.trim()
@@ -844,7 +829,7 @@ class InventoryRepositoryImpl(
             val shouldResetStaleManualComponent = record.sourceType == "MANUAL_INPUT" &&
                 inventoryItemDao.countByComponent(existing.id) == 0
             val protocolPartId = existing.protocolPartId
-                ?: protocolPartIdForComponent(
+                ?: protocolPartIdStrategy.forComponent(
                     componentId = existing.id,
                     partNumber = normalizedPartNumber,
                     sourceType = record.sourceType
@@ -852,7 +837,7 @@ class InventoryRepositoryImpl(
             val updated = if (shouldResetStaleManualComponent) {
                 existing.copy(
                     partNumber = normalizedPartNumber,
-                    protocolPartId = protocolPartIdForComponent(
+                    protocolPartId = protocolPartIdStrategy.forComponent(
                         componentId = existing.id,
                         partNumber = normalizedPartNumber,
                         sourceType = record.sourceType
@@ -898,7 +883,7 @@ class InventoryRepositoryImpl(
 
         val componentEntity = ComponentEntity(
             partNumber = normalizedPartNumber,
-            protocolPartId = protocolPartIdForComponent(
+            protocolPartId = protocolPartIdStrategy.forComponent(
                 componentId = null,
                 partNumber = normalizedPartNumber,
                 sourceType = record.sourceType
@@ -916,7 +901,7 @@ class InventoryRepositoryImpl(
 
         val insertId = componentDao.insert(componentEntity)
         if (insertId > 0) {
-            val resolvedProtocolPartId = protocolPartIdForComponent(
+            val resolvedProtocolPartId = protocolPartIdStrategy.forComponent(
                 componentId = insertId,
                 partNumber = normalizedPartNumber,
                 sourceType = record.sourceType

@@ -28,6 +28,7 @@ import com.example.lcsc_android_erp.data.repository.ContainerRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.InventoryBackupManager
 import com.example.lcsc_android_erp.data.repository.InventoryRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.LcscCatalogRepositoryImpl
+import com.example.lcsc_android_erp.data.repository.ProtocolPartIdStrategy
 import com.example.lcsc_android_erp.data.repository.SlotOperationRepositoryImpl
 import com.example.lcsc_android_erp.data.repository.StockPlacementRepositoryImpl
 import com.example.lcsc_android_erp.domain.model.LocationCategoryProfile
@@ -70,6 +71,7 @@ class AppContainer(context: Context) {
 
     val userPreferencesRepository = UserPreferencesRepository(preferencesDataStore)
     val nfcLabelManager = NfcLabelManager(appContext)
+    private val protocolPartIdStrategy = ProtocolPartIdStrategy()
     private val stockPlacementRepository: StockPlacementRepository = StockPlacementRepositoryImpl(
         containerDao = database.containerDao(),
         stockItemDao = database.stockItemDao(),
@@ -129,7 +131,8 @@ class AppContainer(context: Context) {
         containerDao = database.containerDao(),
         stockPlacementRepository = stockPlacementRepository,
         componentEnrichmentManager = componentEnrichmentManager,
-        componentImageStore = componentImageStore
+        componentImageStore = componentImageStore,
+        protocolPartIdStrategy = protocolPartIdStrategy
     )
 
     val boxRepository: BoxRepository = BoxRepositoryImpl(
@@ -137,14 +140,16 @@ class AppContainer(context: Context) {
         boxDao = database.boxDao(),
         componentDao = database.componentDao(),
         containerDao = database.containerDao(),
-        stockPlacementRepository = stockPlacementRepository
+        stockPlacementRepository = stockPlacementRepository,
+        protocolPartIdStrategy = protocolPartIdStrategy
     )
 
     val containerRepository: ContainerRepository = ContainerRepositoryImpl(
         database = database,
         containerDao = database.containerDao(),
         componentDao = database.componentDao(),
-        stockPlacementRepository = stockPlacementRepository
+        stockPlacementRepository = stockPlacementRepository,
+        protocolPartIdStrategy = protocolPartIdStrategy
     )
 
     val smartChassisManager = SmartChassisManager(
@@ -155,7 +160,8 @@ class AppContainer(context: Context) {
     )
     val smartChassisOperations = SmartChassisOperations(
         manager = smartChassisManager,
-        containerRepository = containerRepository
+        containerRepository = containerRepository,
+        protocolPartIdStrategy = protocolPartIdStrategy
     )
     val smartChassisScanner = SmartChassisScanner(appContext)
 
@@ -164,7 +170,8 @@ class AppContainer(context: Context) {
         containerDao = database.containerDao(),
         componentDao = database.componentDao(),
         stockPlacementRepository = stockPlacementRepository,
-        smartChassisOperations = smartChassisOperations
+        smartChassisOperations = smartChassisOperations,
+        protocolPartIdStrategy = protocolPartIdStrategy
     )
 
     val inventoryBackupManager = InventoryBackupManager(
@@ -180,7 +187,8 @@ class AppContainer(context: Context) {
         stockOperationDao = database.stockOperationDao(),
         componentEnrichmentManager = componentEnrichmentManager,
         componentImageStore = componentImageStore,
-        userPreferencesRepository = userPreferencesRepository
+        userPreferencesRepository = userPreferencesRepository,
+        protocolPartIdStrategy = protocolPartIdStrategy
     )
 
     val lcscCatalogRepository: LcscCatalogRepository = LcscCatalogRepositoryImpl(

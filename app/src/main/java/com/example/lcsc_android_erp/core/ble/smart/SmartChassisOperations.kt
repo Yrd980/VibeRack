@@ -3,13 +3,15 @@ package com.example.lcsc_android_erp.core.ble.smart
 import com.example.lcsc_android_erp.domain.model.ContainerType
 import com.example.lcsc_android_erp.domain.model.StockContainer
 import com.example.lcsc_android_erp.domain.repository.ContainerRepository
+import com.example.lcsc_android_erp.data.repository.ProtocolPartIdStrategy
 import java.util.Locale
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 
 class SmartChassisOperations(
     private val manager: SmartChassisManager,
-    private val containerRepository: ContainerRepository
+    private val containerRepository: ContainerRepository,
+    private val protocolPartIdStrategy: ProtocolPartIdStrategy
 ) {
     val connectionState: StateFlow<SmartChassisConnectionState> = manager.connectionState
     val activeTableInfo: StateFlow<SmartChassisTableInfo?> = manager.activeTableInfo
@@ -45,8 +47,8 @@ class SmartChassisOperations(
                 }
                 return@forEachIndexed
             }
-            val protocolPartId = record.partId.trim().uppercase(Locale.ROOT)
-            if (!protocolPartId.matches(PROTOCOL_PART_ID_REGEX)) {
+            val protocolPartId = protocolPartIdStrategy.normalize(record.partId)
+            if (protocolPartId == null) {
                 invalidRecords++
                 if (local != null) {
                     changedSlots++
@@ -95,8 +97,8 @@ class SmartChassisOperations(
         if (slotNumber !in 1..SmartChassisProtocol.SLOT_COUNT || quantity !in 0..0xFFFF) {
             return null
         }
-        val normalizedPartId = protocolPartId.trim().uppercase(Locale.ROOT)
-        if (!normalizedPartId.matches(PROTOCOL_PART_ID_REGEX) || !connectIfNeeded(macAddress)) {
+        val normalizedPartId = protocolPartIdStrategy.normalize(protocolPartId)
+        if (normalizedPartId == null || !connectIfNeeded(macAddress)) {
             return null
         }
         return manager.writeOne(
@@ -137,10 +139,10 @@ class SmartChassisOperations(
         quantity: Int
     ): SmartChassisTableInfo? {
         val macAddress = container.validSmartChassisMacAddress() ?: return null
-        val normalizedPartId = protocolPartId.trim().uppercase(Locale.ROOT)
+        val normalizedPartId = protocolPartIdStrategy.normalize(protocolPartId)
         if (!isValidSlot(slotNumber) ||
             quantity !in 0..0xFFFF ||
-            !normalizedPartId.matches(PROTOCOL_PART_ID_REGEX) ||
+            normalizedPartId == null ||
             !connectIfNeeded(macAddress)
         ) {
             return null
@@ -312,5 +314,3 @@ data class SmartChassisRestorePreview(
     val tableInfo: SmartChassisTableInfo,
     val records: List<SmartChassisSlotRecord>
 )
-
-private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")

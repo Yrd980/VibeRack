@@ -29,7 +29,8 @@ class SlotOperationRepositoryImpl(
     private val containerDao: ContainerDao,
     private val componentDao: ComponentDao,
     private val stockPlacementRepository: StockPlacementRepository,
-    private val smartChassisOperations: SmartChassisOperations? = null
+    private val smartChassisOperations: SmartChassisOperations? = null,
+    private val protocolPartIdStrategy: ProtocolPartIdStrategy
 ) : SlotOperationRepository {
     override suspend fun writeOne(write: SlotOperationWrite): SlotOperationResult {
         if (write.quantity < 0) {
@@ -347,7 +348,7 @@ class SlotOperationRepositoryImpl(
         val now = System.currentTimeMillis()
         val component = ComponentEntity(
             partNumber = normalized,
-            protocolPartId = protocolPartIdForComponent(null, normalized, "SMART_SLOT_INBOUND"),
+            protocolPartId = protocolPartIdStrategy.forComponent(null, normalized, "SMART_SLOT_INBOUND"),
             name = normalized,
             updatedAt = now
         )
@@ -355,7 +356,7 @@ class SlotOperationRepositoryImpl(
         val resolved = if (insertedId > 0) {
             component.copy(
                 id = insertedId,
-                protocolPartId = protocolPartIdForComponent(insertedId, normalized, "SMART_SLOT_INBOUND")
+                protocolPartId = protocolPartIdStrategy.forComponent(insertedId, normalized, "SMART_SLOT_INBOUND")
             ).also { inserted ->
                 if (inserted.protocolPartId != component.protocolPartId) {
                     componentDao.update(inserted)
@@ -566,7 +567,7 @@ class SlotOperationRepositoryImpl(
         if (existing == null) {
             val entity = ComponentEntity(
                 partNumber = normalizedPartNumber,
-                protocolPartId = protocolPartIdForComponent(null, normalizedPartNumber, sourceType),
+                protocolPartId = protocolPartIdStrategy.forComponent(null, normalizedPartNumber, sourceType),
                 mpn = component.mpn,
                 name = component.name,
                 brand = component.brand,
@@ -582,7 +583,7 @@ class SlotOperationRepositoryImpl(
             val inserted = if (insertedId > 0) {
                 entity.copy(
                     id = insertedId,
-                    protocolPartId = protocolPartIdForComponent(insertedId, normalizedPartNumber, sourceType)
+                    protocolPartId = protocolPartIdStrategy.forComponent(insertedId, normalizedPartNumber, sourceType)
                 )
             } else {
                 componentDao.findByPartNumber(normalizedPartNumber)
@@ -595,7 +596,7 @@ class SlotOperationRepositoryImpl(
         }
         val updated = existing.copy(
             protocolPartId = existing.protocolPartId
-                ?: protocolPartIdForComponent(existing.id, normalizedPartNumber, sourceType),
+                ?: protocolPartIdStrategy.forComponent(existing.id, normalizedPartNumber, sourceType),
             mpn = component.mpn ?: existing.mpn,
             name = component.name ?: existing.name,
             brand = component.brand ?: existing.brand,
@@ -611,24 +612,6 @@ class SlotOperationRepositoryImpl(
             componentDao.update(updated)
         }
         return updated
-    }
-
-    private fun protocolPartIdForComponent(
-        componentId: Long?,
-        partNumber: String,
-        sourceType: String
-    ): String? {
-        val normalizedPartNumber = partNumber.trim().uppercase(Locale.ROOT)
-        val isManual = sourceType == "MANUAL_INPUT" ||
-            sourceType == "SMART_SLOT_INBOUND" ||
-            normalizedPartNumber.matches(MANUAL_INBOUND_PART_NUMBER_REGEX)
-        if (!isManual && normalizedPartNumber.matches(PROTOCOL_PART_ID_REGEX)) {
-            return normalizedPartNumber
-        }
-        if (normalizedPartNumber.matches(PROTOCOL_PART_ID_REGEX)) {
-            return normalizedPartNumber
-        }
-        return componentId?.let { id -> "M%09d".format(Locale.ROOT, id) }
     }
 
     private fun isValidBlock(slotCount: Int, from: Int, to: Int, length: Int): Boolean {
@@ -729,7 +712,5 @@ class SlotOperationRepositoryImpl(
         private const val ERROR_INVALID_QUANTITY = "invalid_quantity"
         private const val ERROR_SMART_CHASSIS_WRITE_FAILED = "smart_chassis_write_failed"
         private const val ERROR_UNSUPPORTED_OPERATION = "unsupported_operation"
-        private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
-        private val MANUAL_INBOUND_PART_NUMBER_REGEX = Regex("^C0\\d+$")
     }
 }

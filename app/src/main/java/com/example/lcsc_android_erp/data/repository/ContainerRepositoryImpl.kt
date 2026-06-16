@@ -32,7 +32,8 @@ class ContainerRepositoryImpl(
     private val database: AppDatabase,
     private val containerDao: ContainerDao,
     private val componentDao: ComponentDao,
-    private val stockPlacementRepository: StockPlacementRepository
+    private val stockPlacementRepository: StockPlacementRepository,
+    private val protocolPartIdStrategy: ProtocolPartIdStrategy
 ) : ContainerRepository {
     override fun observeContainers(): Flow<List<StockContainer>> {
         return containerDao.observeContainerSummaries().map { containers ->
@@ -171,7 +172,7 @@ class ContainerRepositoryImpl(
                     stockPlacementRepository.deleteSlotStock(slot.id)
                     return@forEachIndexed
                 }
-                val protocolPartId = normalizeProtocolPartId(record.partId)
+                val protocolPartId = protocolPartIdStrategy.normalize(record.partId)
                 if (protocolPartId == null) {
                     stockPlacementRepository.deleteSlotStock(slot.id)
                     return@forEachIndexed
@@ -214,14 +215,14 @@ class ContainerRepositoryImpl(
     }
 
     override suspend fun findComponentByProtocolPartId(protocolPartId: String): ComponentDetail? {
-        val normalizedPartId = normalizeProtocolPartId(protocolPartId) ?: return null
+        val normalizedPartId = protocolPartIdStrategy.normalize(protocolPartId) ?: return null
         val component = componentDao.findByProtocolPartId(normalizedPartId)
             ?: componentDao.findByPartNumber(normalizedPartId)
         return component?.let(::toComponentDetail)
     }
 
     override suspend fun findOrCreateManualPlaceholder(protocolPartId: String): ComponentDetail {
-        val normalizedPartId = normalizeProtocolPartId(protocolPartId)
+        val normalizedPartId = protocolPartIdStrategy.normalize(protocolPartId)
             ?: error("Invalid protocol part id: $protocolPartId")
         componentDao.findByProtocolPartId(normalizedPartId)?.let { return toComponentDetail(it) }
 
@@ -368,13 +369,6 @@ class ContainerRepositoryImpl(
             .getOrDefault(ContainerType.LEGACY_LOCATION)
     }
 
-    private fun normalizeProtocolPartId(value: String): String? {
-        return value
-            .trim()
-            .uppercase(Locale.ROOT)
-            .takeIf { it.matches(PROTOCOL_PART_ID_REGEX) }
-    }
-
     private fun smartChassisCode(macAddress: String, batchId: Int): String {
         val suffix = macAddress.replace(":", "").takeLast(4)
         return "VBRK-$suffix-$batchId"
@@ -416,7 +410,6 @@ class ContainerRepositoryImpl(
     }
 
     private companion object {
-        private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")
         private val MAC_ADDRESS_REGEX = Regex("^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
         private val SMART_CHASSIS_NAME_REGEX = Regex("^VBRK-[0-9A-F]{4}$")
     }
