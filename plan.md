@@ -15,30 +15,30 @@ Product rule: smart chassis binding table is the source of truth. App-side `stoc
 
 - Room already has unified container primitives: `container`, `container_slot`, `stock_item`, `stock_operation`.
 - Smart chassis cache fields exist on `ContainerEntity`: MAC, batch, proto version, battery, status flags, table sequence, CRC, seen/synced timestamps.
-- BLE protocol layer has codecs, GATT client, operations facade, scanner, fake client, and light commands.
-- Containers screen can scan/register chassis, connect, read restore preview, confirm restore, light a slot, and do a basic slot inbound write.
+- BLE protocol layer has codecs, GATT client, operations facade, scanner, fake client, table-info refresh, READ_ALL validation, and light commands.
+- Protocol test coverage exists for advertisement parsing, slot records, CRCs, table info, light command encoding, NFC device URI parsing, and fake chassis write/read/reflow behavior.
+- READ_ALL end frame is documented as `op=0x02,status=0x00,payload=0xFF`, and the app validates record count, slot numbers, table slot count, and CRC before restore.
+- Smart chassis slot operations now use a hardware-first boundary for `WRITE_ONE`, `CLEAR_ONE`, `SET_QTY`, `INSERT_AT`, `REMOVE_AT`, and `MOVE_BLOCK`: BLE succeeds first, then local `stock_item`, `container.tableSeq/tableCrc16`, and `stock_operation` are updated with returned table info.
+- Scan advertisements treat `table_seq` as a low-16 hint. A low16 mismatch marks cache as possibly stale by clearing sync state until full Table Info / READ_ALL validation.
+- Protocol part ID generation and validation are centralized in `ProtocolPartIdStrategy` and shared by inbound, slot operations, hardware restore, backup import, box migration, and BLE write validation.
+- Containers screen can scan/register chassis, connect, read restore preview, confirm restore, light a slot, write/clear/set quantity, and render a 25-slot digital twin grid with occupied/empty/low-stock/active-light states.
 - Search supports find-by-light for smart chassis stock records.
 - BOM has an initial pick-to-light path grouped by chassis MAC.
 - NFC device URI parsing and routing exist for `lcscerp://device?mac=...&batch=...&ver=...`.
 
-## Critical Gaps
+## Remaining Critical Gaps
 
-1. `SlotOperationRepositoryImpl` still directly mutates local `stock_item` for smart chassis operations and only records BLE opcode as metadata.
-2. `stock_operation.tableSeqAfter` often equals the old local table sequence instead of the BLE-returned `SmartChassisTableInfo.tableSeq`.
-3. Smart chassis reflow is still computed by app-side local stock copying. For smart chassis, MCU must execute `INSERT_AT`, `REMOVE_AT`, and `MOVE_BLOCK`.
-4. `READ_ALL` end frame is assumed as payload `0xFF`, but the protocol document does not define that frame precisely.
-5. Light command uses `WRITE_TYPE_NO_RESPONSE` but still waits for `onCharacteristicWrite`, which may not be reliable.
-6. GATT connection rebuilds `SmartChassisDevice` with zeroed identity metadata instead of preserving scan/NFC identity.
-7. Broadcast `table_seq` low 16 bits are stored as full `tableSeq`, with no stale-cache state or full uint32 validation after connection.
-8. Protocol part id generation is duplicated across repositories.
-9. Digital twin is not yet a first-class MVP entry with 25-slot status, stale state, and physical guidance.
-10. Inbound and BOM workflows still carry legacy location/box assumptions.
+1. Smart chassis reflow is hardware-first but still refreshes local cache by deterministic app-side transforms after successful `INSERT_AT`, `REMOVE_AT`, and `MOVE_BLOCK`. This is acceptable as the current protocol-tied fallback, but the stronger target is success -> READ_ALL -> CRC/table_seq validation before trusting cache.
+2. The main Inbound tab still writes through the legacy location-oriented `InventoryRepository.addInbound` path. Containers has a hardware-first slot inbound dialog, but stock-in is not yet a first-class smart chassis workflow from scan/enter component -> choose chassis/slot -> green `STOCK_IN` guidance -> `WRITE_ONE` -> local ledger.
+3. BOM pick-to-light is still an initial one-shot grouped light command. It does not yet maintain a pick session with per-target done state, remaining mask recomputation, repeated `PICK`, and `OFF` on complete/cancel.
+4. Digital twin exists inside Containers, but it is not yet the app's primary smart chassis entry from Home/Inventory/NFC resume flows. It also lacks polish around slot menu anchoring and richer physical guidance states.
+5. Legacy `inventory_item` / `inventory_txn` compatibility mirrors still coexist with `stock_item` / `stock_operation`, so legacy location assumptions continue to leak into inbound, search, and BOM workflows.
 
-## First Implementation Batch
+## Completed Implementation Batch
 
-### 1. Protocol Test Coverage
+### 1. Protocol Test Coverage - Complete
 
-Add JVM tests for:
+Implemented JVM tests for:
 
 - `SmartChassisCodec` advertisement parsing.
 - 16-byte slot record encode/decode.
@@ -58,14 +58,14 @@ Verify:
 
 - `./gradlew :app:testDebugUnitTest`
 
-### 2. Fix Protocol Edge Cases
+### 2. Fix Protocol Edge Cases - Complete
 
-Implement before product UI work:
+Implemented before product UI work:
 
-- Decide and document `READ_ALL` end frame. Prefer updating spec to define `op=0x02,status=0x00,payload=0xFF` if firmware agrees.
-- Change light no-response handling so write-start success proceeds to light status read without depending on `onCharacteristicWrite`.
-- Preserve scan/NFC identity across GATT connect so connected device retains batch, proto version, battery, status, table-seq low16, and advertised name.
-- Add protocol version guard in NFC/scan open path: unsupported future protocol should block writes and show upgrade message.
+- Decided and documented `READ_ALL` end frame as `op=0x02,status=0x00,payload=0xFF`.
+- Changed light no-response handling so write-start success proceeds to light status read without depending on `onCharacteristicWrite`.
+- Preserved scan/NFC identity across GATT connect so connected device retains batch, proto version, battery, status, table-seq low16, and advertised name.
+- Added protocol version guard in NFC/scan open path: unsupported future protocol blocks writes and shows upgrade message.
 
 Target files:
 
@@ -74,9 +74,9 @@ Target files:
 - `app/src/main/java/com/example/lcsc_android_erp/core/ble/smart/SmartChassisManager.kt`
 - `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersViewModel.kt`
 
-### 3. Create Hardware-First Commit Boundary
+### 3. Create Hardware-First Commit Boundary - Complete
 
-Add a smart chassis application service/repository path that:
+Added a smart chassis application service/repository path that:
 
 - Executes BLE operation first.
 - Receives `SmartChassisTableInfo`.
@@ -84,7 +84,7 @@ Add a smart chassis application service/repository path that:
 - Writes real `tableSeqBefore`, `tableSeqAfter`, `tableCrc16`, `bleOpcode`, and `bleStatus`.
 - Does not mutate local stock on BLE failure.
 
-Operations to cover:
+Operations covered:
 
 - `WRITE_ONE`
 - `CLEAR_ONE`
@@ -93,56 +93,36 @@ Operations to cover:
 - `REMOVE_AT`
 - `MOVE_BLOCK`
 
-Target files:
-
-- `app/src/main/java/com/example/lcsc_android_erp/core/ble/smart/SmartChassisOperations.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/SlotOperationRepositoryImpl.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/domain/repository/SlotOperationRepository.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/StockPlacementRepositoryImpl.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/core/database/entity/StockOperationEntity.kt`
-
 Acceptance:
 
 - Smart chassis local stock changes happen only after BLE success.
 - Failure leaves `stock_item` unchanged.
 - Operation log reflects returned table sequence.
 
-### 4. Protocol-Driven Reflow
+### 4. Protocol-Driven Reflow - Partial
 
 For smart chassis:
 
-- Do not independently renumber slots in app code.
-- Send `INSERT_AT`, `REMOVE_AT`, or `MOVE_BLOCK`.
-- On success, update cache by either:
-  - `READ_ALL` refresh, preferred for correctness; or
-  - one shared deterministic transform explicitly tied to the successful opcode and returned table info.
+- Do not independently renumber slots before hardware success.
+- Send `INSERT_AT`, `REMOVE_AT`, or `MOVE_BLOCK` first.
+- On success, update cache by one shared deterministic transform explicitly tied to the successful opcode and returned table info.
+
+Current status: smart chassis reflow sends hardware `INSERT_AT`, `REMOVE_AT`, or `MOVE_BLOCK` first, then applies shared deterministic local transforms and records returned table info. Next hardening step is to refresh via READ_ALL after successful reflow or add explicit transform regression coverage tied to each opcode.
 
 Legacy `BOX` may continue using local transforms until box model is migrated.
 
-Target files:
+### 5. Stale Cache State - Complete
 
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/SlotOperationRepositoryImpl.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/core/ble/smart/SmartChassisOperations.kt`
-
-### 5. Stale Cache State
-
-Implement scan-to-cache freshness:
+Implemented scan-to-cache freshness:
 
 - Treat advertisement `table_seq` as low16 hint, not full sequence.
 - If low16 differs from local `tableSeq & 0xFFFF`, mark chassis as possibly stale.
 - On connect, read full Table Info and CRC.
 - If full table info differs from local cache, show stale state and offer/read `READ_ALL`.
 
-Target files:
+### 6. Centralize Protocol Part ID Strategy - Complete
 
-- `app/src/main/java/com/example/lcsc_android_erp/core/database/entity/ContainerEntity.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/ContainerRepositoryImpl.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersUiState.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersScreen.kt`
-
-### 6. Centralize Protocol Part ID Strategy
-
-Extract one service for protocol part id rules:
+Extracted one service for protocol part id rules:
 
 - Catalog component: use valid `C...` id when available.
 - Custom/manual component: generate stable `M...` id.
@@ -156,9 +136,9 @@ Target starting points:
 - `app/src/main/java/com/example/lcsc_android_erp/data/repository/SlotOperationRepositoryImpl.kt`
 - `app/src/main/java/com/example/lcsc_android_erp/data/repository/ContainerRepositoryImpl.kt`
 
-### 7. Digital Twin MVP
+### 7. Digital Twin MVP - Complete
 
-Make smart chassis visible as an MVP workflow:
+Made smart chassis visible as an MVP workflow:
 
 - 25-slot grid.
 - Occupied/empty/low-stock visual states.
@@ -171,7 +151,8 @@ Target files:
 
 - `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersScreen.kt`
 - `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersViewModel.kt`
-- Optionally route Home/Inventory to Containers as the smart chassis digital twin entry.
+
+## Next Implementation Batch
 
 ### 8. Smart Chassis Inbound Flow
 
@@ -190,6 +171,12 @@ Target files:
 - `app/src/main/java/com/example/lcsc_android_erp/feature/inbound/MaterialInboundDialog.kt`
 - `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersViewModel.kt`
 
+Acceptance:
+
+- The main Inbound tab can complete a smart chassis stock-in without going through a legacy storage location.
+- BLE `WRITE_ONE` is the only binding-table mutation for smart chassis stock-in.
+- Local `stock_item` and operation log update only after BLE success and returned table info.
+
 ### 9. BOM Pick-To-Light Completion Loop
 
 Complete the pick session:
@@ -206,6 +193,33 @@ Target files:
 - `app/src/main/java/com/example/lcsc_android_erp/feature/search/SearchViewModel.kt`
 - `app/src/main/java/com/example/lcsc_android_erp/feature/search/SearchScreen.kt`
 
+### 10. Reflow Cache Hardening
+
+For smart chassis reflow operations:
+
+- Prefer READ_ALL after successful `INSERT_AT`, `REMOVE_AT`, or `MOVE_BLOCK`.
+- Validate record count, slot numbers, `slot_count`, CRC, and returned `table_seq` before updating cache.
+- If READ_ALL is unavailable or too slow, keep deterministic transforms but add focused tests that prove app cache matches fake hardware after each opcode.
+
+Target files:
+
+- `app/src/main/java/com/example/lcsc_android_erp/data/repository/SlotOperationRepositoryImpl.kt`
+- `app/src/main/java/com/example/lcsc_android_erp/core/ble/smart/SmartChassisOperations.kt`
+- `app/src/test/java/com/example/lcsc_android_erp/data/repository/SlotOperationRepositoryImplTest.kt`
+
+### 11. Digital Twin Entry Polish
+
+- Route Home / Inventory / NFC resume flows into the selected smart chassis digital twin when hardware identity is known.
+- Improve slot action menu anchoring and compact controls.
+- Keep the first screen focused on the usable twin, not a legacy container list, when the user arrives from NFC or chassis scan.
+
+Target files:
+
+- `app/src/main/java/com/example/lcsc_android_erp/ui/LcscApp.kt`
+- `app/src/main/java/com/example/lcsc_android_erp/feature/home/HomeScreen.kt`
+- `app/src/main/java/com/example/lcsc_android_erp/feature/inventory/InventoryScreen.kt`
+- `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersScreen.kt`
+
 ## Deferred Work
 
 - Migrate legacy `inventory_item/inventory_txn` into compatibility mirrors of `stock_item/stock_operation`.
@@ -216,4 +230,4 @@ Target files:
 
 ## Suggested Next Session Prompt
 
-Read `plan.md`, `CONTEXT.md`, `docs/adr/0001-prefer-protocol-first-viberack.md`, `docs/智能物料管理系统_项目技术文档_v1.0.md`, and `docs/智能底盘BLE接口规格_v0.1.md`. Start with batch 1 and 2: add protocol tests, fix the light no-response handling, and clarify READ_ALL end-frame behavior. Verify with `./gradlew :app:testDebugUnitTest`.
+Read `plan.md`, `CONTEXT.md`, `docs/adr/0001-prefer-protocol-first-viberack.md`, `docs/智能物料管理系统_项目技术文档_v1.0.md`, and `docs/智能底盘BLE接口规格_v0.1.md`. Current priority is batch 8: make the main Inbound flow smart-chassis-first. The flow should scan/enter a component, choose chassis and slot, send `STOCK_IN` green guidance, wait for user confirmation, send `WRITE_ONE`, then update local `stock_item` / `stock_operation` only after BLE success. Verify with `./gradlew :app:compileDebugKotlin` and focused JVM tests if repository logic changes.
