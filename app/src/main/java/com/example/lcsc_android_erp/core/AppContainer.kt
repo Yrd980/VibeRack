@@ -147,13 +147,6 @@ class AppContainer(context: Context) {
         stockPlacementRepository = stockPlacementRepository
     )
 
-    val slotOperationRepository: SlotOperationRepository = SlotOperationRepositoryImpl(
-        database = database,
-        containerDao = database.containerDao(),
-        componentDao = database.componentDao(),
-        stockPlacementRepository = stockPlacementRepository
-    )
-
     val smartChassisManager = SmartChassisManager(
         client = SmartChassisGattClient(
             appContext = appContext,
@@ -165,6 +158,14 @@ class AppContainer(context: Context) {
         containerRepository = containerRepository
     )
     val smartChassisScanner = SmartChassisScanner(appContext)
+
+    val slotOperationRepository: SlotOperationRepository = SlotOperationRepositoryImpl(
+        database = database,
+        containerDao = database.containerDao(),
+        componentDao = database.componentDao(),
+        stockPlacementRepository = stockPlacementRepository,
+        smartChassisOperations = smartChassisOperations
+    )
 
     val inventoryBackupManager = InventoryBackupManager(
         context = appContext,

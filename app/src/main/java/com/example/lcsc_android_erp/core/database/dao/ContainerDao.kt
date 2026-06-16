@@ -68,6 +68,23 @@ interface ContainerDao {
     @Update
     suspend fun updateContainer(container: ContainerEntity)
 
+    @Query(
+        """
+        UPDATE `container`
+        SET tableSeq = :tableSeq,
+            tableCrc16 = :tableCrc16,
+            lastSyncedAt = :syncedAt,
+            updatedAt = :syncedAt
+        WHERE id = :containerId
+        """
+    )
+    suspend fun updateSmartChassisTableInfo(
+        containerId: Long,
+        tableSeq: Long,
+        tableCrc16: Int,
+        syncedAt: Long
+    )
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertSlots(slots: List<ContainerSlotEntity>)
 

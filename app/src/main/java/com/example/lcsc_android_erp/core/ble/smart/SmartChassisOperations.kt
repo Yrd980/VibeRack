@@ -114,6 +114,74 @@ class SmartChassisOperations(
         )
     }
 
+    suspend fun clearSlot(container: StockContainer, slotNumber: Int): SmartChassisTableInfo? {
+        val macAddress = container.validSmartChassisMacAddress() ?: return null
+        if (!isValidSlot(slotNumber) || !connectIfNeeded(macAddress)) {
+            return null
+        }
+        return manager.clearOne(slotNumber)
+    }
+
+    suspend fun setSlotQuantity(container: StockContainer, slotNumber: Int, quantity: Int): SmartChassisTableInfo? {
+        val macAddress = container.validSmartChassisMacAddress() ?: return null
+        if (!isValidSlot(slotNumber) || quantity !in 0..0xFFFF || !connectIfNeeded(macAddress)) {
+            return null
+        }
+        return manager.setQuantity(slotNumber, quantity)
+    }
+
+    suspend fun insertSlot(
+        container: StockContainer,
+        slotNumber: Int,
+        protocolPartId: String,
+        quantity: Int
+    ): SmartChassisTableInfo? {
+        val macAddress = container.validSmartChassisMacAddress() ?: return null
+        val normalizedPartId = protocolPartId.trim().uppercase(Locale.ROOT)
+        if (!isValidSlot(slotNumber) ||
+            quantity !in 0..0xFFFF ||
+            !normalizedPartId.matches(PROTOCOL_PART_ID_REGEX) ||
+            !connectIfNeeded(macAddress)
+        ) {
+            return null
+        }
+        return manager.insertAt(
+            slotNumber,
+            SmartChassisSlotRecord(
+                slot = slotNumber,
+                partId = normalizedPartId,
+                quantity = quantity,
+                flags = if (normalizedPartId.startsWith("M")) {
+                    SmartChassisProtocol.SLOT_FLAG_CUSTOM_PART
+                } else {
+                    0
+                },
+                crc8 = 0
+            )
+        )
+    }
+
+    suspend fun removeSlot(container: StockContainer, slotNumber: Int): SmartChassisTableInfo? {
+        val macAddress = container.validSmartChassisMacAddress() ?: return null
+        if (!isValidSlot(slotNumber) || !connectIfNeeded(macAddress)) {
+            return null
+        }
+        return manager.removeAt(slotNumber)
+    }
+
+    suspend fun moveBlock(
+        container: StockContainer,
+        fromSlotNumber: Int,
+        toSlotNumber: Int,
+        length: Int
+    ): SmartChassisTableInfo? {
+        val macAddress = container.validSmartChassisMacAddress() ?: return null
+        if (!isValidBlock(fromSlotNumber, toSlotNumber, length) || !connectIfNeeded(macAddress)) {
+            return null
+        }
+        return manager.moveBlock(fromSlotNumber, toSlotNumber, length)
+    }
+
     suspend fun findSlot(macAddress: String, slotNumber: Int): Boolean {
         return lightSingleSlot(
             macAddress = macAddress,
@@ -205,11 +273,22 @@ class SmartChassisOperations(
         if (type != ContainerType.SMART_CHASSIS) {
             return null
         }
+        if (protoVersion != null && protoVersion != SmartChassisProtocol.PROTOCOL_VERSION) {
+            return null
+        }
         return macAddress?.normalizeMacAddress()?.takeIf(String::isNotBlank)
     }
 
     private fun isValidSlot(slotNumber: Int): Boolean {
         return slotNumber in 1..SmartChassisProtocol.SLOT_COUNT
+    }
+
+    private fun isValidBlock(from: Int, to: Int, length: Int): Boolean {
+        return isValidSlot(from) &&
+            isValidSlot(to) &&
+            length in 1..SmartChassisProtocol.SLOT_COUNT &&
+            from + length - 1 <= SmartChassisProtocol.SLOT_COUNT &&
+            to + length - 1 <= SmartChassisProtocol.SLOT_COUNT
     }
 
     private fun String.normalizeMacAddress(): String {
