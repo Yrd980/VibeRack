@@ -27,3 +27,9 @@ private struct HardwareRestoreView: View {
             .navigationTitle("从底盘恢复")
     }
 }
+
+#Preview {
+    NavigationStack {
+        SettingsView()
+    }
+}

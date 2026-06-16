@@ -14,14 +14,20 @@ enum Route: Hashable {
 @MainActor
 @Observable
 final class TabRouter {
-    private var routers: [AppTab: RouterPath] = [:]
+    private let routers: [AppTab: RouterPath]
+
+    var configuredTabs: [AppTab] {
+        Array(routers.keys)
+    }
+
+    init(tabs: [AppTab] = AppTab.allCases) {
+        self.routers = Dictionary(uniqueKeysWithValues: tabs.map { ($0, RouterPath()) })
+    }
 
     func router(for tab: AppTab) -> RouterPath {
-        if let router = routers[tab] {
-            return router
+        guard let router = routers[tab] else {
+            preconditionFailure("No router configured for \(tab.rawValue)")
         }
-        let router = RouterPath()
-        routers[tab] = router
         return router
     }
 

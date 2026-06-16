@@ -91,3 +91,22 @@ private struct SlotGridView: View {
         }
     }
 }
+
+#Preview("Chassis List") {
+    NavigationStack {
+        ChassisListView()
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .chassisDetail(let id):
+                    ChassisDetailView(chassisID: id)
+                }
+            }
+    }
+    .environment(RouterPath())
+}
+
+#Preview("Chassis Detail") {
+    NavigationStack {
+        ChassisDetailView(chassisID: "simulator")
+    }
+}

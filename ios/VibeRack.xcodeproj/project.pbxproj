@@ -18,6 +18,9 @@
 		AA0000000000000000000109 /* SmartChassisProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* SmartChassisProtocol.swift */; };
 		AA0000000000000000000110 /* SmartChassisCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* SmartChassisCodec.swift */; };
 		AA0000000000000000000201 /* SmartChassisProtocolVectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000009 /* SmartChassisProtocolVectorTests.swift */; };
+		AA0000000000000000000202 /* RouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* RouterTests.swift */; };
+		AA0000000000000000000203 /* ProtocolFixtures in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000615 /* ProtocolFixtures */; };
+		AA0000000000000000000204 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000005001 /* GRDB */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,6 +45,8 @@
 		AA0000000000000000000009 /* SmartChassisProtocolVectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisProtocolVectorTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000010 /* SmartChassisProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisProtocol.swift; sourceTree = "<group>"; };
 		AA0000000000000000000011 /* SmartChassisCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisCodec.swift; sourceTree = "<group>"; };
+		AA0000000000000000000012 /* RouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouterTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000615 /* ProtocolFixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ProtocolFixtures; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* VibeRack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeRack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000402 /* VibeRackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeRackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -51,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000000204 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -117,6 +123,8 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000608 /* ProtocolTests */,
+				AA0000000000000000000615 /* ProtocolFixtures */,
+				AA0000000000000000000012 /* RouterTests.swift */,
 			);
 			path = VibeRackTests;
 			sourceTree = "<group>";
@@ -195,6 +203,9 @@
 			dependencies = (
 			);
 			name = VibeRack;
+			packageProductDependencies = (
+				AA0000000000000000005001 /* GRDB */,
+			);
 			productName = VibeRack;
 			productReference = AA0000000000000000000401 /* VibeRack.app */;
 			productType = "com.apple.product-type.application";
@@ -245,6 +256,9 @@
 				Base,
 			);
 			mainGroup = AA0000000000000000000601;
+			packageReferences = (
+				AA0000000000000000005000 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+			);
 			productRefGroup = AA0000000000000000000609 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -267,6 +281,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000000203 /* ProtocolFixtures in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,6 +310,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000201 /* SmartChassisProtocolVectorTests.swift in Sources */,
+				AA0000000000000000000202 /* RouterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,6 +323,25 @@
 			targetProxy = AA0000000000000000000301 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA0000000000000000005000 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.11.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA0000000000000000005001 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000005000 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA0000000000000000004001 /* Debug */ = {

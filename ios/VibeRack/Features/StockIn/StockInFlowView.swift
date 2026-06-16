@@ -19,3 +19,9 @@ struct StockInFlowView: View {
         .navigationTitle("入库")
     }
 }
+
+#Preview {
+    NavigationStack {
+        StockInFlowView()
+    }
+}

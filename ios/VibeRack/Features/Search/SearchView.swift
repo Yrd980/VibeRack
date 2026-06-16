@@ -31,3 +31,9 @@ struct SearchView: View {
         .searchable(text: $query, prompt: "料号、MPN、封装")
     }
 }
+
+#Preview {
+    NavigationStack {
+        SearchView()
+    }
+}

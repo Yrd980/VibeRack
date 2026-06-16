@@ -58,3 +58,4 @@ xcuserdata/
 .build/
 .swiftpm/
 Package.resolved
+!ios/VibeRack.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved

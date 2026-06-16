@@ -2,6 +2,44 @@ import XCTest
 @testable import VibeRack
 
 final class SmartChassisProtocolVectorTests: XCTestCase {
+    func testHardwareProtocolJsonVectors() throws {
+        let vectors = try HardwareProtocolVectors.load()
+
+        XCTAssertEqual(vectors.version, "0.1")
+        XCTAssertEqual(vectors.slotCount, SmartChassisProtocol.slotCount)
+        XCTAssertEqual(vectors.slotRecordSize, SmartChassisProtocol.slotRecordSize)
+        XCTAssertEqual(vectors.lightCommandSize, SmartChassisProtocol.lightCommandSize)
+
+        let record = SmartChassisCodec.encodeSlotRecord(
+            slot: 1,
+            partId: "C1234567",
+            quantity: 12,
+            flags: 0
+        )
+
+        XCTAssertEqual(
+            SmartChassisCodec.encodeWriteOne(record: record),
+            vectors.binding["write_one_slot_1_c1234567_qty_12"]?.data
+        )
+        XCTAssertEqual(SmartChassisCodec.encodeReadOne(slot: 1), vectors.binding["read_one_slot_1"]?.data)
+        XCTAssertEqual(SmartChassisCodec.encodeReadAll(), vectors.binding["read_all"]?.data)
+        XCTAssertEqual(
+            SmartChassisCodec.parseBindingResult(try vectors.binding.requiredData("read_all_end"))?.payload,
+            Data([SmartChassisProtocol.readAllEndMarker])
+        )
+        XCTAssertEqual(SmartChassisCodec.encodeFactoryReset(), vectors.binding["factory_reset"]?.data)
+
+        XCTAssertEqual(
+            SmartChassisCodec.encodeLightCommand(.findSlot1Green30s),
+            vectors.light["find_slot_1_green_30s"]?.data
+        )
+        XCTAssertEqual(
+            SmartChassisCodec.encodeLightCommand(.pickSlots1_7_25Green30s),
+            vectors.light["pick_slots_1_7_25_green_30s"]?.data
+        )
+        XCTAssertEqual(SmartChassisCodec.encodeLightCommand(.off), vectors.light["off"]?.data)
+    }
+
     func testHardwareBindingCommandVectors() {
         let record = SmartChassisCodec.encodeSlotRecord(
             slot: 1,
@@ -144,4 +182,86 @@ private extension Data {
             .compactMap { UInt8($0, radix: 16) }
         self.init(bytes)
     }
+}
+
+private struct HardwareProtocolVectors: Decodable {
+    let version: String
+    let slotCount: Int
+    let slotRecordSize: Int
+    let lightCommandSize: Int
+    let binding: [String: HardwareProtocolVector]
+    let light: [String: HardwareProtocolVector]
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case slotCount = "slot_count"
+        case slotRecordSize = "slot_record_size"
+        case lightCommandSize = "light_command_size"
+        case binding
+        case light
+    }
+
+    static func load() throws -> Self {
+        let bundle = Bundle(for: SmartChassisProtocolVectorTests.self)
+        let url = try XCTUnwrap(
+            bundle.url(
+                forResource: "test-vectors",
+                withExtension: "json",
+                subdirectory: "ProtocolFixtures"
+            )
+        )
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(Self.self, from: data)
+    }
+}
+
+private struct HardwareProtocolVector: Decodable {
+    let hex: String
+    let description: String
+
+    var data: Data {
+        Data(hex: hex)
+    }
+}
+
+private extension Dictionary where Key == String, Value == HardwareProtocolVector {
+    func requiredData(_ key: String) throws -> Data {
+        try XCTUnwrap(self[key], "Missing hardware protocol vector: \(key)").data
+    }
+}
+
+private extension LightCommand {
+    static let findSlot1Green30s = LightCommand(
+        mode: .find,
+        maskA: SmartChassisCodec.slotMask(slot: 1),
+        maskB: 0,
+        colorA: .green,
+        colorB: .black,
+        timeoutSeconds: 30
+    )
+
+    static let pickSlots1_7_25Green30s = LightCommand(
+        mode: .pick,
+        maskA: SmartChassisCodec.slotMask(slot: 1) |
+            SmartChassisCodec.slotMask(slot: 7) |
+            SmartChassisCodec.slotMask(slot: 25),
+        maskB: 0,
+        colorA: .green,
+        colorB: .black,
+        timeoutSeconds: 30
+    )
+
+    static let off = LightCommand(
+        mode: .off,
+        maskA: 0,
+        maskB: 0,
+        colorA: .black,
+        colorB: .black,
+        timeoutSeconds: 0
+    )
+}
+
+private extension RGBColor {
+    static let green = RGBColor(red: 0, green: 255, blue: 0)
+    static let black = RGBColor(red: 0, green: 0, blue: 0)
 }
