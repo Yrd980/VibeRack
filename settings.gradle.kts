@@ -28,4 +28,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "viberack_app"
+include(":domain")
 include(":app")

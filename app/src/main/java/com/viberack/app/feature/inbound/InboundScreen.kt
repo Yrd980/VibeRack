@@ -1,19 +1,14 @@
 package com.viberack.app.feature.inbound
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageDecoder
-import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,14 +22,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -63,54 +56,42 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlashOff
 import androidx.compose.material.icons.outlined.FlashOn
-import coil3.compose.AsyncImage
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.viberack.app.VibeRackApplication
 import com.viberack.app.R
 import com.viberack.app.core.nfc.NfcLabelPayloadCodec
-import com.viberack.app.core.printer.PrinterConnectionState
 import com.viberack.app.core.printer.PrinterManager
 import com.viberack.app.core.ui.LocationPickerDialog
 import com.viberack.app.core.ui.LocationPickerOption
 import com.viberack.app.core.ui.MaterialListCard
-import com.viberack.app.core.ui.QuantityOutlinedTextField
-import com.viberack.app.core.ui.SourceOutlinedTextField
-import com.viberack.app.core.ui.clearFocusOnTapOutside
 import com.viberack.app.core.ui.performCopyFeedback
 import com.viberack.app.domain.model.ComponentDetail
 import com.viberack.app.domain.model.ExistingStockLocation
-import com.viberack.app.domain.model.LocationCategoryProfile
+import com.viberack.app.domain.model.LegacyLocationCode
 import com.viberack.app.domain.model.StorageLocation
-import java.io.File
-import java.io.FileOutputStream
-import java.util.Locale
+import com.viberack.app.domain.stock.StockInLocationSuggester
 import kotlinx.coroutines.launch
 
 private const val MANUAL_INBOUND_DEFAULT_LOCATION_CODE = "A1"
+private val stockInLocationSuggester = StockInLocationSuggester()
 
 @Composable
 fun InboundRoute(
@@ -359,7 +340,7 @@ fun InboundScreen(
                 component = component,
                 initialQuantity = payload?.quantity ?: 1,
                 quantityEditable = true,
-                initialLocation = suggestInboundLocationCode(
+                initialLocation = stockInLocationSuggester.suggestLocationCode(
                     component = component,
                     existingStockLocations = uiState.existingStockByPartNumber[component.partNumber].orEmpty(),
                     availableLocations = uiState.locations,
@@ -558,7 +539,7 @@ fun InboundScreen(
                                     component = component,
                                     initialQuantity = 0,
                                     quantityEditable = true,
-                                    initialLocation = suggestInboundLocationCode(
+                                    initialLocation = stockInLocationSuggester.suggestLocationCode(
                                         component = component,
                                         existingStockLocations = uiState.existingStockByPartNumber[component.partNumber].orEmpty(),
                                         availableLocations = uiState.locations,
@@ -706,154 +687,62 @@ fun InboundScreen(
     }
 
     qrPreviewComponent?.let { component ->
-        AlertDialog(
-            onDismissRequest = {
-                if (!qrPreviewSaving && !qrPreviewPrinting) {
-                    qrPreviewComponent = null
-                    qrPreviewBitmap = null
-                    qrPreviewLoading = false
+        QrLabelPreviewDialog(
+            component = component,
+            bitmap = qrPreviewBitmap,
+            printerState = printerState,
+            loading = qrPreviewLoading,
+            saving = qrPreviewSaving,
+            printing = qrPreviewPrinting,
+            onDismiss = {
+                qrPreviewComponent = null
+                qrPreviewBitmap = null
+                qrPreviewLoading = false
+            },
+            onWriteNfc = {
+                appContainer.nfcLabelManager.setPendingWrite(
+                    NfcLabelPayloadCodec.materialUri(component.partNumber)
+                )
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.nfc_tap_tag_to_write),
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onPrint = { bitmap ->
+                qrPreviewPrinting = true
+                printerManager.printBitmap(bitmap) { errorMessage ->
+                    qrPreviewPrinting = false
+                    Toast.makeText(
+                        context,
+                        errorMessage ?: context.getString(R.string.printer_print_success),
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
-            title = { Text(text = stringResource(R.string.inbound_manual_print_qr_preview_title)) },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 520.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    if (qrPreviewLoading) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            CircularProgressIndicator()
-                            Text(text = stringResource(R.string.inbound_manual_print_qr_preview_loading))
-                        }
-                    } else {
-                        qrPreviewBitmap?.let { bitmap ->
-                            androidx.compose.foundation.Image(
-                                bitmap = bitmap.asImageBitmap(),
-                                contentDescription = component.name ?: component.partNumber,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(MaterialTheme.shapes.medium)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentScale = ContentScale.Fit
-                            )
-                        }
-                        Text(
-                            text = if (printerState.connectionState == PrinterConnectionState.CONNECTED) {
-                                printerState.connectionSummary
-                            } else {
-                                stringResource(R.string.printer_not_connected)
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (qrPreviewPrinting || printerState.isPrinting) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp))
-                                Text(text = stringResource(R.string.printer_print_in_progress))
-                            }
-                        }
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
+            onSave = { bitmap ->
+                qrPreviewSaving = true
+                coroutineScope.launch {
+                    MaterialQrCodeExporter.saveBitmapToGallery(
+                        context = context,
+                        partNumber = component.partNumber,
+                        bitmap = bitmap
+                    ).onSuccess { fileName ->
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.inbound_manual_print_qr_saved, fileName),
+                            Toast.LENGTH_SHORT
+                        ).show()
                         qrPreviewComponent = null
                         qrPreviewBitmap = null
-                        qrPreviewLoading = false
-                    },
-                    enabled = !qrPreviewSaving && !qrPreviewPrinting
-                ) {
-                    Text(text = stringResource(R.string.common_cancel))
-                }
-            },
-            confirmButton = {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TextButton(
-                        onClick = {
-                            appContainer.nfcLabelManager.setPendingWrite(
-                                NfcLabelPayloadCodec.materialUri(component.partNumber)
-                            )
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.nfc_tap_tag_to_write),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        },
-                        enabled = !qrPreviewLoading &&
-                            !qrPreviewSaving &&
-                            !qrPreviewPrinting &&
-                            qrPreviewBitmap != null
-                    ) {
-                        Text(text = stringResource(R.string.nfc_write_tag))
+                    }.onFailure { error ->
+                        Toast.makeText(
+                            context,
+                            error.message ?: context.getString(R.string.inbound_manual_print_qr_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
-                    TextButton(
-                        onClick = {
-                            val bitmap = qrPreviewBitmap ?: return@TextButton
-                            qrPreviewPrinting = true
-                            printerManager.printBitmap(bitmap) { errorMessage ->
-                                qrPreviewPrinting = false
-                                Toast.makeText(
-                                    context,
-                                    errorMessage ?: context.getString(R.string.printer_print_success),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        },
-                        enabled = !qrPreviewLoading &&
-                            !qrPreviewSaving &&
-                            !qrPreviewPrinting &&
-                            qrPreviewBitmap != null &&
-                            printerState.connectionState == PrinterConnectionState.CONNECTED &&
-                            !printerState.isPrinting
-                    ) {
-                        Text(text = stringResource(R.string.printer_print_label))
-                    }
-                    TextButton(
-                        onClick = {
-                            val bitmap = qrPreviewBitmap ?: return@TextButton
-                            qrPreviewSaving = true
-                            coroutineScope.launch {
-                                MaterialQrCodeExporter.saveBitmapToGallery(
-                                    context = context,
-                                    partNumber = component.partNumber,
-                                    bitmap = bitmap
-                                ).onSuccess { fileName ->
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.inbound_manual_print_qr_saved, fileName),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    qrPreviewComponent = null
-                                    qrPreviewBitmap = null
-                                }.onFailure { error ->
-                                    Toast.makeText(
-                                        context,
-                                        error.message ?: context.getString(R.string.inbound_manual_print_qr_failed),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                                qrPreviewSaving = false
-                            }
-                        },
-                        enabled = !qrPreviewLoading && !qrPreviewSaving && !qrPreviewPrinting && qrPreviewBitmap != null
-                    ) {
-                        Text(text = stringResource(R.string.common_save))
-                    }
+                    qrPreviewSaving = false
                 }
             }
         )
@@ -997,403 +886,6 @@ private fun RecentManualSearchesCard(
     }
 }
 
-@Composable
-private fun ManualInboundEditorCard(
-    component: ComponentDetail,
-    partNumber: String,
-    name: String,
-    onNameChange: (String) -> Unit,
-    brand: String,
-    onBrandChange: (String) -> Unit,
-    packageName: String,
-    onPackageNameChange: (String) -> Unit,
-    category: String,
-    onCategoryChange: (String) -> Unit,
-    quantityText: String,
-    onQuantityTextChange: (String) -> Unit,
-    description: String,
-    onDescriptionChange: (String) -> Unit,
-    sourceUrl: String,
-    originalSourceUrl: String,
-    onSourceUrlChange: (String) -> Unit,
-    onImagePreviewClick: () -> Unit,
-    specificationText: String,
-    onSpecificationTextChange: (String) -> Unit,
-    showSpecificationEditor: Boolean,
-    errorMessage: String?,
-    locationLabel: String,
-    onLocationClick: () -> Unit,
-    onInboundClick: () -> Unit
-) {
-    val context = LocalContext.current
-    val openableSourceUrl = remember(sourceUrl) { extractOpenableSourceUrl(sourceUrl) }
-    val sourceChanged = sourceUrl != originalSourceUrl
-    Column(
-        modifier = Modifier.clearFocusOnTapOutside(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Card(
-                modifier = Modifier
-                    .width(168.dp)
-                    .combinedClickable(
-                        onClick = onImagePreviewClick,
-                        onLongClick = onImagePreviewClick
-                    )
-            ) {
-                val imageModel = component.imageLocalPath
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let(::File)
-                    ?.takeIf { it.exists() && it.length() > 0L }
-                    ?: component.imageUrl?.takeIf { it.isNotBlank() }
-                if (imageModel != null) {
-                    AsyncImage(
-                        model = imageModel,
-                        contentDescription = component.name ?: component.partNumber,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentScale = ContentScale.Fit
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = component.partNumber.ifBlank { stringResource(R.string.inbound_component_number) },
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = stringResource(R.string.inbound_manual_entry_pick_image_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-            ManualInboundEditableFirstPropertyCard(
-                partNumber = partNumber,
-                brand = brand,
-                onBrandChange = onBrandChange,
-                packageName = packageName,
-                onPackageNameChange = onPackageNameChange,
-                category = category,
-                onCategoryChange = onCategoryChange,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(10.dp)
-                .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-        )
-        ManualInboundEditableSecondPropertyCard(
-            name = name,
-            onNameChange = onNameChange,
-            specificationText = specificationText,
-            onSpecificationTextChange = onSpecificationTextChange,
-            showSpecificationEditor = showSpecificationEditor,
-            description = description,
-            onDescriptionChange = onDescriptionChange
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val originalQuantityText = ""
-            QuantityOutlinedTextField(
-                value = quantityText,
-                onValueChange = onQuantityTextChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.inbound_quantity_label),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Next
-                ),
-                onDecrease = {
-                    val current = quantityText.toIntOrNull() ?: 0
-                    onQuantityTextChange((current - 1).coerceAtLeast(0).toString())
-                },
-                decreaseContentDescription = stringResource(R.string.common_decrease),
-                onIncrease = {
-                    val current = quantityText.toIntOrNull()
-                    onQuantityTextChange(((current ?: 0) + 1).toString())
-                },
-                increaseContentDescription = stringResource(R.string.common_increase),
-                showUndo = quantityText != originalQuantityText,
-                onUndo = { onQuantityTextChange(originalQuantityText) },
-                undoContentDescription = stringResource(R.string.common_undo)
-            )
-            SourceOutlinedTextField(
-                value = sourceUrl,
-                onValueChange = onSourceUrlChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.inventory_source_label),
-                singleLine = false,
-                minLines = 2,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    keyboardType = KeyboardType.Uri,
-                    imeAction = ImeAction.Default
-                ),
-                showUndo = sourceChanged,
-                onUndo = { onSourceUrlChange(originalSourceUrl) },
-                undoContentDescription = stringResource(R.string.common_undo),
-                onValueBlurTransform = ::normalizeSourceValue,
-                showOpen = openableSourceUrl != null,
-                onOpen = {
-                    openableSourceUrl ?: return@SourceOutlinedTextField
-                    runCatching {
-                        openSourceUrl(context, openableSourceUrl)
-                    }.onFailure {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.inventory_open_source_failed),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                },
-                openContentDescription = stringResource(R.string.inventory_open_source)
-            )
-        }
-        errorMessage?.let { message ->
-            PayloadFieldCard(
-                title = stringResource(R.string.inbound_component_error_title),
-                value = message
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onLocationClick) {
-                Text(text = locationLabel)
-            }
-            Button(onClick = onInboundClick) {
-                Text(text = stringResource(R.string.common_confirm))
-            }
-        }
-    }
-}
-
-private fun normalizeSourceValue(value: String): String {
-    val normalized = value.trim()
-    return extractOpenableSourceUrl(normalized) ?: normalized
-}
-
-@Composable
-private fun ManualInboundEditableFirstPropertyCard(
-    partNumber: String,
-    brand: String,
-    onBrandChange: (String) -> Unit,
-    packageName: String,
-    onPackageNameChange: (String) -> Unit,
-    category: String,
-    onCategoryChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            ManualInboundEditableCell(
-                label = stringResource(R.string.inbound_component_number),
-                value = partNumber,
-                onValueChange = {},
-                readOnly = true
-            )
-            HorizontalDivider()
-            ManualInboundEditableCell(
-                label = stringResource(R.string.inbound_component_brand),
-                value = brand,
-                onValueChange = onBrandChange
-            )
-            HorizontalDivider()
-            ManualInboundEditableCell(
-                label = stringResource(R.string.inbound_component_package),
-                value = packageName,
-                onValueChange = onPackageNameChange
-            )
-            HorizontalDivider()
-            ManualInboundEditableCell(
-                label = stringResource(R.string.inbound_component_category),
-                value = category,
-                onValueChange = onCategoryChange
-            )
-        }
-    }
-}
-
-@Composable
-private fun ManualInboundEditableSecondPropertyCard(
-    name: String,
-    onNameChange: (String) -> Unit,
-    specificationText: String,
-    onSpecificationTextChange: (String) -> Unit,
-    showSpecificationEditor: Boolean,
-    description: String,
-    onDescriptionChange: (String) -> Unit,
-) {
-    val specificationEntries = remember(specificationText) {
-        parseManualSpecificationEntries(specificationText)
-    }
-    Card {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            ManualInboundEditableRow(
-                label = stringResource(R.string.inbound_component_name),
-                value = name,
-                onValueChange = onNameChange
-            )
-            if (showSpecificationEditor) {
-                specificationEntries.forEachIndexed { index, (key, value) ->
-                    HorizontalDivider()
-                    ManualInboundEditableRow(
-                        label = key,
-                        value = value,
-                        onValueChange = { newValue ->
-                            onSpecificationTextChange(
-                                rebuildManualSpecificationText(
-                                    specificationEntries.mapIndexed { entryIndex, entry ->
-                                        if (entryIndex == index) {
-                                            entry.first to newValue
-                                        } else {
-                                            entry
-                                        }
-                                    }
-                                )
-                            )
-                        }
-                    )
-                }
-            }
-            HorizontalDivider()
-            ManualInboundEditableRow(
-                label = stringResource(R.string.inbound_component_description),
-                value = description,
-                onValueChange = onDescriptionChange,
-                singleLine = false,
-                minLines = 3
-            )
-        }
-    }
-}
-
-@Composable
-private fun ManualInboundEditableCell(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    readOnly: Boolean = false
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        ManualInboundEditableText(
-            value = value,
-            onValueChange = onValueChange,
-            readOnly = readOnly
-        )
-    }
-}
-
-@Composable
-private fun ManualInboundEditableRow(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    singleLine: Boolean = true,
-    minLines: Int = 1,
-    placeholder: String? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(76.dp)
-        )
-        ManualInboundEditableText(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            singleLine = singleLine,
-            minLines = minLines,
-            placeholder = placeholder
-        )
-    }
-}
-
-@Composable
-private fun ManualInboundEditableText(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    readOnly: Boolean = false,
-    singleLine: Boolean = true,
-    minLines: Int = 1,
-    placeholder: String? = null
-) {
-    Box(modifier = modifier) {
-        if (value.isBlank() && !placeholder.isNullOrBlank()) {
-            Text(
-                text = placeholder,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            readOnly = readOnly,
-            singleLine = singleLine,
-            minLines = minLines,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold
-            ),
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.None,
-                imeAction = if (singleLine) ImeAction.Next else ImeAction.Default
-            )
-        )
-    }
-}
-
 private data class InboundDialogState(
     val title: String,
     val component: ComponentDetail,
@@ -1439,522 +931,12 @@ private fun buildManualInboundComponent(
     )
 }
 
-private fun parseManualSpecifications(rawText: String): Map<String, String> {
-    return parseManualSpecificationEntries(rawText).toMap()
-}
-
-private fun parseManualSpecificationEntries(rawText: String): List<Pair<String, String>> {
-    return rawText
-        .lineSequence()
-        .map(String::trim)
-        .filter { it.isNotEmpty() }
-        .mapNotNull { line ->
-            val separatorIndex = line.indexOfFirst { it == ':' || it == '=' || it == '：' }
-            if (separatorIndex <= 0 || separatorIndex >= line.lastIndex) {
-                return@mapNotNull null
-            }
-            val key = line.substring(0, separatorIndex).trim()
-            val value = line.substring(separatorIndex + 1).trim()
-            if (key.isEmpty() || value.isEmpty()) {
-                null
-            } else {
-                key to value
-            }
-        }
-        .toList()
-}
-
-private fun rebuildManualSpecificationText(entries: List<Pair<String, String>>): String {
-    return entries.joinToString("\n") { (key, value) -> "$key=$value" }
-}
-
-private fun saveManualInboundBitmap(
-    context: android.content.Context,
-    partNumber: String,
-    bitmap: Bitmap
-): String {
-    val imageDir = File(context.filesDir, "manual_inbound_images").apply { mkdirs() }
-    val targetFile = buildManualInboundImageFile(
-        imageDir = imageDir,
-        partNumber = partNumber,
-        extension = "jpg"
-    )
-    saveBitmapToFile(
-        bitmap = resizeBitmapWithinLimit(bitmap),
-        targetFile = targetFile,
-        format = Bitmap.CompressFormat.JPEG
-    )
-    return targetFile.absolutePath
-}
-
-private fun saveManualInboundImageUri(
-    context: android.content.Context,
-    partNumber: String,
-    uri: Uri
-): String {
-    val imageDir = File(context.filesDir, "manual_inbound_images").apply { mkdirs() }
-    val (extension, format) = when (context.contentResolver.getType(uri)?.lowercase()) {
-        "image/png" -> "png" to Bitmap.CompressFormat.PNG
-        "image/webp" -> "webp" to Bitmap.CompressFormat.WEBP_LOSSY
-        else -> "jpg" to Bitmap.CompressFormat.JPEG
-    }
-    val targetFile = buildManualInboundImageFile(
-        imageDir = imageDir,
-        partNumber = partNumber,
-        extension = extension
-    )
-    val bitmap = decodeBitmapWithinLimit(context, uri) ?: error("Failed to decode selected image")
-    saveBitmapToFile(
-        bitmap = bitmap,
-        targetFile = targetFile,
-        format = format
-    )
-    return targetFile.absolutePath
-}
-
-private fun buildManualInboundImageFile(
-    imageDir: File,
-    partNumber: String,
-    extension: String
-): File {
-    val safePartNumber = partNumber
-        .trim()
-        .uppercase()
-        .ifBlank { "MANUAL" }
-        .replace(Regex("[^A-Z0-9._-]"), "_")
-    val normalizedExtension = extension.lowercase().ifBlank { "jpg" }
-    return File(imageDir, "${safePartNumber}_${System.currentTimeMillis()}.$normalizedExtension")
-}
-
-private fun decodeBitmapWithinLimit(
-    context: android.content.Context,
-    uri: Uri,
-    maxDimension: Int = 300
-): Bitmap? {
-    return decodeBitmapWithBitmapFactory(
-        context = context,
-        uri = uri,
-        maxDimension = maxDimension
-    ) ?: decodeBitmapWithImageDecoder(
-        context = context,
-        uri = uri,
-        maxDimension = maxDimension
-    )
-}
-
-private fun decodeBitmapWithBitmapFactory(
-    context: android.content.Context,
-    uri: Uri,
-    maxDimension: Int
-): Bitmap? {
-    val resolver = context.contentResolver
-    val bounds = BitmapFactory.Options().apply {
-        inJustDecodeBounds = true
-    }
-    resolver.openInputStream(uri)?.use { inputStream ->
-        BitmapFactory.decodeStream(inputStream, null, bounds)
-    } ?: return null
-
-    val sampledOptions = BitmapFactory.Options().apply {
-        inSampleSize = calculateInSampleSize(
-            width = bounds.outWidth,
-            height = bounds.outHeight,
-            maxDimension = maxDimension
-        )
-    }
-    val decodedBitmap = resolver.openInputStream(uri)?.use { inputStream ->
-        BitmapFactory.decodeStream(inputStream, null, sampledOptions)
-    } ?: return null
-
-    return resizeBitmapWithinLimit(decodedBitmap, maxDimension)
-}
-
-private fun decodeBitmapWithImageDecoder(
-    context: android.content.Context,
-    uri: Uri,
-    maxDimension: Int
-): Bitmap? {
-    return runCatching {
-        val source = ImageDecoder.createSource(context.contentResolver, uri)
-        val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            val sampleSize = calculateInSampleSize(
-                width = info.size.width,
-                height = info.size.height,
-                maxDimension = maxDimension
-            )
-            decoder.setTargetSampleSize(sampleSize)
-        }
-        resizeBitmapWithinLimit(bitmap, maxDimension)
-    }.getOrNull()
-}
-
-private fun calculateInSampleSize(
-    width: Int,
-    height: Int,
-    maxDimension: Int
-): Int {
-    if (width <= 0 || height <= 0 || (width <= maxDimension && height <= maxDimension)) {
-        return 1
-    }
-    var sampleSize = 1
-    var sampledWidth = width
-    var sampledHeight = height
-    while (sampledWidth > maxDimension || sampledHeight > maxDimension) {
-        sampleSize *= 2
-        sampledWidth = width / sampleSize
-        sampledHeight = height / sampleSize
-    }
-    return sampleSize.coerceAtLeast(1)
-}
-
-private fun resizeBitmapWithinLimit(
-    bitmap: Bitmap,
-    maxDimension: Int = 300
-): Bitmap {
-    val width = bitmap.width
-    val height = bitmap.height
-    if (width <= maxDimension && height <= maxDimension) {
-        return bitmap
-    }
-    val scale = minOf(
-        maxDimension.toFloat() / width.toFloat(),
-        maxDimension.toFloat() / height.toFloat()
-    )
-    val targetWidth = (width * scale).toInt().coerceAtLeast(1)
-    val targetHeight = (height * scale).toInt().coerceAtLeast(1)
-    return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
-}
-
-private fun saveBitmapToFile(
-    bitmap: Bitmap,
-    targetFile: File,
-    format: Bitmap.CompressFormat
-) {
-    FileOutputStream(targetFile).use { outputStream ->
-        val quality = when (format) {
-            Bitmap.CompressFormat.PNG -> 100
-            else -> 92
-        }
-        if (!bitmap.compress(format, quality, outputStream)) {
-            error("Failed to compress bitmap")
-        }
-        outputStream.flush()
-    }
-}
-
-private fun extractOpenableSourceUrl(value: String): String? {
-    val normalized = value.trim()
-    if (normalized.isEmpty()) {
-        return null
-    }
-    val urlRegex = Regex("""(?i)\bhttps?://[^\s"”」】]+""")
-    return urlRegex.find(normalized)?.value?.trim()
-}
-
-private fun openSourceUrl(context: android.content.Context, rawUrl: String) {
-    val normalizedUrl = rawUrl.trim()
-    val browserUri = normalizedUrl.toUri()
-    val intent = Intent(Intent.ACTION_VIEW, browserUri).apply {
-        addCategory(Intent.CATEGORY_BROWSABLE)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    val launched = runCatching {
-        context.startActivity(intent)
-    }.isSuccess
-    if (!launched) {
-        throw IllegalStateException("No activity can handle source url: $normalizedUrl")
-    }
-}
-
-@Composable
-fun ScannerCard(
-    hasCameraPermission: Boolean,
-    scannerPaused: Boolean,
-    torchEnabled: Boolean = false,
-    onTorchAvailabilityChanged: (Boolean) -> Unit = {},
-    onQrScanned: (String) -> Unit,
-    onRequestPermission: () -> Unit,
-    modifier: Modifier = Modifier,
-    fullBleed: Boolean = false
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                if (fullBleed) {
-                    Modifier
-                } else {
-                    Modifier.clip(MaterialTheme.shapes.large)
-                }
-            )
-    ) {
-        if (hasCameraPermission) {
-            QrScannerPreview(
-                modifier = Modifier.fillMaxSize(),
-                enabled = !scannerPaused,
-                torchEnabled = torchEnabled,
-                onTorchAvailabilityChanged = onTorchAvailabilityChanged,
-                onQrCodeDetected = onQrScanned
-            )
-            CameraGuideOverlay()
-        } else {
-            PermissionPlaceholder(onRequestPermission = onRequestPermission)
-        }
-    }
-}
-
-@Composable
-fun CameraGuideOverlay() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(
-            modifier = Modifier.size(180.dp)
-        ) {
-            val strokeWidth = 4.dp.toPx()
-            val cornerLength = size.minDimension * 0.22f
-            val maxX = size.width
-            val maxY = size.height
-
-            drawLine(
-                color = Color.White,
-                start = Offset(0f, 0f),
-                end = Offset(cornerLength, 0f),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = Color.White,
-                start = Offset(0f, 0f),
-                end = Offset(0f, cornerLength),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
-            )
-
-            drawLine(
-                color = Color.White,
-                start = Offset(maxX - cornerLength, 0f),
-                end = Offset(maxX, 0f),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = Color.White,
-                start = Offset(maxX, 0f),
-                end = Offset(maxX, cornerLength),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
-            )
-
-            drawLine(
-                color = Color.White,
-                start = Offset(0f, maxY - cornerLength),
-                end = Offset(0f, maxY),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = Color.White,
-                start = Offset(0f, maxY),
-                end = Offset(cornerLength, maxY),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
-            )
-
-            drawLine(
-                color = Color.White,
-                start = Offset(maxX - cornerLength, maxY),
-                end = Offset(maxX, maxY),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = Color.White,
-                start = Offset(maxX, maxY - cornerLength),
-                end = Offset(maxX, maxY),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
-            )
-        }
-    }
-}
-
 private fun groupInboundLocations(locations: List<StorageLocation>): List<Pair<String, List<StorageLocation>>> {
     return locations
-        .sortedWith(compareBy({ inboundLocationRowIndex(it.code) }, { inboundLocationColumnIndex(it.code) }, { it.code }))
-        .groupBy { inboundLocationRowLabel(it.code) }
+        .sortedBy { LegacyLocationCode(it.code) }
+        .groupBy { LegacyLocationCode(it.code).rowLabel }
         .toList()
         .sortedBy { it.first }
-}
-
-private fun inboundLocationRowLabel(code: String): String {
-    return code.takeWhile { it.isLetter() }.ifBlank { "#" }
-}
-
-private fun inboundLocationRowIndex(code: String): Int {
-    return code.firstOrNull()?.uppercaseChar()?.code ?: Int.MAX_VALUE
-}
-
-private fun inboundLocationColumnIndex(code: String): Int {
-    return code.dropWhile { it.isLetter() }.toIntOrNull() ?: Int.MAX_VALUE
-}
-
-private data class InboundCategoryLocationMapping(
-    val keywords: List<String>,
-    val prefix: String
-)
-
-private val inboundCategoryLocationMappings = listOf(
-    InboundCategoryLocationMapping(listOf("电阻"), "R"),
-    InboundCategoryLocationMapping(listOf("电容"), "C"),
-    InboundCategoryLocationMapping(listOf("二极管", "LED", "TVS"), "D"),
-    InboundCategoryLocationMapping(listOf("电感"), "L"),
-    InboundCategoryLocationMapping(listOf("三极管", "晶体管", "MOS"), "Q"),
-    InboundCategoryLocationMapping(listOf("晶振", "振荡器"), "Y"),
-    InboundCategoryLocationMapping(listOf("保险丝"), "F"),
-    InboundCategoryLocationMapping(listOf("连接器", "接插件"), "J"),
-    InboundCategoryLocationMapping(listOf("继电器"), "K"),
-    InboundCategoryLocationMapping(listOf("开关", "按键"), "S"),
-    InboundCategoryLocationMapping(listOf("传感器"), "T"),
-    InboundCategoryLocationMapping(listOf("集成电路", "接口芯片", "逻辑芯片", "放大器", "驱动器", "存储器", "处理器", "单片机"), "U")
-)
-
-private fun suggestInboundLocationCode(
-    component: ComponentDetail,
-    existingStockLocations: List<ExistingStockLocation>,
-    availableLocations: List<StorageLocation>,
-    locationCategoryProfiles: List<LocationCategoryProfile>,
-    fallbackCode: String
-): String {
-    Log.d(
-        INBOUND_SCREEN_TAG,
-        "suggestInboundLocationCode start partNumber=${component.partNumber}, category=${component.category}, packageName=${component.packageName}, fallbackCode=$fallbackCode, existingStockLocations=${existingStockLocations.map { it.locationCode }}, availableLocations=${availableLocations.map { it.code }}, locationCategoryProfiles=$locationCategoryProfiles"
-    )
-    existingStockLocations.firstOrNull { existing ->
-        availableLocations.any { location ->
-            location.code.equals(existing.locationCode, ignoreCase = true)
-        }
-    }?.let { existing ->
-        Log.d(
-            INBOUND_SCREEN_TAG,
-            "suggestInboundLocationCode matched existingStock partNumber=${component.partNumber}, locationCode=${existing.locationCode}"
-        )
-        return existing.locationCode
-    }
-
-    val sortedLocations = availableLocations.sortedWith(
-        compareBy<StorageLocation>(
-            { inboundLocationRowIndex(it.code) },
-            { inboundLocationColumnIndex(it.code) },
-            { it.code }
-        )
-    )
-    val locationCategoryLookup = buildLocationCategoryLookup(locationCategoryProfiles)
-    val componentCategory = component.category.normalizedInboundProfileValue()
-    if (componentCategory != null) {
-        val categoryMatchedLocations = sortedLocations.filter { location ->
-            locationCategoryLookup[location.id]?.category == componentCategory
-        }
-        when (categoryMatchedLocations.size) {
-            0 -> Unit
-            1 -> {
-                val location = categoryMatchedLocations.first()
-                Log.d(
-                    INBOUND_SCREEN_TAG,
-                    "suggestInboundLocationCode matched locationProfileCategory partNumber=${component.partNumber}, locationCode=${location.code}, profile=${locationCategoryLookup[location.id]}"
-                )
-                return location.code
-            }
-            else -> {
-                val componentPackageName = component.packageName.normalizedInboundProfileValue()
-                val packageMatchedLocation = componentPackageName?.let { packageName ->
-                    categoryMatchedLocations.firstOrNull { location ->
-                        locationCategoryLookup[location.id]?.packageName == packageName
-                    }
-                }
-                if (packageMatchedLocation != null) {
-                    Log.d(
-                        INBOUND_SCREEN_TAG,
-                        "suggestInboundLocationCode matched locationProfileCategoryPackage partNumber=${component.partNumber}, locationCode=${packageMatchedLocation.code}, category=$componentCategory, packageName=$componentPackageName, profile=${locationCategoryLookup[packageMatchedLocation.id]}"
-                    )
-                    return packageMatchedLocation.code
-                }
-                val fallbackLocation = categoryMatchedLocations.first()
-                Log.d(
-                    INBOUND_SCREEN_TAG,
-                    "suggestInboundLocationCode matched locationProfileCategoryFallback partNumber=${component.partNumber}, locationCode=${fallbackLocation.code}, category=$componentCategory, packageName=$componentPackageName, matchedLocationCodes=${categoryMatchedLocations.map { it.code }}"
-                )
-                return fallbackLocation.code
-            }
-        }
-    }
-
-    val normalizedCategory = component.category?.trim().orEmpty()
-    if (normalizedCategory.isEmpty()) {
-        Log.d(
-            INBOUND_SCREEN_TAG,
-            "suggestInboundLocationCode fallback emptyCategory partNumber=${component.partNumber}, locationCode=$fallbackCode"
-        )
-        return fallbackCode
-    }
-
-    val mapping = inboundCategoryLocationMappings.firstOrNull { rule ->
-        rule.keywords.any { keyword -> normalizedCategory.contains(keyword, ignoreCase = true) }
-    } ?: run {
-        Log.d(
-            INBOUND_SCREEN_TAG,
-            "suggestInboundLocationCode fallback noCategoryMapping partNumber=${component.partNumber}, category=$normalizedCategory, locationCode=$fallbackCode"
-        )
-        return fallbackCode
-    }
-
-    sortedLocations.firstOrNull { location ->
-        location.code.trim().uppercase().startsWith(mapping.prefix)
-    }?.let { location ->
-        Log.d(
-            INBOUND_SCREEN_TAG,
-            "suggestInboundLocationCode matched categoryPrefix partNumber=${component.partNumber}, category=$normalizedCategory, prefix=${mapping.prefix}, locationCode=${location.code}"
-        )
-        return location.code
-    }
-
-    val mappedFallback = mapping.prefix + "1"
-    Log.d(
-        INBOUND_SCREEN_TAG,
-        "suggestInboundLocationCode fallback mappedPrefixDefault partNumber=${component.partNumber}, category=$normalizedCategory, prefix=${mapping.prefix}, locationCode=$mappedFallback"
-    )
-    return mappedFallback
-}
-
-private data class InboundLocationCategoryProfile(
-    val category: String?,
-    val packageName: String?
-)
-
-private fun buildLocationCategoryLookup(
-    profiles: List<LocationCategoryProfile>
-): Map<Long, InboundLocationCategoryProfile> {
-    return profiles.mapNotNull { profile ->
-        val category = profile.category.normalizedInboundProfileValue()
-        val packageName = profile.packageName.normalizedInboundProfileValue()
-        if (category == null && packageName == null) {
-            null
-        } else {
-            profile.locationId to InboundLocationCategoryProfile(
-                category = category,
-                packageName = packageName
-            )
-        }
-    }.toMap()
-}
-
-private fun String?.normalizedInboundProfileValue(): String? {
-    return this
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
-        ?.uppercase(Locale.ROOT)
 }
 
 @Composable
@@ -2369,74 +1351,3 @@ private fun LoadingCard(text: String = stringResource(R.string.inbound_component
     }
 }
 
-@Composable
-private fun PermissionPlaceholder(
-    onRequestPermission: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = stringResource(R.string.inbound_camera_permission_needed),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        Button(
-            onClick = onRequestPermission,
-            modifier = Modifier.padding(top = 16.dp)
-        ) {
-            Text(text = stringResource(R.string.inbound_grant_permission))
-        }
-    }
-}
-
-@Composable
-private fun ScanStatusCard(
-    uiState: InboundUiState
-) {
-    val statusText = when {
-        uiState.isLoadingComponent -> stringResource(R.string.inbound_status_loading_component)
-        uiState.componentDetail != null -> stringResource(R.string.inbound_status_success)
-        uiState.componentLookupError != null -> uiState.componentLookupError
-        uiState.parseError != null -> uiState.parseError
-        else -> stringResource(R.string.inbound_status_waiting)
-    }
-
-    PayloadFieldCard(
-        title = stringResource(R.string.inbound_status_title),
-        value = buildString {
-            append(statusText)
-            if (!uiState.lastRawText.isNullOrBlank()) {
-                append("\n")
-                append(uiState.lastRawText)
-            }
-        }
-    )
-}
-
-@Composable
-private fun PayloadFieldCard(
-    title: String,
-    value: String
-) {
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-}

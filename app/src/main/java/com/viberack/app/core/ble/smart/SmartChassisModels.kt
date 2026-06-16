@@ -9,21 +9,9 @@ data class SmartChassisAdvertisement(
     val tableSeqLow16: Int
 )
 
-data class SmartChassisSlotRecord(
-    val slot: Int,
-    val partId: String,
-    val quantity: Int,
-    val flags: Int,
-    val crc8: Int
-) {
-    val isEmpty: Boolean get() = slot == 0 || partId.isBlank()
-}
+typealias SmartChassisSlotRecord = com.viberack.app.domain.model.SmartChassisSlotRecord
 
-data class SmartChassisTableInfo(
-    val tableSeq: Long,
-    val crc16: Int,
-    val slotCount: Int
-)
+typealias SmartChassisTableInfo = com.viberack.app.domain.model.SmartChassisTableInfo
 
 data class SmartChassisBindingResult(
     val op: SmartChassisBindingOp,

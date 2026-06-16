@@ -16,6 +16,7 @@ import com.viberack.app.domain.model.StockLocationCell
 import com.viberack.app.domain.model.StorageLocationSortMode
 import com.viberack.app.domain.repository.InventoryRepository
 import com.viberack.app.domain.repository.LcscCatalogRepository
+import com.viberack.app.domain.stock.LocationStockSortPolicy
 import com.viberack.app.feature.inbound.LcscQrParser
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +39,7 @@ class InventoryViewModel(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val appContext: Context
 ) : ViewModel() {
+    private val locationStockSortPolicy = LocationStockSortPolicy()
     private val selectedLocation = MutableStateFlow<StockLocationCell?>(null)
     private val pendingOpenRequest = MutableStateFlow<InventoryOpenRequest?>(null)
     private val settingsLocationId = MutableStateFlow<Long?>(null)
@@ -105,7 +107,10 @@ class InventoryViewModel(
     ) { baseState, settingsItems, preferences ->
         baseState.copy(
             selectedLocationItems = baseState.selectedLocationItems,
-            settingsLocationSortAttributes = supportedSpecificationKeys(settingsItems),
+            settingsLocationSortAttributes = locationStockSortPolicy.supportedSpecificationAttributes(
+                items = settingsItems,
+                currentSortMode = StorageLocationSortMode.NONE
+            ),
             recentLocationColors = preferences.recentLocationColors
         )
     }.stateIn(
@@ -537,33 +542,6 @@ class InventoryViewModel(
         return specificationSortValue(item, specificationKey)
             .trim()
             .lowercase(Locale.ROOT)
-    }
-
-    private fun supportedSpecificationKeys(items: List<LocationInventoryItem>): List<String> {
-        return items
-            .asSequence()
-            .flatMap { item -> item.specifications.keys.asSequence() }
-            .map(String::trim)
-            .distinct()
-            .filter { key -> key.isNotEmpty() && hasMultipleSpecificationValues(items, key) }
-            .sorted()
-            .toList()
-    }
-
-    private fun hasMultipleSpecificationValues(
-        items: List<LocationInventoryItem>,
-        specificationKey: String
-    ): Boolean {
-        return items
-            .asSequence()
-            .mapNotNull { item ->
-                item.specifications[specificationKey]
-                    ?.trim()
-                    ?.takeIf { it.isNotEmpty() }
-            }
-            .distinct()
-            .take(2)
-            .count() > 1
     }
 
     private fun primarySortKey(item: LocationInventoryItem): String {

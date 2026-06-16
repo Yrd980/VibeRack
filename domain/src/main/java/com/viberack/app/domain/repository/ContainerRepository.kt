@@ -3,10 +3,10 @@ package com.viberack.app.domain.repository
 import com.viberack.app.domain.model.ComponentDetail
 import com.viberack.app.domain.model.ContainerSlot
 import com.viberack.app.domain.model.ContainerSlotStock
+import com.viberack.app.domain.model.SmartChassisSlotRecord
+import com.viberack.app.domain.model.SmartChassisTableInfo
 import com.viberack.app.domain.model.SlotStockItem
 import com.viberack.app.domain.model.StockContainer
-import com.viberack.app.core.ble.smart.SmartChassisSlotRecord
-import com.viberack.app.core.ble.smart.SmartChassisTableInfo
 import kotlinx.coroutines.flow.Flow
 
 interface ContainerRepository {

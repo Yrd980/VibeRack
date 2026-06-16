@@ -79,7 +79,6 @@ import com.viberack.app.domain.model.StockLocationCell
 import com.viberack.app.domain.model.StorageLocation
 import com.viberack.app.feature.inbound.ComponentDetailTable
 import com.viberack.app.feature.inbound.ExistingStockReminderCard
-import com.viberack.app.feature.inbound.MaterialInboundDialog
 import com.viberack.app.feature.inventory.InventoryItemManageDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -675,219 +674,6 @@ private fun BomSearchRowCard(
 }
 
 @Composable
-private fun BomDirectInboundDialog(
-    entry: BomSearchEntry,
-    locations: List<StorageLocation>,
-    defaultLocationCode: String?,
-    onLookup: (String, (BomDirectInboundLookupResult) -> Unit) -> Unit,
-    onConfirmInbound: (ComponentDetail, Int, String, (String?) -> Unit) -> Unit,
-    onMatchUpdated: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onViewInventoryItem: (String, String) -> Unit
-) {
-    val context = LocalContext.current
-    var lookupResult by remember(entry) { mutableStateOf(BomDirectInboundLookupResult()) }
-    var isLoading by remember(entry) { mutableStateOf(true) }
-    val initialQuantityText = remember(entry) { entry.quantity?.toString() ?: "0" }
-    var quantityText by remember(entry) { mutableStateOf(initialQuantityText) }
-    var selectedLocationCode by remember(entry, locations, defaultLocationCode) {
-        mutableStateOf(
-            defaultLocationCode
-                ?.takeIf { default -> locations.any { it.code == default } }
-                ?: locations.firstOrNull()?.code
-                ?: ""
-        )
-    }
-    var actionError by remember(entry) { mutableStateOf<String?>(null) }
-    var isSubmitting by remember(entry) { mutableStateOf(false) }
-
-    LaunchedEffect(entry) {
-        isLoading = true
-        lookupResult = BomDirectInboundLookupResult()
-        actionError = null
-        onLookup(entry.supplierPart.orEmpty()) { result ->
-            lookupResult = result
-            isLoading = false
-        }
-    }
-
-    MaterialInboundDialog(
-        title = stringResource(R.string.search_bom_direct_inbound),
-        component = lookupResult.component,
-        isLoading = isLoading,
-        loadingText = stringResource(R.string.search_bom_direct_inbound_loading),
-        errorMessage = actionError ?: lookupResult.errorMessage,
-        existingStockLocations = lookupResult.existingStockLocations,
-        quantityText = quantityText,
-        quantityEditable = true,
-        quantityLabel = stringResource(R.string.search_bom_direct_inbound_quantity),
-        onQuantityChange = { quantityText = it.filter(Char::isDigit) },
-        quantityShowUndo = quantityText != initialQuantityText,
-        onQuantityUndo = { quantityText = initialQuantityText },
-        selectedLocationCode = selectedLocationCode,
-        availableLocations = locations,
-        onLocationSelected = { selectedLocationCode = it },
-        onDismiss = onDismiss,
-        onConfirm = {
-            val component = lookupResult.component ?: return@MaterialInboundDialog
-            val quantity = quantityText.toIntOrNull()
-            if (quantity == null) {
-                actionError = context.getString(R.string.search_bom_direct_inbound_quantity_error)
-                return@MaterialInboundDialog
-            }
-            if (selectedLocationCode.isBlank()) {
-                actionError = context.getString(R.string.search_bom_direct_inbound_location_error)
-                return@MaterialInboundDialog
-            }
-            isSubmitting = true
-            actionError = null
-            onConfirmInbound(component, quantity, selectedLocationCode) { error ->
-                isSubmitting = false
-                actionError = error
-                if (error == null) {
-                    onMatchUpdated(component.partNumber)
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.search_bom_direct_inbound_success, component.partNumber),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    onDismiss()
-                }
-            }
-        },
-        confirmEnabled = !isSubmitting && !isLoading && lookupResult.component != null,
-        confirmText = stringResource(R.string.search_bom_direct_inbound_confirm),
-        onViewExistingStock = {
-            val component = lookupResult.component ?: return@MaterialInboundDialog
-            val targetLocation = lookupResult.existingStockLocations.firstOrNull()
-                ?: return@MaterialInboundDialog
-            onViewInventoryItem(targetLocation.locationCode, component.partNumber)
-        }
-    )
-}
-
-@Composable
-private fun BomBindingDialog(
-    entry: BomSearchEntry,
-    inventoryResults: List<SearchResultUiModel>,
-    onDismiss: () -> Unit,
-    onBind: (String) -> Unit
-) {
-    var query by remember(entry) { mutableStateOf("") }
-    val filteredResults = remember(inventoryResults, query) {
-        val normalizedQuery = query.trim().lowercase()
-        if (normalizedQuery.isBlank()) {
-            inventoryResults
-        } else {
-            inventoryResults.filter { result ->
-                buildList {
-                    add(result.partNumber)
-                    result.name?.let(::add)
-                    result.mpn?.let(::add)
-                    result.brand?.let(::add)
-                    result.packageName?.let(::add)
-                    result.category?.let(::add)
-                }.any { value ->
-                    value.trim().lowercase().contains(normalizedQuery)
-                }
-            }
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(),
-        title = { Text(text = stringResource(R.string.search_bom_bind_dialog_title)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 560.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = entry.supplierPart?.takeIf { it.isNotBlank() }
-                        ?: entry.manufacturerPart?.takeIf { it.isNotBlank() }
-                        ?: entry.comment?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.search_bom_bind_dialog_subtitle_fallback),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(text = stringResource(R.string.search_bom_bind_search_label)) },
-                    singleLine = true
-                )
-                if (filteredResults.isEmpty()) {
-                    MessageCard(text = stringResource(R.string.search_bom_bind_empty))
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(filteredResults, key = { it.partNumber + (it.mpn ?: "") }) { result ->
-                            BomBindingCandidateCard(
-                                result = result,
-                                onBind = { onBind(result.partNumber) }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.common_cancel))
-            }
-        }
-    )
-}
-
-@Composable
-private fun BomBindingCandidateCard(
-    result: SearchResultUiModel,
-    onBind: () -> Unit
-) {
-    val imageModel = result.imageLocalPath
-        ?.takeIf { it.isNotBlank() }
-        ?.let(::File)
-        ?.takeIf { it.exists() && it.length() > 0L }
-    val secondarySummary = searchResultSecondarySummary(result)
-
-    MaterialListCard(
-        title = result.name?.takeIf { it.isNotBlank() }
-            ?: result.mpn?.takeIf { it.isNotBlank() }
-            ?: result.partNumber,
-        subtitle = listOfNotNull(result.brand, result.packageName, result.category).joinToString(" · "),
-        secondarySummary = secondarySummary,
-        sourceText = result.sourceUrl,
-        imageModel = imageModel,
-        imageContentDescription = result.name ?: result.partNumber,
-        placeholderText = result.partNumber,
-        detailContent = {
-            Text(
-                text = stringResource(R.string.search_part_number, result.partNumber),
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold
-            )
-        },
-        bottomContent = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Button(onClick = onBind) {
-                    Text(text = stringResource(R.string.search_bom_bind_confirm))
-                }
-            }
-        }
-    )
-}
-
-@Composable
 private fun BomInfoLine(
     label: String,
     value: String?
@@ -937,7 +723,7 @@ private fun BomInfoLine(
 }
 
 @Composable
-private fun MessageCard(text: String) {
+fun MessageCard(text: String) {
     Card {
         Text(
             text = text,
@@ -1197,86 +983,13 @@ private fun SearchLocationRecordCard(
     }
 }
 
-private fun searchResultSecondarySummary(item: SearchResultUiModel): String? {
+fun searchResultSecondarySummary(item: SearchResultUiModel): String? {
     return item.specifications.values
         .map(String::trim)
         .filter { it.isNotEmpty() }
         .distinct()
         .joinToString(" · ")
         .takeIf { it.isNotBlank() }
-}
-
-@Composable
-private fun BomPickControlCard(
-    session: BomPickSessionUiModel?,
-    message: String?,
-    isBusy: Boolean,
-    hasTargets: Boolean,
-    onStart: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.search_bom_pick_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = session?.let {
-                    stringResource(
-                        R.string.search_bom_pick_active_summary,
-                        it.slotCount,
-                        it.groups.size
-                    )
-                } ?: stringResource(R.string.search_bom_pick_summary),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            session?.groups?.forEach { group ->
-                Text(
-                    text = stringResource(
-                        R.string.search_bom_pick_group,
-                        group.containerCode,
-                        group.slots.joinToString(", ")
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            message?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                if (session == null) {
-                    Button(
-                        onClick = onStart,
-                        enabled = hasTargets && !isBusy
-                    ) {
-                        Text(text = stringResource(R.string.search_bom_pick_start))
-                    }
-                } else {
-                    TextButton(
-                        onClick = onCancel,
-                        enabled = !isBusy
-                    ) {
-                        Text(text = stringResource(R.string.search_bom_pick_cancel))
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
