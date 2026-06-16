@@ -1,0 +1,532 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000101 /* VibeRackApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000001 /* VibeRackApp.swift */; };
+		AA0000000000000000000102 /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* AppTab.swift */; };
+		AA0000000000000000000103 /* Router.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000003 /* Router.swift */; };
+		AA0000000000000000000104 /* AppView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000004 /* AppView.swift */; };
+		AA0000000000000000000105 /* ChassisListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000005 /* ChassisListView.swift */; };
+		AA0000000000000000000106 /* StockInFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000006 /* StockInFlowView.swift */; };
+		AA0000000000000000000107 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000007 /* SearchView.swift */; };
+		AA0000000000000000000108 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000008 /* SettingsView.swift */; };
+		AA0000000000000000000109 /* SmartChassisProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* SmartChassisProtocol.swift */; };
+		AA0000000000000000000110 /* SmartChassisCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* SmartChassisCodec.swift */; };
+		AA0000000000000000000201 /* SmartChassisProtocolVectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000009 /* SmartChassisProtocolVectorTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000301 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000001000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000002001;
+			remoteInfo = VibeRack;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000001 /* VibeRackApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VibeRackApp.swift; sourceTree = "<group>"; };
+		AA0000000000000000000002 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* Router.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Router.swift; sourceTree = "<group>"; };
+		AA0000000000000000000004 /* AppView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000005 /* ChassisListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChassisListView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000006 /* StockInFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StockInFlowView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000007 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000008 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000009 /* SmartChassisProtocolVectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisProtocolVectorTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000010 /* SmartChassisProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisProtocol.swift; sourceTree = "<group>"; };
+		AA0000000000000000000011 /* SmartChassisCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisCodec.swift; sourceTree = "<group>"; };
+		AA0000000000000000000401 /* VibeRack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeRack.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000402 /* VibeRackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeRackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000000501 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000502 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0000000000000000000601 = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000602 /* VibeRack */,
+				AA0000000000000000000607 /* VibeRackTests */,
+				AA0000000000000000000609 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000602 /* VibeRack */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000001 /* VibeRackApp.swift */,
+				AA0000000000000000000603 /* App */,
+				AA0000000000000000000613 /* Core */,
+				AA0000000000000000000604 /* Features */,
+			);
+			path = VibeRack;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000603 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000002 /* AppTab.swift */,
+				AA0000000000000000000003 /* Router.swift */,
+				AA0000000000000000000004 /* AppView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000604 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000605 /* Chassis */,
+				AA0000000000000000000610 /* StockIn */,
+				AA0000000000000000000611 /* Search */,
+				AA0000000000000000000612 /* Settings */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000605 /* Chassis */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000005 /* ChassisListView.swift */,
+			);
+			path = Chassis;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000607 /* VibeRackTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000608 /* ProtocolTests */,
+			);
+			path = VibeRackTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000608 /* ProtocolTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000009 /* SmartChassisProtocolVectorTests.swift */,
+			);
+			path = ProtocolTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000609 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000401 /* VibeRack.app */,
+				AA0000000000000000000402 /* VibeRackTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000610 /* StockIn */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000006 /* StockInFlowView.swift */,
+			);
+			path = StockIn;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000611 /* Search */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000007 /* SearchView.swift */,
+			);
+			path = Search;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000612 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000008 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000613 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000614 /* Protocol */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000614 /* Protocol */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000010 /* SmartChassisProtocol.swift */,
+				AA0000000000000000000011 /* SmartChassisCodec.swift */,
+			);
+			path = Protocol;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000002001 /* VibeRack */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000003001 /* Build configuration list for PBXNativeTarget "VibeRack" */;
+			buildPhases = (
+				AA0000000000000000000701 /* Sources */,
+				AA0000000000000000000501 /* Frameworks */,
+				AA0000000000000000000801 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VibeRack;
+			productName = VibeRack;
+			productReference = AA0000000000000000000401 /* VibeRack.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AA0000000000000000002002 /* VibeRackTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000003002 /* Build configuration list for PBXNativeTarget "VibeRackTests" */;
+			buildPhases = (
+				AA0000000000000000000702 /* Sources */,
+				AA0000000000000000000502 /* Frameworks */,
+				AA0000000000000000000802 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000302 /* PBXTargetDependency */,
+			);
+			name = VibeRackTests;
+			productName = VibeRackTests;
+			productReference = AA0000000000000000000402 /* VibeRackTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000001000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2610;
+				LastUpgradeCheck = 2610;
+				TargetAttributes = {
+					AA0000000000000000002001 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
+					AA0000000000000000002002 = {
+						CreatedOnToolsVersion = 26.1.1;
+						TestTargetID = AA0000000000000000002001;
+					};
+				};
+			};
+			buildConfigurationList = AA0000000000000000003000 /* Build configuration list for PBXProject "VibeRack" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0000000000000000000601;
+			productRefGroup = AA0000000000000000000609 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000002001 /* VibeRack */,
+				AA0000000000000000002002 /* VibeRackTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA0000000000000000000801 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000802 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000701 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000101 /* VibeRackApp.swift in Sources */,
+				AA0000000000000000000102 /* AppTab.swift in Sources */,
+				AA0000000000000000000103 /* Router.swift in Sources */,
+				AA0000000000000000000104 /* AppView.swift in Sources */,
+				AA0000000000000000000105 /* ChassisListView.swift in Sources */,
+				AA0000000000000000000106 /* StockInFlowView.swift in Sources */,
+				AA0000000000000000000107 /* SearchView.swift in Sources */,
+				AA0000000000000000000108 /* SettingsView.swift in Sources */,
+				AA0000000000000000000109 /* SmartChassisProtocol.swift in Sources */,
+				AA0000000000000000000110 /* SmartChassisCodec.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000702 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000201 /* SmartChassisProtocolVectorTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000302 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000002001 /* VibeRack */;
+			targetProxy = AA0000000000000000000301 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		AA0000000000000000004001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AA0000000000000000004002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AA0000000000000000004003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = VibeRack;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.viberack.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		AA0000000000000000004004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = VibeRack;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.viberack.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		AA0000000000000000004005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.viberack.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VibeRack.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VibeRack";
+			};
+			name = Debug;
+		};
+		AA0000000000000000004006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.viberack.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VibeRack.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VibeRack";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA0000000000000000003000 /* Build configuration list for PBXProject "VibeRack" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000004001 /* Debug */,
+				AA0000000000000000004002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000003001 /* Build configuration list for PBXNativeTarget "VibeRack" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000004003 /* Debug */,
+				AA0000000000000000004004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000003002 /* Build configuration list for PBXNativeTarget "VibeRackTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000004005 /* Debug */,
+				AA0000000000000000004006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA0000000000000000001000 /* Project object */;
+}

@@ -42,3 +42,19 @@ uni-appX/
 /tmp/
 
 screen-*.png
+
+# Xcode / iOS local state
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.moved-aside
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager local build state
+.build/
+.swiftpm/
+Package.resolved

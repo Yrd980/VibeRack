@@ -1,0 +1,38 @@
+import SwiftUI
+
+enum AppTab: String, CaseIterable, Identifiable, Hashable {
+    case chassis
+    case stockIn
+    case search
+    case settings
+
+    var id: String { rawValue }
+
+    @ViewBuilder
+    func makeContentView() -> some View {
+        switch self {
+        case .chassis:
+            ChassisListView()
+        case .stockIn:
+            StockInFlowView()
+        case .search:
+            SearchView()
+        case .settings:
+            SettingsView()
+        }
+    }
+
+    @ViewBuilder
+    var label: some View {
+        switch self {
+        case .chassis:
+            Label("底盘", systemImage: "square.grid.3x3.square")
+        case .stockIn:
+            Label("入库", systemImage: "tray.and.arrow.down")
+        case .search:
+            Label("搜索", systemImage: "magnifyingglass")
+        case .settings:
+            Label("设置", systemImage: "gearshape")
+        }
+    }
+}
