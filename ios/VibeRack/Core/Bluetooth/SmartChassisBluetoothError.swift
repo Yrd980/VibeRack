@@ -13,6 +13,8 @@ public enum SmartChassisBluetoothError: Error, Equatable {
     case serviceMissing(CBUUID)
     case characteristicMissing(CBUUID)
     case invalidPayload(CBUUID)
+    case bindingTable(SmartChassisBindingTableError)
+    case bindingCommandFailed(BindingOp, BindingStatus)
     case readFailed(CBUUID, String)
     case writeFailed(CBUUID, String)
     case encryptedWriteRequiresPairing
@@ -47,6 +49,10 @@ public enum SmartChassisBluetoothError: Error, Equatable {
             return "智能底盘固件缺少必要特征，请检查固件版本。"
         case .invalidPayload:
             return "智能底盘返回的数据格式不正确。"
+        case .bindingTable:
+            return "智能底盘绑定表校验失败，已拒绝使用这次读取结果。"
+        case let .bindingCommandFailed(op, status):
+            return "智能底盘绑定操作失败：op=\(op.code)，status=\(status.code)。"
         case let .readFailed(_, reason):
             return "读取智能底盘状态失败：\(reason)"
         case let .writeFailed(_, reason):

@@ -269,6 +269,16 @@ public enum SmartChassisCodec {
         return crc
     }
 
+    public static func tableCRC16(_ records: [Data]) -> UInt16 {
+        precondition(
+            records.allSatisfy { $0.count == SmartChassisProtocol.slotRecordSize },
+            "all table records must be 16 bytes"
+        )
+        return crc16CcittFalse(records.reduce(into: Data()) { tableBytes, record in
+            tableBytes.append(record)
+        })
+    }
+
     public static func parseDeviceHealth(_ data: Data) -> DeviceHealth? {
         guard data.count == 4 else {
             return nil

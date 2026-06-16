@@ -49,6 +49,13 @@ public final class SmartChassisCentral: NSObject {
     @ObservationIgnored private var serviceDiscoveryContinuation: CheckedContinuation<Void, Error>?
     @ObservationIgnored private var readContinuations: [CBUUID: CheckedContinuation<Data, Error>] = [:]
     @ObservationIgnored private var writeContinuations: [CBUUID: CheckedContinuation<Void, Error>] = [:]
+    @ObservationIgnored private var notifyContinuations: [CBUUID: CheckedContinuation<Void, Error>] = [:]
+    @ObservationIgnored private var mutatingBindingContinuation: CheckedContinuation<TableInfo, Error>?
+    @ObservationIgnored private var mutatingBindingOp: BindingOp?
+    @ObservationIgnored private var mutatingBindingAwaitingTableInfo = false
+    @ObservationIgnored private var tableInfoNotifyContinuation: CheckedContinuation<TableInfo, Error>?
+    @ObservationIgnored private var readAllContinuation: CheckedContinuation<BindingTableSnapshot, Error>?
+    @ObservationIgnored private var readAllAggregator: BindingTableReadAllAggregator?
 
     public init(queue: DispatchQueue? = nil) {
         self.queue = queue
@@ -169,6 +176,49 @@ public final class SmartChassisCentral: NSObject {
         )
     }
 
+    public func readAllBindingTable() async throws -> BindingTableSnapshot {
+        try await enableNotify(for: SmartChassisBluetoothUUIDs.bindingControlPoint)
+        try await enableNotify(for: SmartChassisBluetoothUUIDs.tableInfo)
+        let tableInfo = try await readTableInfo()
+        let command = SmartChassisCodec.encodeReadAll()
+        readAllAggregator = BindingTableReadAllAggregator()
+        pendingReadAllTableInfo = tableInfo
+        return try await withCheckedThrowingContinuation { continuation in
+            readAllContinuation = continuation
+            Task { @MainActor in
+                do {
+                    try await writeEncryptedBindingCommand(command)
+                } catch {
+                    self.readAllContinuation = nil
+                    self.readAllAggregator = nil
+                    self.pendingReadAllTableInfo = nil
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    public func writeOne(record: Data) async throws -> TableInfo {
+        try await performMutatingBindingCommand(
+            op: .writeOne,
+            command: SmartChassisCodec.encodeWriteOne(record: record)
+        )
+    }
+
+    public func clearOne(slot: Int) async throws -> TableInfo {
+        try await performMutatingBindingCommand(
+            op: .clearOne,
+            command: SmartChassisCodec.encodeClearOne(slot: slot)
+        )
+    }
+
+    public func setQuantity(slot: Int, quantity: Int) async throws -> TableInfo {
+        try await performMutatingBindingCommand(
+            op: .setQuantity,
+            command: SmartChassisCodec.encodeSetQuantity(slot: slot, quantity: quantity)
+        )
+    }
+
     public func sendLightCommand(_ command: LightCommand) async throws {
         try await write(
             SmartChassisCodec.encodeLightCommand(command),
@@ -194,6 +244,50 @@ public final class SmartChassisCentral: NSObject {
         return try await withCheckedThrowingContinuation { continuation in
             readContinuations[uuid] = continuation
             peripheral.readValue(for: characteristic)
+        }
+    }
+
+    @ObservationIgnored private var pendingReadAllTableInfo: TableInfo?
+
+    private func performMutatingBindingCommand(op: BindingOp, command: Data) async throws -> TableInfo {
+        try await enableNotify(for: SmartChassisBluetoothUUIDs.bindingControlPoint)
+        try await enableNotify(for: SmartChassisBluetoothUUIDs.tableInfo)
+        return try await withCheckedThrowingContinuation { continuation in
+            mutatingBindingOp = op
+            mutatingBindingContinuation = continuation
+            mutatingBindingAwaitingTableInfo = false
+            Task { @MainActor in
+                do {
+                    try await writeEncryptedBindingCommand(command)
+                } catch {
+                    self.mutatingBindingOp = nil
+                    self.mutatingBindingContinuation = nil
+                    self.mutatingBindingAwaitingTableInfo = false
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func waitForNextTableInfoNotify() async throws -> TableInfo {
+        try await withCheckedThrowingContinuation { continuation in
+            tableInfoNotifyContinuation = continuation
+        }
+    }
+
+    private func enableNotify(for uuid: CBUUID) async throws {
+        guard let peripheral else {
+            throw fail(.peripheralUnavailable)
+        }
+        guard let characteristic = discoveredCharacteristics[uuid] else {
+            throw fail(.characteristicMissing(uuid))
+        }
+        if characteristic.isNotifying {
+            return
+        }
+        try await withCheckedThrowingContinuation { continuation in
+            notifyContinuations[uuid] = continuation
+            peripheral.setNotifyValue(true, for: characteristic)
         }
     }
 
@@ -277,6 +371,7 @@ extension SmartChassisCentral: CBCentralManagerDelegate {
             }
             self.peripheral = nil
             discoveredCharacteristics.removeAll()
+            failPendingOperations(.disconnected(error?.localizedDescription))
             connectedDiscovery = nil
             phase = .disconnected
         }
@@ -368,6 +463,7 @@ extension SmartChassisCentral: CBPeripheralDelegate {
         Task { @MainActor in
             let uuid = characteristic.uuid
             guard let continuation = readContinuations.removeValue(forKey: uuid) else {
+                handleNotificationUpdate(for: uuid, characteristic: characteristic, error: error)
                 return
             }
             if let mapped = SmartChassisBluetoothError.mapCoreBluetoothError(error, characteristic: uuid) {
@@ -379,6 +475,139 @@ extension SmartChassisCentral: CBPeripheralDelegate {
                 return
             }
             continuation.resume(returning: value)
+        }
+    }
+
+    private func handleNotificationUpdate(
+        for uuid: CBUUID,
+        characteristic: CBCharacteristic,
+        error: Error?
+    ) {
+        if let mapped = SmartChassisBluetoothError.mapCoreBluetoothError(error, characteristic: uuid) {
+            failPendingOperations(mapped)
+            return
+        }
+        guard let value = characteristic.value else {
+            failPendingOperations(.invalidPayload(uuid))
+            return
+        }
+
+        switch uuid {
+        case SmartChassisBluetoothUUIDs.bindingControlPoint:
+            handleBindingControlPointNotification(value)
+        case SmartChassisBluetoothUUIDs.tableInfo:
+            handleTableInfoNotification(value)
+        default:
+            break
+        }
+    }
+
+    private func handleBindingControlPointNotification(_ data: Data) {
+        guard let result = SmartChassisCodec.parseBindingResult(data) else {
+            failPendingOperations(.invalidPayload(SmartChassisBluetoothUUIDs.bindingControlPoint))
+            return
+        }
+
+        if readAllContinuation != nil && result.op == .readAll {
+            handleReadAllResult(result)
+            return
+        }
+
+        guard mutatingBindingOp == result.op else {
+            return
+        }
+        guard let continuation = mutatingBindingContinuation else {
+            return
+        }
+        if result.status == .ok {
+            mutatingBindingAwaitingTableInfo = true
+        } else {
+            mutatingBindingContinuation = nil
+            mutatingBindingOp = nil
+            mutatingBindingAwaitingTableInfo = false
+            continuation.resume(throwing: fail(.bindingCommandFailed(result.op, result.status)))
+        }
+    }
+
+    private func handleReadAllResult(_ result: BindingResult) {
+        guard var aggregator = readAllAggregator,
+              let continuation = readAllContinuation else {
+            return
+        }
+
+        do {
+            let snapshot = try aggregator.append(result, tableInfo: pendingReadAllTableInfo)
+            readAllAggregator = aggregator
+            guard let snapshot else {
+                return
+            }
+            readAllContinuation = nil
+            readAllAggregator = nil
+            pendingReadAllTableInfo = nil
+            continuation.resume(returning: snapshot)
+        } catch let error as SmartChassisBindingTableError {
+            readAllContinuation = nil
+            readAllAggregator = nil
+            pendingReadAllTableInfo = nil
+            continuation.resume(throwing: fail(.bindingTable(error)))
+        } catch {
+            readAllContinuation = nil
+            readAllAggregator = nil
+            pendingReadAllTableInfo = nil
+            continuation.resume(throwing: error)
+        }
+    }
+
+    private func handleTableInfoNotification(_ data: Data) {
+        guard let tableInfo = SmartChassisCodec.parseTableInfo(data) else {
+            failPendingOperations(.invalidPayload(SmartChassisBluetoothUUIDs.tableInfo))
+            return
+        }
+        if mutatingBindingAwaitingTableInfo,
+           let continuation = mutatingBindingContinuation {
+            mutatingBindingContinuation = nil
+            mutatingBindingOp = nil
+            mutatingBindingAwaitingTableInfo = false
+            continuation.resume(returning: tableInfo)
+            return
+        }
+
+        tableInfoNotifyContinuation?.resume(returning: tableInfo)
+        tableInfoNotifyContinuation = nil
+    }
+
+    private func failPendingOperations(_ error: SmartChassisBluetoothError) {
+        mutatingBindingContinuation?.resume(throwing: fail(error))
+        mutatingBindingContinuation = nil
+        mutatingBindingOp = nil
+        mutatingBindingAwaitingTableInfo = false
+        readAllContinuation?.resume(throwing: fail(error))
+        readAllContinuation = nil
+        readAllAggregator = nil
+        pendingReadAllTableInfo = nil
+        tableInfoNotifyContinuation?.resume(throwing: fail(error))
+        tableInfoNotifyContinuation = nil
+        for continuation in notifyContinuations.values {
+            continuation.resume(throwing: fail(error))
+        }
+        notifyContinuations.removeAll()
+    }
+
+    public nonisolated func peripheral(
+        _ peripheral: CBPeripheral,
+        didUpdateNotificationStateFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
+        Task { @MainActor in
+            let uuid = characteristic.uuid
+            guard let continuation = notifyContinuations.removeValue(forKey: uuid) else {
+                return
+            }
+            if let mapped = SmartChassisBluetoothError.mapCoreBluetoothError(error, characteristic: uuid) {
+                continuation.resume(throwing: fail(mapped))
+            } else {
+                continuation.resume()
+            }
         }
     }
 
