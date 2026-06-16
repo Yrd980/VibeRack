@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.lcsc_android_erp.core.AppContainer
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisConnectionState
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisOperations
+import com.example.lcsc_android_erp.core.ble.smart.SmartChassisProtocol
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisScanner
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisOperationError
 import com.example.lcsc_android_erp.core.ble.smart.SmartChassisRestorePreview
@@ -138,6 +139,11 @@ class ContainersViewModel(
     }
 
     fun openRequest(request: ContainersOpenRequest) {
+        val requestedProtoVersion = request.protoVersion
+        if (requestedProtoVersion != null && !isSupportedSmartChassisProtocol(requestedProtoVersion)) {
+            message.value = smartChassisProtocolMessage(requestedProtoVersion)
+            return
+        }
         viewModelScope.launch {
             val container = request.containerId?.let { containerRepository.findContainer(it) }
                 ?: request.macAddress?.let { containerRepository.findContainerByMacAddress(it) }
@@ -158,6 +164,11 @@ class ContainersViewModel(
 
     fun connectSmartChassis(container: StockContainer) {
         val macAddress = container.macAddress ?: return
+        val protoVersion = container.protoVersion
+        if (protoVersion != null && !isSupportedSmartChassisProtocol(protoVersion)) {
+            message.value = smartChassisProtocolMessage(protoVersion)
+            return
+        }
         viewModelScope.launch {
             message.value = null
             val connected = smartChassisOperations.connectAndRefresh(macAddress)
@@ -329,6 +340,9 @@ class ContainersViewModel(
             val scannerState = smartChassisScanner.state.first { !it.isScanning }
             var firstRegisteredContainer: StockContainer? = null
             scannerState.devices.distinctBy { it.address }.forEach { device ->
+                if (!device.isSupportedProtocol) {
+                    return@forEach
+                }
                 val registeredContainer = containerRepository.ensureSmartChassisContainer(
                     macAddress = device.address,
                     batchId = device.advertisement.batchId,
@@ -344,7 +358,12 @@ class ContainersViewModel(
             }
             if (scannerState.devices.isNotEmpty()) {
                 firstRegisteredContainer?.let(::selectContainer)
-                message.value = "发现 ${scannerState.devices.size} 台智能底盘"
+                val unsupportedCount = scannerState.devices.count { !it.isSupportedProtocol }
+                message.value = if (unsupportedCount > 0) {
+                    "发现 ${scannerState.devices.size} 台智能底盘，已跳过 $unsupportedCount 台协议版本不兼容设备"
+                } else {
+                    "发现 ${scannerState.devices.size} 台智能底盘"
+                }
             }
             scanRegistrationJob = null
         }
@@ -361,6 +380,18 @@ class ContainersViewModel(
                 )
             }
         }
+    }
+}
+
+private fun isSupportedSmartChassisProtocol(protoVersion: Int): Boolean {
+    return protoVersion == SmartChassisProtocol.PROTOCOL_VERSION
+}
+
+private fun smartChassisProtocolMessage(protoVersion: Int): String {
+    return if (protoVersion > SmartChassisProtocol.PROTOCOL_VERSION) {
+        "智能底盘协议 v$protoVersion 需要升级 APP 后再写入"
+    } else {
+        "智能底盘协议 v$protoVersion 需要升级固件后再写入"
     }
 }
 

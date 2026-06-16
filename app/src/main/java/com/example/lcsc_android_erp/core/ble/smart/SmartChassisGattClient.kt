@@ -43,13 +43,13 @@ class SmartChassisGattClient(
     private var lightCommand: BluetoothGattCharacteristic? = null
     private var lightStatus: BluetoothGattCharacteristic? = null
     private var connectedDevice: SmartChassisDevice? = null
+    private var pendingIdentity: SmartChassisDevice? = null
 
     private var pendingConnect: CompletableDeferred<SmartChassisClientResult<SmartChassisDevice>>? = null
     private var pendingBindingOp: PendingBindingOp? = null
     private var pendingReadAll: PendingReadAll? = null
     private var pendingTableInfoRead: CompletableDeferred<SmartChassisClientResult<SmartChassisTableInfo>>? = null
     private var pendingLightStatusRead: CompletableDeferred<SmartChassisClientResult<SmartChassisLightStatus>>? = null
-    private var pendingLightWrite: CompletableDeferred<SmartChassisClientResult<SmartChassisLightStatus>>? = null
     private val pendingDescriptors = ArrayDeque<BluetoothGattDescriptor>()
     private var pendingDescriptorSetup: CompletableDeferred<Boolean>? = null
     private var bondReceiver: BroadcastReceiver? = null
@@ -179,22 +179,9 @@ class SmartChassisGattClient(
             status: Int
         ) {
             if (characteristic.uuid == SmartChassisUuids.lightCommand) {
-                val deferred = pendingLightWrite ?: return
-                pendingLightWrite = null
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    deferred.complete(
-                        SmartChassisClientResult.Success(
-                            SmartChassisLightStatus(
-                                mode = SmartChassisLightMode.UNKNOWN,
-                                rawMode = SmartChassisLightMode.UNKNOWN.code,
-                                remainingSeconds = 0
-                            )
-                        )
-                    )
-                } else {
-                    deferred.complete(SmartChassisClientResult.Failure("Light command write failed: $status"))
-                }
-            } else if (status != BluetoothGatt.GATT_SUCCESS) {
+                return
+            }
+            if (status != BluetoothGatt.GATT_SUCCESS) {
                 pendingBindingOp?.deferred?.complete(
                     SmartChassisClientResult.Failure(
                         message = "Binding command write failed: $status",
@@ -229,6 +216,9 @@ class SmartChassisGattClient(
         disconnect()
         val deferred = CompletableDeferred<SmartChassisClientResult<SmartChassisDevice>>()
         pendingConnect = deferred
+        pendingIdentity = discoveredChassis.value.firstOrNull {
+            it.address.equals(normalizedAddress, ignoreCase = true)
+        }
         _connectionState.value = SmartChassisConnectionState(
             phase = SmartChassisConnectionPhase.CONNECTING,
             message = "Connecting to $normalizedAddress"
@@ -378,11 +368,8 @@ class SmartChassisGattClient(
             val characteristic = lightCommand
                 ?: return@withLock SmartChassisClientResult.Failure("Light Command characteristic is unavailable")
             val gattClient = gatt ?: return@withLock SmartChassisClientResult.Failure("smart chassis is not connected")
-            val deferred = CompletableDeferred<SmartChassisClientResult<SmartChassisLightStatus>>()
-            pendingLightWrite = deferred
             val payload = runCatching { SmartChassisCodec.encodeLightCommand(command) }
                 .getOrElse { throwable ->
-                    pendingLightWrite = null
                     return@withLock SmartChassisClientResult.Failure(
                         throwable.message ?: "Invalid light command"
                     )
@@ -394,15 +381,9 @@ class SmartChassisGattClient(
                     BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 )
             ) {
-                pendingLightWrite = null
                 return@withLock SmartChassisClientResult.Failure("Light command write failed to start")
             }
-            val writeResult = withBleTimeout("Light command write timed out") { deferred.await() }
-            if (writeResult is SmartChassisClientResult.Failure) {
-                writeResult
-            } else {
-                SmartChassisClientResult.Success(Unit)
-            }
+            SmartChassisClientResult.Success(Unit)
         }
         return if (writeResult is SmartChassisClientResult.Failure) {
             writeResult
@@ -741,19 +722,24 @@ class SmartChassisGattClient(
 
     private fun completeConnect() {
         val deviceAddress = gatt?.device?.address?.uppercase() ?: return failConnect("Connected device address is unavailable")
+        val advertisedIdentity = pendingIdentity?.takeIf {
+            it.address.equals(deviceAddress, ignoreCase = true)
+        }
         val device = SmartChassisDevice(
             address = deviceAddress,
-            name = gatt?.device?.name,
-            rssi = null,
-            advertisement = SmartChassisAdvertisement(
+            name = advertisedIdentity?.name ?: gatt?.device?.name,
+            rssi = advertisedIdentity?.rssi,
+            advertisement = advertisedIdentity?.advertisement ?: SmartChassisAdvertisement(
                 companyId = SmartChassisProtocol.DEV_COMPANY_ID,
                 protoVersion = SmartChassisProtocol.PROTOCOL_VERSION,
                 batchId = 0,
                 batteryPct = 0,
                 statusFlags = 0,
                 tableSeqLow16 = 0
-            )
+            ),
+            lastSeenAt = advertisedIdentity?.lastSeenAt ?: System.currentTimeMillis()
         )
+        pendingIdentity = null
         connectedDevice = device
         _connectionState.value = SmartChassisConnectionState(
             phase = SmartChassisConnectionPhase.CONNECTED,
@@ -766,6 +752,7 @@ class SmartChassisGattClient(
     private fun failConnect(message: String) {
         pendingConnect?.complete(SmartChassisClientResult.Failure(message))
         pendingConnect = null
+        pendingIdentity = null
         _connectionState.value = SmartChassisConnectionState(
             phase = SmartChassisConnectionPhase.DISCONNECTED,
             message = message
@@ -781,8 +768,6 @@ class SmartChassisGattClient(
         pendingTableInfoRead = null
         pendingLightStatusRead?.complete(SmartChassisClientResult.Failure(message))
         pendingLightStatusRead = null
-        pendingLightWrite?.complete(SmartChassisClientResult.Failure(message))
-        pendingLightWrite = null
     }
 
     private fun closeGatt() {
@@ -795,6 +780,7 @@ class SmartChassisGattClient(
         lightCommand = null
         lightStatus = null
         connectedDevice = null
+        pendingIdentity = null
         _tableInfoUpdates.value = null
         pendingDescriptors.clear()
         pendingDescriptorSetup = null
