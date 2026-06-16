@@ -257,21 +257,9 @@ class ContainersViewModel(
         viewModelScope.launch {
             message.value = null
             val container = slotOperationRepository.findContainer(request.containerId)
-            if (container?.type == ContainerType.SMART_CHASSIS) {
-                if (!normalizedPart.matches(PROTOCOL_PART_ID_REGEX)) {
-                    message.value = "智能底盘槽位需要 C... 或 M... 协议物料编号"
-                    return@launch
-                }
-                val tableInfo = smartChassisOperations.writeSlot(
-                    container = container,
-                    slotNumber = request.slotNumber,
-                    protocolPartId = normalizedPart,
-                    quantity = quantity
-                )
-                if (tableInfo == null) {
-                    message.value = "智能底盘写入失败，本地台账未修改"
-                    return@launch
-                }
+            if (container == null) {
+                message.value = "容器不存在"
+                return@launch
             }
             val component = slotOperationRepository.resolveLocalComponent(normalizedPart)
             if (component == null) {
@@ -413,5 +401,3 @@ private data class DialogState(
     val slotInboundRequest: SlotInboundRequest?,
     val message: String?
 )
-
-private val PROTOCOL_PART_ID_REGEX = Regex("^[CM][A-Z0-9]{0,9}$")

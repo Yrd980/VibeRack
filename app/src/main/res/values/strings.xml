@@ -323,6 +323,8 @@
     <string name="containers_enable_bluetooth">开启蓝牙</string>
     <string name="containers_slot_empty">空位</string>
     <string name="containers_no_slots">当前容器暂无槽位。</string>
+    <string name="containers_twin_title">数字孪生槽位</string>
+    <string name="containers_slot_find">查找</string>
     <string name="containers_slot_inbound">入库</string>
     <string name="containers_slot_clear">清空</string>
     <string name="containers_slot_set_quantity">改数</string>

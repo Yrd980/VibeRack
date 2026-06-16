@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -96,6 +99,7 @@ fun ContainersRoute(
         onSelectContainer = viewModel::selectContainer,
         onConnectSmartChassis = viewModel::connectSmartChassis,
         onReadAllSmartChassis = viewModel::readAllSmartChassis,
+        onFindSlot = { container, slot -> viewModel.findSlot(container, slot.slot.slotNumber) },
         onConfirmRestorePreview = viewModel::confirmRestorePreview,
         onCancelRestorePreview = viewModel::cancelRestorePreview,
         onLightsOff = viewModel::lightsOff,
@@ -125,6 +129,7 @@ fun ContainersScreen(
     onSelectContainer: (StockContainer) -> Unit,
     onConnectSmartChassis: (StockContainer) -> Unit,
     onReadAllSmartChassis: (StockContainer) -> Unit,
+    onFindSlot: (StockContainer, ContainerSlotStock) -> Unit,
     onConfirmRestorePreview: () -> Unit,
     onCancelRestorePreview: () -> Unit,
     onLightsOff: () -> Unit,
@@ -190,6 +195,7 @@ fun ContainersScreen(
                     cacheWarningText = smartChassisCacheWarningText(container),
                     onConnectSmartChassis = { onConnectSmartChassis(container) },
                     onReadAllSmartChassis = { onReadAllSmartChassis(container) },
+                    onFindSlot = { slot -> onFindSlot(container, slot) },
                     onLightsOff = onLightsOff,
                     onRequestSlotInbound = { slot -> onRequestSlotInbound(container, slot) },
                     onClearSlot = { slot -> onClearSlot(container, slot) },
@@ -417,6 +423,7 @@ private fun ContainerDetail(
     cacheWarningText: String?,
     onConnectSmartChassis: () -> Unit,
     onReadAllSmartChassis: () -> Unit,
+    onFindSlot: (ContainerSlotStock) -> Unit,
     onLightsOff: () -> Unit,
     onRequestSlotInbound: (ContainerSlotStock) -> Unit,
     onClearSlot: (ContainerSlotStock) -> Unit,
@@ -452,8 +459,17 @@ private fun ContainerDetail(
                 slots = slots,
                 activeLightSlot = activeLightSlot
             )
+            SmartChassisTwinGrid(
+                slots = slots,
+                activeLightSlot = activeLightSlot,
+                onFindSlot = onFindSlot,
+                onRequestSlotInbound = onRequestSlotInbound,
+                onClearSlot = onClearSlot,
+                onSetSlotQuantity = onSetSlotQuantity
+            )
             SmartSlotList(
                 slots = slots,
+                onFindSlot = onFindSlot,
                 onRequestSlotInbound = onRequestSlotInbound,
                 onClearSlot = onClearSlot,
                 onSetSlotQuantity = onSetSlotQuantity
@@ -611,6 +627,171 @@ private fun SmartChassisLightStrip(
 }
 
 @Composable
+private fun SmartChassisTwinGrid(
+    slots: List<ContainerSlotStock>,
+    activeLightSlot: Int?,
+    onFindSlot: (ContainerSlotStock) -> Unit,
+    onRequestSlotInbound: (ContainerSlotStock) -> Unit,
+    onClearSlot: (ContainerSlotStock) -> Unit,
+    onSetSlotQuantity: (ContainerSlotStock, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val slotMap = slots.associateBy { it.slot.slotNumber }
+    var menuSlot by remember { mutableStateOf<ContainerSlotStock?>(null) }
+    var quantityEditSlot by remember { mutableStateOf<ContainerSlotStock?>(null) }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.containers_twin_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        (0 until 5).forEach { rowIndex ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                (1..5).forEach { columnIndex ->
+                    val slotNumber = rowIndex * 5 + columnIndex
+                    val slot = slotMap[slotNumber]
+                    if (slot == null) {
+                        Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                    } else {
+                        SmartTwinSlotCell(
+                            slot = slot,
+                            active = activeLightSlot == slotNumber,
+                            onFindSlot = onFindSlot,
+                            onOpenMenu = { menuSlot = slot },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+    menuSlot?.let { slot ->
+        Box {
+            DropdownMenu(
+                expanded = true,
+                onDismissRequest = { menuSlot = null }
+            ) {
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(R.string.containers_slot_find)) },
+                    onClick = {
+                        menuSlot = null
+                        onFindSlot(slot)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(R.string.containers_slot_inbound)) },
+                    onClick = {
+                        menuSlot = null
+                        onRequestSlotInbound(slot)
+                    }
+                )
+                if (slot.stockItem != null) {
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.containers_slot_set_quantity)) },
+                        onClick = {
+                            menuSlot = null
+                            quantityEditSlot = slot
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.containers_slot_clear)) },
+                        onClick = {
+                            menuSlot = null
+                            onClearSlot(slot)
+                        }
+                    )
+                }
+            }
+        }
+    }
+    quantityEditSlot?.let { slot ->
+        SlotQuantityDialog(
+            slot = slot,
+            onConfirm = { quantity ->
+                onSetSlotQuantity(slot, quantity)
+                quantityEditSlot = null
+            },
+            onDismiss = { quantityEditSlot = null }
+        )
+    }
+}
+
+@Composable
+private fun SmartTwinSlotCell(
+    slot: ContainerSlotStock,
+    active: Boolean,
+    onFindSlot: (ContainerSlotStock) -> Unit,
+    onOpenMenu: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val stock = slot.stockItem
+    val background = when {
+        active -> MaterialTheme.colorScheme.tertiaryContainer
+        stock?.isAtOrBelowSafetyStock == true -> MaterialTheme.colorScheme.errorContainer
+        stock != null -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val foreground = when {
+        active -> MaterialTheme.colorScheme.onTertiaryContainer
+        stock?.isAtOrBelowSafetyStock == true -> MaterialTheme.colorScheme.onErrorContainer
+        stock != null -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clickable { onFindSlot(slot) },
+        shape = RoundedCornerShape(8.dp),
+        color = background,
+        tonalElevation = if (active) 4.dp else 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "%02d".format(slot.slot.slotNumber),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = foreground
+                )
+                Text(
+                    text = "⋮",
+                    modifier = Modifier.clickable(onClick = onOpenMenu),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = foreground
+                )
+            }
+            Text(
+                text = stock?.protocolPartId ?: stringResource(R.string.containers_slot_empty),
+                style = MaterialTheme.typography.labelSmall,
+                color = foreground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = stock?.quantity?.toString().orEmpty(),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = foreground,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
 private fun SlotList(
     slots: List<ContainerSlotStock>,
     modifier: Modifier = Modifier
@@ -664,6 +845,7 @@ private fun SlotList(
 @Composable
 private fun SmartSlotList(
     slots: List<ContainerSlotStock>,
+    onFindSlot: (ContainerSlotStock) -> Unit,
     onRequestSlotInbound: (ContainerSlotStock) -> Unit,
     onClearSlot: (ContainerSlotStock) -> Unit,
     onSetSlotQuantity: (ContainerSlotStock, Int) -> Unit,
@@ -711,6 +893,12 @@ private fun SmartSlotList(
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
+                    }
+                    OutlinedButton(
+                        onClick = { onFindSlot(slot) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(text = stringResource(R.string.containers_slot_find))
                     }
                     OutlinedButton(
                         onClick = { onRequestSlotInbound(slot) },
