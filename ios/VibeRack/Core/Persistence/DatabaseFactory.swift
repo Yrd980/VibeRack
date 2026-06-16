@@ -16,7 +16,11 @@ public enum DatabaseFactory {
             create: true
         )
         let url = directory.appendingPathComponent(filename)
-        let queue = try DatabaseQueue(path: url.path)
+        return try makeQueue(path: url.path)
+    }
+
+    public static func makeQueue(path: String) throws -> DatabaseQueue {
+        let queue = try DatabaseQueue(path: path)
         try migrator.migrate(queue)
         return queue
     }
@@ -54,6 +58,26 @@ public enum DatabaseFactory {
                 table.column("quantity", .integer).notNull()
                 table.column("flags", .integer).notNull().defaults(to: 0)
                 table.uniqueKey(["container_slot_id"])
+            }
+        }
+
+        migrator.registerMigration("m2_stock_operation_schema") { db in
+            try db.create(table: "stock_operation", ifNotExists: true) { table in
+                table.column("id", .text).primaryKey()
+                table.column("type", .text).notNull()
+                table.column("container_id", .text).notNull()
+                    .references("container", onDelete: .cascade)
+                table.column("container_slot_id", .text).notNull()
+                    .references("container_slot", onDelete: .cascade)
+                table.column("slot_number", .integer).notNull()
+                table.column("protocol_part_id", .text).notNull()
+                table.column("quantity_before", .integer)
+                table.column("quantity_after", .integer)
+                table.column("quantity_delta", .integer).notNull()
+                table.column("source_type", .text).notNull()
+                table.column("ble_opcode", .integer)
+                table.column("ble_status", .integer)
+                table.column("created_at", .datetime).notNull()
             }
         }
         return migrator

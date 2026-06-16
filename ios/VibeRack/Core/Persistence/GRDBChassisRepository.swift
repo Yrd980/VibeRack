@@ -99,4 +99,215 @@ public final class GRDBChassisRepository: ChassisRepository {
             }
         }
     }
+
+    public func bindSlot(
+        chassisID: String,
+        slotNumber: Int,
+        protocolPartId: String,
+        quantity: Int,
+        source: StockOperationSource,
+        bleOpcode: UInt8?,
+        bleStatus: UInt8?
+    ) throws {
+        try database.write { db in
+            let slot = try fetchSlotRow(db, chassisID: chassisID, slotNumber: slotNumber)
+            let quantityBefore = slot.quantity
+            try db.execute(sql: """
+                INSERT OR REPLACE INTO stock_item (
+                    id, container_id, container_slot_id, protocol_part_id,
+                    quantity, flags
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """, arguments: [
+                    slot.stockID ?? "stock-\(slot.id)",
+                    chassisID,
+                    slot.id,
+                    protocolPartId,
+                    quantity,
+                    slot.flags
+                ])
+            try appendOperation(
+                db,
+                type: .stockIn,
+                chassisID: chassisID,
+                slotID: slot.id,
+                slotNumber: slotNumber,
+                protocolPartId: protocolPartId,
+                quantityBefore: quantityBefore,
+                quantityAfter: quantity,
+                source: source,
+                bleOpcode: bleOpcode,
+                bleStatus: bleStatus
+            )
+        }
+    }
+
+    public func setQuantity(
+        chassisID: String,
+        slotNumber: Int,
+        quantity: Int,
+        source: StockOperationSource,
+        bleOpcode: UInt8?,
+        bleStatus: UInt8?
+    ) throws {
+        try database.write { db in
+            let slot = try fetchSlotRow(db, chassisID: chassisID, slotNumber: slotNumber)
+            guard let stockID = slot.stockID,
+                  let protocolPartId = slot.protocolPartId,
+                  let quantityBefore = slot.quantity
+            else {
+                throw ChassisRepositoryError.slotIsEmpty(chassisID: chassisID, slotNumber: slotNumber)
+            }
+
+            try db.execute(sql: """
+                UPDATE stock_item
+                SET quantity = ?
+                WHERE id = ?
+                """, arguments: [quantity, stockID])
+            try appendOperation(
+                db,
+                type: .setQuantity,
+                chassisID: chassisID,
+                slotID: slot.id,
+                slotNumber: slotNumber,
+                protocolPartId: protocolPartId,
+                quantityBefore: quantityBefore,
+                quantityAfter: quantity,
+                source: source,
+                bleOpcode: bleOpcode,
+                bleStatus: bleStatus
+            )
+        }
+    }
+
+    public func clearSlot(
+        chassisID: String,
+        slotNumber: Int,
+        source: StockOperationSource,
+        bleOpcode: UInt8?,
+        bleStatus: UInt8?
+    ) throws {
+        try database.write { db in
+            let slot = try fetchSlotRow(db, chassisID: chassisID, slotNumber: slotNumber)
+            guard let stockID = slot.stockID,
+                  let protocolPartId = slot.protocolPartId,
+                  let quantityBefore = slot.quantity
+            else {
+                throw ChassisRepositoryError.slotIsEmpty(chassisID: chassisID, slotNumber: slotNumber)
+            }
+
+            try db.execute(sql: "DELETE FROM stock_item WHERE id = ?", arguments: [stockID])
+            try appendOperation(
+                db,
+                type: .clearSlot,
+                chassisID: chassisID,
+                slotID: slot.id,
+                slotNumber: slotNumber,
+                protocolPartId: protocolPartId,
+                quantityBefore: quantityBefore,
+                quantityAfter: nil,
+                source: source,
+                bleOpcode: bleOpcode,
+                bleStatus: bleStatus
+            )
+        }
+    }
+
+    public func fetchStockOperations(chassisID: String) throws -> [StockOperationRecord] {
+        try database.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT id, type, container_id, slot_number, protocol_part_id,
+                       quantity_before, quantity_after, quantity_delta,
+                       source_type, ble_opcode, ble_status, created_at
+                FROM stock_operation
+                WHERE container_id = ?
+                ORDER BY datetime(created_at), rowid
+                """, arguments: [chassisID]).map { row in
+                StockOperationRecord(
+                    id: row["id"],
+                    type: StockOperationType(rawValue: row["type"]) ?? .stockIn,
+                    chassisID: row["container_id"],
+                    slotNumber: row["slot_number"],
+                    protocolPartId: row["protocol_part_id"],
+                    quantityBefore: row["quantity_before"],
+                    quantityAfter: row["quantity_after"],
+                    quantityDelta: row["quantity_delta"],
+                    source: StockOperationSource(rawValue: row["source_type"]) ?? .manual,
+                    bleOpcode: (row["ble_opcode"] as Int?).map(UInt8.init),
+                    bleStatus: (row["ble_status"] as Int?).map(UInt8.init),
+                    createdAt: row["created_at"]
+                )
+            }
+        }
+    }
+
+    private func fetchSlotRow(_ db: Database, chassisID: String, slotNumber: Int) throws -> SlotRow {
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT slot.id, slot.container_id, slot.slot_number,
+                   stock.id AS stock_id, stock.protocol_part_id,
+                   stock.quantity, stock.flags
+            FROM container_slot slot
+            LEFT JOIN stock_item stock ON stock.container_slot_id = slot.id
+            WHERE slot.container_id = ? AND slot.slot_number = ?
+            """, arguments: [chassisID, slotNumber]) else {
+            throw ChassisRepositoryError.slotNotFound(chassisID: chassisID, slotNumber: slotNumber)
+        }
+
+        return SlotRow(
+            id: row["id"],
+            stockID: row["stock_id"],
+            protocolPartId: row["protocol_part_id"],
+            quantity: row["quantity"],
+            flags: row["flags"] ?? 0
+        )
+    }
+
+    private func appendOperation(
+        _ db: Database,
+        type: StockOperationType,
+        chassisID: String,
+        slotID: String,
+        slotNumber: Int,
+        protocolPartId: String,
+        quantityBefore: Int?,
+        quantityAfter: Int?,
+        source: StockOperationSource,
+        bleOpcode: UInt8?,
+        bleStatus: UInt8?
+    ) throws {
+        let quantityDelta = (quantityAfter ?? 0) - (quantityBefore ?? 0)
+        try db.execute(sql: """
+            INSERT INTO stock_operation (
+                id, type, container_id, container_slot_id, slot_number,
+                protocol_part_id, quantity_before, quantity_after, quantity_delta,
+                source_type, ble_opcode, ble_status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, arguments: [
+                UUID().uuidString,
+                type.rawValue,
+                chassisID,
+                slotID,
+                slotNumber,
+                protocolPartId,
+                quantityBefore,
+                quantityAfter,
+                quantityDelta,
+                source.rawValue,
+                bleOpcode,
+                bleStatus,
+                Date()
+            ])
+    }
+}
+
+public enum ChassisRepositoryError: Error, Equatable {
+    case slotNotFound(chassisID: String, slotNumber: Int)
+    case slotIsEmpty(chassisID: String, slotNumber: Int)
+}
+
+private struct SlotRow {
+    let id: String
+    let stockID: String?
+    let protocolPartId: String?
+    let quantity: Int?
+    let flags: Int
 }

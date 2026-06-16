@@ -15,7 +15,7 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
         case .chassis:
             ChassisListView(repository: dependencies.chassisRepository)
         case .stockIn:
-            StockInFlowView()
+            StockInFlowView(repository: dependencies.chassisRepository)
         case .search:
             SearchView()
         case .settings:

@@ -59,3 +59,58 @@ public struct ChassisSlotState: Identifiable, Equatable {
         self.flags = flags
     }
 }
+
+public enum StockOperationType: String, Equatable {
+    case stockIn = "stock_in"
+    case setQuantity = "set_quantity"
+    case clearSlot = "clear_slot"
+}
+
+public enum StockOperationSource: String, Equatable {
+    case stockIn = "stock_in"
+    case manual = "manual"
+    case restore = "restore"
+}
+
+public struct StockOperationRecord: Identifiable, Equatable {
+    public let id: String
+    public let type: StockOperationType
+    public let chassisID: String
+    public let slotNumber: Int
+    public let protocolPartId: String
+    public let quantityBefore: Int?
+    public let quantityAfter: Int?
+    public let quantityDelta: Int
+    public let source: StockOperationSource
+    public let bleOpcode: UInt8?
+    public let bleStatus: UInt8?
+    public let createdAt: Date
+
+    public init(
+        id: String,
+        type: StockOperationType,
+        chassisID: String,
+        slotNumber: Int,
+        protocolPartId: String,
+        quantityBefore: Int?,
+        quantityAfter: Int?,
+        quantityDelta: Int,
+        source: StockOperationSource,
+        bleOpcode: UInt8?,
+        bleStatus: UInt8?,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.type = type
+        self.chassisID = chassisID
+        self.slotNumber = slotNumber
+        self.protocolPartId = protocolPartId
+        self.quantityBefore = quantityBefore
+        self.quantityAfter = quantityAfter
+        self.quantityDelta = quantityDelta
+        self.source = source
+        self.bleOpcode = bleOpcode
+        self.bleStatus = bleStatus
+        self.createdAt = createdAt
+    }
+}
