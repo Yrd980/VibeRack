@@ -22,4 +22,10 @@ data class StockContainer(
     val tableCrc16: Int? = null,
     val lastSeenAt: Long? = null,
     val lastSyncedAt: Long? = null
-)
+) {
+    val isSmartChassisCachePossiblyStale: Boolean
+        get() = type == ContainerType.SMART_CHASSIS &&
+            tableSeq != null &&
+            tableCrc16 != null &&
+            lastSyncedAt == null
+}

@@ -84,6 +84,9 @@ class ContainerRepositoryImpl(
         val displayName = advertisedCode
             ?: existing?.displayName
             ?: "VibeRack ${normalizedMac.takeLast(5).replace(":", "")}"
+        val tableSeqLow16Changed = existing?.tableSeq?.let { tableSeq ->
+            tableSeqLow16 != null && ((tableSeq and 0xFFFF).toInt() != tableSeqLow16)
+        } ?: false
         val containerId = if (existing == null) {
             containerDao.insertContainer(
                 ContainerEntity(
@@ -96,7 +99,6 @@ class ContainerRepositoryImpl(
                     protoVersion = protoVersion,
                     batteryPct = batteryPct,
                     statusFlags = statusFlags,
-                    tableSeq = tableSeqLow16?.toLong(),
                     lastSeenAt = now,
                     updatedAt = now
                 )
@@ -113,7 +115,8 @@ class ContainerRepositoryImpl(
                     protoVersion = protoVersion,
                     batteryPct = batteryPct ?: existing.batteryPct,
                     statusFlags = statusFlags ?: existing.statusFlags,
-                    tableSeq = tableSeqLow16?.toLong() ?: existing.tableSeq,
+                    tableSeq = existing.tableSeq,
+                    lastSyncedAt = if (tableSeqLow16Changed) null else existing.lastSyncedAt,
                     lastSeenAt = now,
                     updatedAt = now
                 )

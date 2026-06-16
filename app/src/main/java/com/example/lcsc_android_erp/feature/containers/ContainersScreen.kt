@@ -186,7 +186,8 @@ fun ContainersScreen(
                     connectionText = uiState.connectionState.message,
                     tableInfoText = uiState.activeTableInfo?.let { tableInfo ->
                         "seq ${tableInfo.tableSeq} / crc ${tableInfo.crc16}"
-                    },
+                    } ?: smartChassisCacheText(container),
+                    cacheWarningText = smartChassisCacheWarningText(container),
                     onConnectSmartChassis = { onConnectSmartChassis(container) },
                     onReadAllSmartChassis = { onReadAllSmartChassis(container) },
                     onLightsOff = onLightsOff,
@@ -413,6 +414,7 @@ private fun ContainerDetail(
     activeLightSlot: Int?,
     connectionText: String?,
     tableInfoText: String?,
+    cacheWarningText: String?,
     onConnectSmartChassis: () -> Unit,
     onReadAllSmartChassis: () -> Unit,
     onLightsOff: () -> Unit,
@@ -438,6 +440,7 @@ private fun ContainerDetail(
             SmartChassisActions(
                 connectionText = connectionText,
                 tableInfoText = tableInfoText,
+                cacheWarningText = cacheWarningText,
                 onConnect = onConnectSmartChassis,
                 onReadAll = onReadAllSmartChassis,
                 onLightsOff = onLightsOff,
@@ -465,6 +468,7 @@ private fun ContainerDetail(
 private fun SmartChassisActions(
     connectionText: String?,
     tableInfoText: String?,
+    cacheWarningText: String?,
     onConnect: () -> Unit,
     onReadAll: () -> Unit,
     onLightsOff: () -> Unit,
@@ -561,6 +565,13 @@ private fun SmartChassisActions(
                 text = it,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        cacheWarningText?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
             )
         }
     }
@@ -889,6 +900,30 @@ private fun ContainerType.label(): String {
         ContainerType.LEGACY_LOCATION -> "库位"
         ContainerType.BOX -> "盒子"
         ContainerType.SMART_CHASSIS -> "智能底盘"
+    }
+}
+
+private fun smartChassisCacheText(container: StockContainer): String? {
+    if (container.type != ContainerType.SMART_CHASSIS) {
+        return null
+    }
+    val tableSeq = container.tableSeq
+    val tableCrc16 = container.tableCrc16
+    return when {
+        tableSeq != null && tableCrc16 != null -> "缓存 seq $tableSeq / crc $tableCrc16"
+        tableSeq != null -> "广播 seq low16 ${tableSeq and 0xFFFF}"
+        else -> "未校验绑定表"
+    }
+}
+
+private fun smartChassisCacheWarningText(container: StockContainer): String? {
+    if (container.type != ContainerType.SMART_CHASSIS) {
+        return null
+    }
+    return when {
+        container.isSmartChassisCachePossiblyStale -> "绑定表可能已变化，请连接后读表校验"
+        container.tableSeq == null || container.tableCrc16 == null -> "尚未读取完整绑定表"
+        else -> null
     }
 }
 
