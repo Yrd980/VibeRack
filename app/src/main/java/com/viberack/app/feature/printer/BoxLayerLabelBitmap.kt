@@ -88,6 +88,59 @@ object BoxLayerLabelBitmap {
         return bitmap
     }
 
+    fun create10MmPreviewBitmap(content: BoxLayerLabelContent): Bitmap {
+        val bitmap = Bitmap.createBitmap(widthDots, heightDots, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+
+        val positionPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textAlign = Paint.Align.LEFT
+            textSize = 48f
+            typeface = PrintTypeface.bold
+        }
+        val partPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textAlign = Paint.Align.LEFT
+            textSize = 40f
+            typeface = PrintTypeface.bold
+        }
+        val notePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textAlign = Paint.Align.LEFT
+            textSize = 28f
+            typeface = PrintTypeface.regular
+        }
+
+        drawPreviewLine(
+            canvas = canvas,
+            text = content.positionCode,
+            paint = positionPaint,
+            baseline = 68f,
+            minTextSize = 32f,
+        )
+        content.partNumber.takeIf { it.isNotBlank() }?.let { partNumber ->
+            drawPreviewLine(
+                canvas = canvas,
+                text = partNumber,
+                paint = partPaint,
+                baseline = 124f,
+                minTextSize = 28f,
+            )
+        }
+        content.note?.takeIf { it.isNotBlank() }?.let { note ->
+            drawPreviewLine(
+                canvas = canvas,
+                text = note,
+                paint = notePaint,
+                baseline = 170f,
+                minTextSize = 20f,
+            )
+        }
+
+        return bitmap
+    }
+
     private fun drawFittedLine(
         canvas: Canvas,
         text: String,
@@ -126,5 +179,27 @@ object BoxLayerLabelBitmap {
         return if (endIndex <= 0) ellipsis else text.substring(0, endIndex) + ellipsis
     }
 
+    private fun drawPreviewLine(
+        canvas: Canvas,
+        text: String,
+        paint: TextPaint,
+        baseline: Float,
+        minTextSize: Float,
+    ) {
+        val originalTextSize = paint.textSize
+        val trimmedText = text.trim()
+        var textSize = originalTextSize
+        while (textSize > minTextSize && paint.measureText(trimmedText) > maxPreviewTextWidth) {
+            textSize -= 1f
+            paint.textSize = textSize
+        }
+
+        val fittedText = ellipsizeEnd(trimmedText, paint, maxPreviewTextWidth)
+        canvas.drawText(fittedText, previewPaddingX, baseline, paint)
+        paint.textSize = originalTextSize
+    }
+
     private const val maxRotatedTextWidth = heightDots - 18f
+    private const val previewPaddingX = 16f
+    private const val maxPreviewTextWidth = widthDots - previewPaddingX * 2
 }

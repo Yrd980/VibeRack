@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -157,15 +158,21 @@ fun PrinterScreen(
     }
     val boxLabelPositionValue = boxLabelPosition.trim()
     val boxLabelPartNumberValue = boxLabelPartNumber.trim()
-    val boxLabelBitmap = remember(boxLabelPositionValue, boxLabelPartNumberValue) {
+    val boxLabelContent = remember(boxLabelPositionValue, boxLabelPartNumberValue) {
         if (boxLabelPositionValue.isNotBlank() && boxLabelPartNumberValue.isNotBlank()) {
-            BoxLayerLabelBitmap.create10MmBitmap(
+            BoxLayerLabelContent(
                 positionCode = boxLabelPositionValue,
                 partNumber = boxLabelPartNumberValue
             )
         } else {
             null
         }
+    }
+    val boxLabelBitmap = remember(boxLabelContent) {
+        boxLabelContent?.let(BoxLayerLabelBitmap::create10MmBitmap)
+    }
+    val boxLabelPreviewBitmap = remember(boxLabelContent) {
+        boxLabelContent?.let(BoxLayerLabelBitmap::create10MmPreviewBitmap)
     }
 
     LazyColumn(
@@ -289,7 +296,7 @@ fun PrinterScreen(
                 onPositionCodeChange = { boxLabelPosition = it },
                 partNumber = boxLabelPartNumber,
                 onPartNumberChange = { boxLabelPartNumber = it },
-                previewBitmap = boxLabelBitmap,
+                previewBitmap = boxLabelPreviewBitmap,
                 printerState = state,
                 onPrint = {
                     val bitmap = boxLabelBitmap
@@ -463,6 +470,7 @@ private fun BoxLayerLabelCard(
                     contentDescription = stringResource(R.string.printer_box_label_preview_title),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .aspectRatio(BoxLayerLabelBitmap.widthDots.toFloat() / BoxLayerLabelBitmap.heightDots)
                         .heightIn(max = 180.dp)
                         .clip(MaterialTheme.shapes.medium)
                         .background(MaterialTheme.colorScheme.surfaceVariant),
