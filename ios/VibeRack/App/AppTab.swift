@@ -8,11 +8,12 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
+    @MainActor
     @ViewBuilder
-    func makeContentView() -> some View {
+    func makeContentView(dependencies: DependencyGraph) -> some View {
         switch self {
         case .chassis:
-            ChassisListView()
+            ChassisListView(repository: dependencies.chassisRepository)
         case .stockIn:
             StockInFlowView()
         case .search:

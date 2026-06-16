@@ -29,6 +29,12 @@
 		AA0000000000000000000204 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000005001 /* GRDB */; };
 		AA0000000000000000000205 /* SmartChassisBluetoothTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000018 /* SmartChassisBluetoothTests.swift */; };
 		AA0000000000000000000206 /* SmartChassisBindingTableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000019 /* SmartChassisBindingTableTests.swift */; };
+		AA0000000000000000000207 /* ChassisRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000021 /* ChassisRepositoryTests.swift */; };
+		AA0000000000000000000117 /* ChassisModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000022 /* ChassisModels.swift */; };
+		AA0000000000000000000118 /* ChassisRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000023 /* ChassisRepository.swift */; };
+		AA0000000000000000000119 /* DatabaseFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000024 /* DatabaseFactory.swift */; };
+		AA0000000000000000000120 /* GRDBChassisRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000025 /* GRDBChassisRepository.swift */; };
+		AA0000000000000000000121 /* DependencyGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000026 /* DependencyGraph.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +68,12 @@
 		AA0000000000000000000018 /* SmartChassisBluetoothTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisBluetoothTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000019 /* SmartChassisBindingTableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisBindingTableTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000020 /* SmartChassisBindingTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisBindingTable.swift; sourceTree = "<group>"; };
+		AA0000000000000000000021 /* ChassisRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChassisRepositoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000022 /* ChassisModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChassisModels.swift; sourceTree = "<group>"; };
+		AA0000000000000000000023 /* ChassisRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChassisRepository.swift; sourceTree = "<group>"; };
+		AA0000000000000000000024 /* DatabaseFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseFactory.swift; sourceTree = "<group>"; };
+		AA0000000000000000000025 /* GRDBChassisRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GRDBChassisRepository.swift; sourceTree = "<group>"; };
+		AA0000000000000000000026 /* DependencyGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependencyGraph.swift; sourceTree = "<group>"; };
 		AA0000000000000000000615 /* ProtocolFixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ProtocolFixtures; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* VibeRack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeRack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000402 /* VibeRackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeRackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -101,6 +113,7 @@
 				AA0000000000000000000001 /* VibeRackApp.swift */,
 				AA0000000000000000000603 /* App */,
 				AA0000000000000000000613 /* Core */,
+				AA0000000000000000000620 /* Domain */,
 				AA0000000000000000000604 /* Features */,
 			);
 			path = VibeRack;
@@ -112,6 +125,7 @@
 				AA0000000000000000000002 /* AppTab.swift */,
 				AA0000000000000000000003 /* Router.swift */,
 				AA0000000000000000000004 /* AppView.swift */,
+				AA0000000000000000000026 /* DependencyGraph.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -140,6 +154,7 @@
 			children = (
 				AA0000000000000000000608 /* ProtocolTests */,
 				AA0000000000000000000616 /* BluetoothTests */,
+				AA0000000000000000000618 /* PersistenceTests */,
 				AA0000000000000000000615 /* ProtocolFixtures */,
 				AA0000000000000000000012 /* RouterTests.swift */,
 			);
@@ -193,6 +208,7 @@
 			children = (
 				AA0000000000000000000614 /* Protocol */,
 				AA0000000000000000000617 /* Bluetooth */,
+				AA0000000000000000000619 /* Persistence */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -225,6 +241,48 @@
 				AA0000000000000000000017 /* SmartChassisCentral.swift */,
 			);
 			path = Bluetooth;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000618 /* PersistenceTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000021 /* ChassisRepositoryTests.swift */,
+			);
+			path = PersistenceTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000619 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000024 /* DatabaseFactory.swift */,
+				AA0000000000000000000025 /* GRDBChassisRepository.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000620 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000621 /* Models */,
+				AA0000000000000000000622 /* Repositories */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000621 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000022 /* ChassisModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000622 /* Repositories */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000023 /* ChassisRepository.swift */,
+			);
+			path = Repositories;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -348,6 +406,11 @@
 				AA0000000000000000000114 /* SmartChassisScanner.swift in Sources */,
 				AA0000000000000000000115 /* SmartChassisCentral.swift in Sources */,
 				AA0000000000000000000116 /* SmartChassisBindingTable.swift in Sources */,
+				AA0000000000000000000117 /* ChassisModels.swift in Sources */,
+				AA0000000000000000000118 /* ChassisRepository.swift in Sources */,
+				AA0000000000000000000119 /* DatabaseFactory.swift in Sources */,
+				AA0000000000000000000120 /* GRDBChassisRepository.swift in Sources */,
+				AA0000000000000000000121 /* DependencyGraph.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -359,6 +422,7 @@
 				AA0000000000000000000202 /* RouterTests.swift in Sources */,
 				AA0000000000000000000205 /* SmartChassisBluetoothTests.swift in Sources */,
 				AA0000000000000000000206 /* SmartChassisBindingTableTests.swift in Sources */,
+				AA0000000000000000000207 /* ChassisRepositoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
