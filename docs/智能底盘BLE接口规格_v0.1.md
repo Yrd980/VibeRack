@@ -1,6 +1,6 @@
 # 智能底盘 BLE 接口规格 v0.1
 
-适用范围：智能底盘（25 槽，nRF52811 + NT3H2111）与 Android APP（LCSC ERP）之间的全部蓝牙交互。本文档是固件与 APP 的共同契约，任何修改需同步更新协议版本号。
+适用范围：智能底盘（25 槽，nRF52811 + NT3H2111）与 Android APP（VibeRack）之间的全部蓝牙交互。本文档是固件与 APP 的共同契约，任何修改需同步更新协议版本号。
 
 ---
 
@@ -32,6 +32,8 @@
 | 6 | 1 B | status_flags | bit0 低电量；bit1 存在未绑定槽位；bit2 正在点灯；bit3 故障 |
 | 7 | 2 B | table_seq | 绑定表版本号低 16 位，APP 据此判断缓存是否过期，免连接 |
 
+开发期固件当前会在上述核心字段后附加 2 字节预留尾部，写 `0x0000`。APP 解析时只依赖前 9 字节核心字段，并忽略额外尾部字节，避免后续广告扩展破坏兼容。
+
 > APP 扫描页凭广播即可渲染"全部底盘 + 电量 + 数据是否最新"列表，无需逐台连接。
 
 ## 3. 服务总表
@@ -44,7 +46,22 @@
 | Device Information | 0x180A（标准） | 固件版本、硬件版本、型号 |
 | Secure DFU | Nordic 标准 | 无按钮 OTA 升级入口 |
 
-自定义基 UUID 定一个随机 128-bit，全产品线复用，末两字节区分服务/特征。
+自定义基 UUID 定一个随机 128-bit，全产品线复用；开发期以 UUID 第一段低 16 位 short id 区分服务/特征。
+
+### 3.1 开发期 UUID 常量
+
+开发期固定使用 UUID 模板 `7f4bXXXX-8d1a-4d45-9a4e-2b4a7c000000`，其中第一段末尾 `XXXX` 为 16-bit short id，对应上表"基 UUID + 0x0001 / 0x0002"的写法。若后续修改以下任一 UUID，必须同步提升本协议文档版本并通知 Android、固件两端。
+
+| 项 | Short id | UUID |
+|---|---:|---|
+| Binding Table Service | 0x0001 | `7f4b0001-8d1a-4d45-9a4e-2b4a7c000000` |
+| Binding Control Point characteristic | 0x1001 | `7f4b1001-8d1a-4d45-9a4e-2b4a7c000000` |
+| Table Info characteristic | 0x1002 | `7f4b1002-8d1a-4d45-9a4e-2b4a7c000000` |
+| Light Service | 0x0002 | `7f4b0002-8d1a-4d45-9a4e-2b4a7c000000` |
+| Light Command characteristic | 0x2001 | `7f4b2001-8d1a-4d45-9a4e-2b4a7c000000` |
+| Light Status characteristic | 0x2002 | `7f4b2002-8d1a-4d45-9a4e-2b4a7c000000` |
+
+P0/银立方（Yinlifang）打印机蓝牙行为不属于本 GATT 合约：打印机仍使用 BLE 扫描发现设备，打印连接继续走经典蓝牙 SPP/RFCOMM。
 
 ## 4. 槽位绑定记录格式（16 字节定长）
 
@@ -66,7 +83,7 @@
 | 特征 | 属性 | 说明 |
 |---|---|---|
 | Control Point | Write / Notify | 操作码协议，见 5.2 |
-| Table Info | Read / Notify | `table_seq`(uint32) + `crc16`(全表) + `slot_count`(uint8=25) |
+| Table Info | Read / Notify | `table_seq`(uint32) + `crc16`(全表 CRC-16/CCITT-FALSE) + `slot_count`(uint8=25) |
 
 每次任何写操作成功后 `table_seq` 自增并 Notify，多手机场景下其他已连接端凭此感知变更。
 
@@ -87,6 +104,8 @@
 **关键约定：插入/移除/平移的重编号逻辑在 MCU 端执行**，APP 只发结构化指令。这保证硬件是绑定关系的单一事实源，APP 收到操作成功后用 READ_ALL 或本地等价变换刷新缓存，两端永不因"各自算各自的"而分叉。
 
 所有响应帧格式：`op(1B) + status(1B) + payload`。status：0x00 成功；0x01 参数错误；0x02 槽满；0x03 flash 忙（APP 退避 100ms 重试）；0x04 CRC 错误。
+
+`READ_ALL` 成功时连续 Notify 25 条记录帧，记录帧格式为 `op=0x02,status=0x00,payload=<16B slot_record>`；最后发送结束帧 `op=0x02,status=0x00,payload=0xFF`。APP 必须在收到结束帧后校验记录数、Table Info `slot_count` 与全表 CRC-16，校验失败不得落账。
 
 ## 6. 灯控服务
 

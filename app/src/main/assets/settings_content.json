@@ -6,12 +6,12 @@
     "languageEnglish": "English",
     "aboutTitle": "关于",
     "aboutSummary": "版本信息与技术说明",
-    "inventoryBackupTitle": "库存导入导出",
-    "exportInventoryTitle": "导出库存",
-    "exportInventorySummary": "将全部库存导出为 Excel 文件",
-    "importInventoryTitle": "导入库存",
-    "importInventorySummary": "从 Excel 文件导入并覆盖当前库存",
-    "aboutBody": "LCSC Android ERP 用于在 Android 设备上完成立创物料扫码、入库和库存管理。",
+    "inventoryBackupTitle": "库存账导入导出",
+    "exportInventoryTitle": "导出库存账",
+    "exportInventorySummary": "将库存账导出为 Excel 文件",
+    "importInventoryTitle": "导入库存账",
+    "importInventorySummary": "从 Excel 文件导入并覆盖当前库存账",
+    "aboutBody": "VibeRack 是面向智能物料管理的 Android 应用，用于组件入库、容器槽位管理、库存账、找料点灯、BOM 拣料点灯和智能底盘硬件恢复。",
     "stackBody": "Android 原生 Kotlin + Compose，依赖通过应用级容器管理，本地业务库使用 Room + SQLite，设置存储使用 DataStore。\n作者: BrokenClient@foxmail.com\nQQ群: 1098077458"
   },
   "en": {
@@ -21,12 +21,12 @@
     "languageEnglish": "English",
     "aboutTitle": "About",
     "aboutSummary": "Version information and technical notes",
-    "inventoryBackupTitle": "Inventory Import/Export",
-    "exportInventoryTitle": "Export Inventory",
-    "exportInventorySummary": "Export all inventory as an Excel file",
-    "importInventoryTitle": "Import Inventory",
-    "importInventorySummary": "Import from an Excel file and overwrite current inventory",
-    "aboutBody": "LCSC Android ERP is used on Android devices for LCSC material scanning, inbound processing, and inventory management.",
+    "inventoryBackupTitle": "Stock Ledger Import/Export",
+    "exportInventoryTitle": "Export Stock Ledger",
+    "exportInventorySummary": "Export the stock ledger as an Excel file",
+    "importInventoryTitle": "Import Stock Ledger",
+    "importInventorySummary": "Import from an Excel file and overwrite the current stock ledger",
+    "aboutBody": "VibeRack is an Android app for smart component management: component stock-in, container slots, stock ledger, find-by-light, BOM pick-to-light, and smart chassis hardware restore.",
     "stackBody": "Native Android Kotlin + Compose, with dependencies managed through an application-level container. Room + SQLite is used for local business data, DataStore stores settings.\nAuthor: BrokenClient@foxmail.com\nQQ group: 1098077458"
   }
 }

@@ -17,7 +17,7 @@ import urllib.request
 
 
 DEFAULT_HEADERS = {
-    "User-Agent": "LCSCAndroidERP/1.4.0 (Android)",
+    "User-Agent": "VibeRack/1.4.0 (Android; LCSC catalog probe)",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     "Cache-Control": "no-cache",

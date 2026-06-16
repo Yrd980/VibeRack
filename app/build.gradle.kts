@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.androidx.room)
 }
 
 val localProperties = Properties().apply {
@@ -32,11 +33,11 @@ val hasReleaseSigning = listOf(
 ).all { !it.isNullOrBlank() }
 
 android {
-    namespace = "com.example.lcsc_android_erp"
+    namespace = "com.viberack.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.lcsc_android_erp"
+        applicationId = "com.viberack.app"
         minSdk = 29
         targetSdk = 36
         versionCode = 6
@@ -82,8 +83,8 @@ android {
     }
 }
 
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {

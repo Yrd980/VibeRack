@@ -1,11 +1,13 @@
 *.iml
 .gradle
 /local.properties
+/.idea/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
 /.idea/deploymentTargetSelector.xml
+/.idea/markdown.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 /.kotlin
@@ -28,13 +30,15 @@ __pycache__/
 
 docs/update/
 h5/
+hardware/
 tools/output/
 uni-appX/
 .backup/
 .superpowers/
 .gradle-user-home*/
+.commit-verify-worktrees/
 
 /asset/BOM.xlsx
 /tmp/
 
-
+screen-*.png

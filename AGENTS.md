@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a single-module Android app in `app/`. Kotlin source lives under `app/src/main/java/com/example/lcsc_android_erp`, organized by layer and feature:
+This repository is a single-module Android app in `app/`. Kotlin source lives under `app/src/main/java/com/viberack/app`, organized by layer and feature:
 
 - `feature/`: Compose screens and view models for `home`, `inbound`, `inventory`, `search`, and `settings`
 - `core/`: app container, Room database, DataStore, network, and shared UI helpers
@@ -73,4 +73,18 @@ PRs should include:
 
 This app uses Jetpack Compose + Room + DataStore + Retrofit/Jsoup. Preserve the existing flow: UI -> ViewModel -> Repository -> Room/network. Keep persisted schema changes compatible and update `app/schemas` when Room entities change.
 
-Prefer incremental vertical slices that keep existing inbound, search, inventory, printer, NFC, and backup flows usable. For smart chassis work, implement the app-side BLE layer against mocks or simulators when hardware is unavailable, but keep packet formats and state transitions aligned with the BLE spec.
+Prefer protocol-first vertical slices that keep the smart chassis, container/slot model, and hardware-backed workflows coherent. Legacy inbound, search, inventory, printer, NFC, backup, location, and box flows may be migrated, replaced, or deleted when they slow down the VibeRack hardware-protocol direction. For smart chassis work, implement the app-side BLE layer against mocks or simulators when hardware is unavailable, but keep packet formats and state transitions aligned with the BLE spec.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for this repository. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository; read `CONTEXT.md` first, then the detailed product/protocol docs it points to. See `docs/agents/domain.md`.

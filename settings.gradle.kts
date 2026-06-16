@@ -1,3 +1,11 @@
+val gradleAppName = System.getProperty("org.gradle.appname").orEmpty()
+if (gradleAppName == "gradle") {
+    error(
+        "This project must be built through the checked-in Gradle wrapper. " +
+            "Use .\\gradlew.bat <task> on Windows or ./gradlew <task> on Unix-like shells."
+    )
+}
+
 pluginManagement {
     repositories {
         google {
@@ -19,5 +27,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LCSC_android_erp"
+rootProject.name = "viberack_app"
 include(":app")
