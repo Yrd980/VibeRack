@@ -17,10 +17,16 @@
 		AA0000000000000000000108 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000008 /* SettingsView.swift */; };
 		AA0000000000000000000109 /* SmartChassisProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* SmartChassisProtocol.swift */; };
 		AA0000000000000000000110 /* SmartChassisCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* SmartChassisCodec.swift */; };
+		AA0000000000000000000111 /* SmartChassisBluetoothUUIDs.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000013 /* SmartChassisBluetoothUUIDs.swift */; };
+		AA0000000000000000000112 /* SmartChassisDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000014 /* SmartChassisDiscovery.swift */; };
+		AA0000000000000000000113 /* SmartChassisBluetoothError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000015 /* SmartChassisBluetoothError.swift */; };
+		AA0000000000000000000114 /* SmartChassisScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000016 /* SmartChassisScanner.swift */; };
+		AA0000000000000000000115 /* SmartChassisCentral.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000017 /* SmartChassisCentral.swift */; };
 		AA0000000000000000000201 /* SmartChassisProtocolVectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000009 /* SmartChassisProtocolVectorTests.swift */; };
 		AA0000000000000000000202 /* RouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* RouterTests.swift */; };
 		AA0000000000000000000203 /* ProtocolFixtures in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000615 /* ProtocolFixtures */; };
 		AA0000000000000000000204 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000005001 /* GRDB */; };
+		AA0000000000000000000205 /* SmartChassisBluetoothTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000018 /* SmartChassisBluetoothTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +52,12 @@
 		AA0000000000000000000010 /* SmartChassisProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisProtocol.swift; sourceTree = "<group>"; };
 		AA0000000000000000000011 /* SmartChassisCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisCodec.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* RouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouterTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000013 /* SmartChassisBluetoothUUIDs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisBluetoothUUIDs.swift; sourceTree = "<group>"; };
+		AA0000000000000000000014 /* SmartChassisDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisDiscovery.swift; sourceTree = "<group>"; };
+		AA0000000000000000000015 /* SmartChassisBluetoothError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisBluetoothError.swift; sourceTree = "<group>"; };
+		AA0000000000000000000016 /* SmartChassisScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisScanner.swift; sourceTree = "<group>"; };
+		AA0000000000000000000017 /* SmartChassisCentral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisCentral.swift; sourceTree = "<group>"; };
+		AA0000000000000000000018 /* SmartChassisBluetoothTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisBluetoothTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000615 /* ProtocolFixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ProtocolFixtures; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* VibeRack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeRack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000402 /* VibeRackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeRackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -123,6 +135,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000608 /* ProtocolTests */,
+				AA0000000000000000000616 /* BluetoothTests */,
 				AA0000000000000000000615 /* ProtocolFixtures */,
 				AA0000000000000000000012 /* RouterTests.swift */,
 			);
@@ -174,6 +187,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000614 /* Protocol */,
+				AA0000000000000000000617 /* Bluetooth */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -185,6 +199,26 @@
 				AA0000000000000000000011 /* SmartChassisCodec.swift */,
 			);
 			path = Protocol;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000616 /* BluetoothTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000018 /* SmartChassisBluetoothTests.swift */,
+			);
+			path = BluetoothTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000617 /* Bluetooth */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000013 /* SmartChassisBluetoothUUIDs.swift */,
+				AA0000000000000000000014 /* SmartChassisDiscovery.swift */,
+				AA0000000000000000000015 /* SmartChassisBluetoothError.swift */,
+				AA0000000000000000000016 /* SmartChassisScanner.swift */,
+				AA0000000000000000000017 /* SmartChassisCentral.swift */,
+			);
+			path = Bluetooth;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -302,6 +336,11 @@
 				AA0000000000000000000108 /* SettingsView.swift in Sources */,
 				AA0000000000000000000109 /* SmartChassisProtocol.swift in Sources */,
 				AA0000000000000000000110 /* SmartChassisCodec.swift in Sources */,
+				AA0000000000000000000111 /* SmartChassisBluetoothUUIDs.swift in Sources */,
+				AA0000000000000000000112 /* SmartChassisDiscovery.swift in Sources */,
+				AA0000000000000000000113 /* SmartChassisBluetoothError.swift in Sources */,
+				AA0000000000000000000114 /* SmartChassisScanner.swift in Sources */,
+				AA0000000000000000000115 /* SmartChassisCentral.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -311,6 +350,7 @@
 			files = (
 				AA0000000000000000000201 /* SmartChassisProtocolVectorTests.swift in Sources */,
 				AA0000000000000000000202 /* RouterTests.swift in Sources */,
+				AA0000000000000000000205 /* SmartChassisBluetoothTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

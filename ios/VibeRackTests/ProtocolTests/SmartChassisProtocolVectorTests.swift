@@ -105,7 +105,7 @@ final class SmartChassisProtocolVectorTests: XCTestCase {
         )
     }
 
-    func testAdvertisementAndTableInfoParsing() {
+    func testAndroidMigrationVectorParsesCoreAdvertisementAndIgnoresReservedTail() {
         let advertisement = SmartChassisCodec.parseAdvertisement(
             Data(hex: "FF FF 01 E9 03 58 04 34 12 00 00")
         )
@@ -116,7 +116,9 @@ final class SmartChassisProtocolVectorTests: XCTestCase {
         XCTAssertEqual(advertisement?.batteryPct, 88)
         XCTAssertEqual(advertisement?.statusFlags, SmartChassisProtocol.advertisementLightActiveFlag)
         XCTAssertEqual(advertisement?.tableSeqLow16, 0x1234)
+    }
 
+    func testAndroidMigrationVectorParsesManufacturerPayloadWithoutCompanyBytes() {
         let androidPayload = SmartChassisCodec.parseAndroidManufacturerPayload(
             companyId: SmartChassisProtocol.devCompanyId,
             payload: Data(hex: "01 D2 04 61 02 78 56")
@@ -124,14 +126,16 @@ final class SmartChassisProtocolVectorTests: XCTestCase {
         XCTAssertEqual(androidPayload?.batchId, 1234)
         XCTAssertEqual(androidPayload?.batteryPct, 97)
         XCTAssertEqual(androidPayload?.tableSeqLow16, 0x5678)
+    }
 
+    func testAndroidMigrationVectorParsesTableInfo() {
         let tableInfo = SmartChassisCodec.parseTableInfo(Data(hex: "78 56 34 12 CD AB 19"))
         XCTAssertEqual(tableInfo?.tableSeq, 0x12345678)
         XCTAssertEqual(tableInfo?.crc16, 0xABCD)
         XCTAssertEqual(tableInfo?.slotCount, 25)
     }
 
-    func testSlotRecordAndCrcParsing() {
+    func testAndroidMigrationVectorEncodesAndParsesSlotRecordWithCrc() {
         let encoded = SmartChassisCodec.encodeSlotRecord(
             slot: 7,
             partId: "c12345",
@@ -153,19 +157,21 @@ final class SmartChassisProtocolVectorTests: XCTestCase {
         XCTAssertNil(SmartChassisCodec.parseSlotRecord(corrupted))
     }
 
-    func testKnownCrcCheckValuesAndDeviceHealth() {
+    func testAndroidMigrationVectorCrcImplementationsMatchKnownCheckValues() {
         let check = Data("123456789".utf8)
 
         XCTAssertEqual(SmartChassisCodec.crc8Maxim(check), 0xA1)
         XCTAssertEqual(SmartChassisCodec.crc16CcittFalse(check), 0x29B1)
+    }
 
+    func testDeviceHealthVectorParsesXiaoSamplePayload() {
         let health = SmartChassisCodec.parseDeviceHealth(Data(hex: "64 02 00 00"))
         XCTAssertEqual(health?.batteryPct, 100)
         XCTAssertEqual(health?.resetReason, 0x0002)
         XCTAssertEqual(health?.healthFlags, 0x00)
     }
 
-    func testLightStatusAndReadAllEndParsing() {
+    func testAndroidMigrationVectorParsesLightStatusAndReadAllEndPayload() {
         let status = SmartChassisCodec.parseLightStatus(Data(hex: "02 1E 00"))
         XCTAssertEqual(status?.mode, .pick)
         XCTAssertEqual(status?.remainingSeconds, 30)

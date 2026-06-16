@@ -28,6 +28,7 @@ iOS 版应按 VibeRack 当前产品方向重建，而不是逐屏复制 Android 
 | 打印 | iOS MVP 不做；Android P0/Q5 走经典蓝牙 SPP/RFCOMM，iOS 通用 App 不能按这个方式直接迁移 |
 | 固件协同 | 以 `/Users/wq/PartRack-Hardware/protocol/test-vectors.json` 和 `docs/verification-matrix.md` 为跨端协议与验证证据基线 |
 | 开发顺序 | 协议单测 -> iOS 工程骨架 -> BLE 扫描/连接/Device Health -> 本地账本 -> 数字孪生 -> 入库/找料 -> 硬件恢复 -> BOM Pick-to-Light |
+| SPM 锁文件 | App 工程提交 `ios/VibeRack.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`；仓库继续忽略其他位置的 `Package.resolved` |
 
 ---
 
@@ -368,6 +369,7 @@ iOS MVP 身份策略：
 验收：
 
 - `xcodebuild test` 通过协议测试。
+- `Package.resolved` 决策：提交 Xcode app workspace 下的锁文件，当前 `.gitignore` 已通过 `!ios/VibeRack.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` 明确放行；继续忽略根目录或其他 SwiftPM local package 的 `Package.resolved`。
 - 以下硬件仓库测试向量在 XCTest 中逐项通过：
   - `WRITE_ONE slot 1, part_id C1234567, qty 12`
   - `READ_ONE slot 1`
@@ -377,8 +379,26 @@ iOS MVP 身份策略：
   - `FIND slot 1 green 30s`
   - `PICK slots 1,7,25 green 30s`
   - `OFF`
+- 以下 Android 迁移向量在 XCTest 中以 `testAndroidMigrationVector...` 命名显式覆盖：
+  - Core advertisement 解析并忽略 reserved tail。
+  - Android manufacturer payload 不含 company bytes 的解析。
+  - Table Info 解析。
+  - Slot Record 编码、解析和 CRC-8/MAXIM 校验。
+  - CRC-8/MAXIM 与 CRC16/CCITT-FALSE check values。
+  - Light Status 和 READ_ALL end payload 解析。
+- Device Health XIAO 样例 `64 02 00 00` 以独立 XCTest 覆盖。
 - `xcodebuild build -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 通过。
 - 模拟器截图确认 4 Tab 原生 UI 可见。
+
+M0 收尾记录：
+
+| 日期 | 命令 / 证据 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-16 | `git check-ignore -v ios/VibeRack.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` | 未被忽略 | `.gitignore` 第 60 行忽略通用 `Package.resolved`，第 61 行放行 iOS App 工程锁文件 |
+| 2026-06-16 | `ios/VibeRack.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` | GRDB 7.11.0 锁定 | revision `9ed8c8457e00ff9c7aedb3bf213f20a2cfdf509e` |
+| 2026-06-16 | `xcodebuild test -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` | 通过 | 覆盖协议、Android 迁移向量、BLE UUID/广播解析和 Router 测试；xcresult `Test-VibeRack-2026.06.16_22-46-09-+0800.xcresult` |
+| 2026-06-16 | `xcodebuild build -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` | 通过 | 验证 4 Tab SwiftUI shell |
+| 2026-06-16 | XcodeBuildMCP `build_run_sim` + `snapshot_ui` + `screenshot` | 通过 | iPhone Air 模拟器启动 `com.viberack.ios`，4 Tab 可见；截图 `/var/folders/p6/m7cr2vmd68b1t7mt87xjnl1c0000gn/T/screenshot_optimized_e3182fb9-f0f0-413d-88e6-6ca5e1f5c053.jpg` |
 
 ### M1：BLE 发现与连接
 
@@ -397,6 +417,19 @@ iOS MVP 身份策略：
 - 真机日志读取 Device Health，当前 XIAO 样例应可解析 `64 02 00 00` 为 battery 100、reset_reason `0x0002`、health_flags `0x00`。
 - 多台底盘可区分；同 batch 冲突可提示。
 - 明确记录验证对象是 XIAO nRF52840 Sense 还是 nRF52832/回板硬件。
+
+M1 当前实机记录：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-16 | Mac CoreBluetooth/Bleak 扫描 | 发现 `VBRK-0000`，RSSI `-56` | macOS 系统蓝牙列表也显示 `VBRK-0000`，地址 `D9:2F:81:45:C1:62` |
+| 2026-06-16 | Manufacturer Data 解析 | company `0xFFFF`，payload `01 01 00 64 02 11 00 00 00` | `proto_ver=1`、`batch_id=1`、`battery_pct=100`、`status_flags=0x02`、`table_seq_low16=0x0011`；当前广告未携带 service UUID，iOS 扫描需全扫后按 Manufacturer Data 过滤 |
+| 2026-06-16 | GATT service discovery | Binding Table、Device Health、Light 均发现 | Binding CP `write, notify`；Table Info `read, notify`；Light Command `write-without-response`；Light Status `read, notify`；Device Health `read, notify` |
+| 2026-06-16 | Table Info | `11 00 00 00 21 F5 19` | `table_seq=17`、`crc16=0xF521`、`slot_count=25` |
+| 2026-06-16 | Light Status | `00 00 00` | `mode=OFF`、`remaining=0` |
+| 2026-06-16 | Device Health | `64 02 00 00` | `battery=100`、`reset_reason=0x0002`、`health_flags=0x00` |
+| 2026-06-16 | BAS / DIS | 当前未发现 | `2A19`、`2A26`、`2A27` 读取返回 characteristic not found；iOS M1 应把 BAS/DIS 作为可选信息处理，不能阻塞自定义服务闭环 |
+| 2026-06-16 | iPhone 真机 CoreBluetooth 扫描 | 未验证 | 当前 `iPhone Air (26.3.1)` 在 `xcrun xctrace list devices` 中为 offline，在 `xcrun devicectl list devices` 中为 unavailable；Mac/Bleak 扫描证据不能替代 iOS 真机 App 扫描证据 |
 
 ### M2：绑定表闭环
 
