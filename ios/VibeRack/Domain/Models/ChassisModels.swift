@@ -107,6 +107,7 @@ public enum StockOperationType: String, Equatable {
     case stockIn = "stock_in"
     case setQuantity = "set_quantity"
     case clearSlot = "clear_slot"
+    case restore = "restore"
 }
 
 public enum StockOperationSource: String, Equatable {

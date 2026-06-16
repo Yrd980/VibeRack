@@ -498,6 +498,14 @@ M1 当前实机记录：
 - 恢复非空槽位和数量。
 - 组件富数据缺失时显示可补全状态。
 
+M5 当前模拟器记录：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | Repository 从 `BindingTableSnapshot` 恢复本地账本 | 通过 | `READ_ALL` 快照先走 `BindingTableReadAllAggregator.validate`；非空槽 upsert，硬件空槽删除本地库存；记录 `restore` StockOperation；更新 `table_seq` / `table_crc16` |
+| 2026-06-17 | Settings -> 从底盘恢复 -> 运行模拟恢复 | 通过 | XcodeBuildMCP 在 iPhone Air 模拟器触发模拟 READ_ALL 恢复，UI 显示 `已按 READ_ALL 快照恢复 2 个非空槽位，table_seq 42` |
+| 2026-06-17 | BLE/NFC 真机恢复 | 未验证 | 当前实现只覆盖协议模拟和本地账本闭环，不能替代真实 NFC 选择底盘、BLE READ_ALL、真机恢复验收 |
+
 ### M6：BOM Pick-to-Light
 
 目标：把 Android 已有 BOM 匹配规则迁到 iOS。

@@ -246,6 +246,47 @@ public final class GRDBChassisRepository: ChassisRepository {
         }
     }
 
+    public func restoreFromBindingTableSnapshot(
+        chassisID: String,
+        snapshot: BindingTableSnapshot
+    ) throws {
+        try BindingTableReadAllAggregator.validate(
+            records: snapshot.records,
+            tableInfo: snapshot.tableInfo
+        )
+
+        try database.write { db in
+            try db.execute(sql: """
+                UPDATE container
+                SET table_seq = ?, table_crc16 = ?
+                WHERE id = ?
+                """, arguments: [
+                    Int(snapshot.tableInfo.tableSeq),
+                    Int(snapshot.tableInfo.crc16),
+                    chassisID
+                ])
+
+            for (index, recordData) in snapshot.records.enumerated() {
+                guard let record = SmartChassisCodec.parseSlotRecord(recordData) else {
+                    throw SmartChassisBindingTableError.invalidRecordPayload
+                }
+                let slotNumber = record.slot == 0 ? index + 1 : record.slot
+                let slot = try fetchSlotRow(db, chassisID: chassisID, slotNumber: slotNumber)
+                if record.isEmpty {
+                    try restoreEmptySlot(db, chassisID: chassisID, slot: slot, slotNumber: slotNumber)
+                } else {
+                    try restoreNonEmptySlot(
+                        db,
+                        chassisID: chassisID,
+                        slot: slot,
+                        slotNumber: slotNumber,
+                        record: record
+                    )
+                }
+            }
+        }
+    }
+
     public func fetchStockOperations(chassisID: String) throws -> [StockOperationRecord] {
         try database.read { db in
             try Row.fetchAll(db, sql: """
@@ -272,6 +313,78 @@ public final class GRDBChassisRepository: ChassisRepository {
                 )
             }
         }
+    }
+
+    private func restoreEmptySlot(
+        _ db: Database,
+        chassisID: String,
+        slot: SlotRow,
+        slotNumber: Int
+    ) throws {
+        guard let stockID = slot.stockID,
+              let protocolPartId = slot.protocolPartId,
+              let quantityBefore = slot.quantity
+        else {
+            return
+        }
+
+        try db.execute(sql: "DELETE FROM stock_item WHERE id = ?", arguments: [stockID])
+        try appendOperation(
+            db,
+            type: .restore,
+            chassisID: chassisID,
+            slotID: slot.id,
+            slotNumber: slotNumber,
+            protocolPartId: protocolPartId,
+            quantityBefore: quantityBefore,
+            quantityAfter: nil,
+            source: .restore,
+            bleOpcode: BindingOp.readAll.code,
+            bleStatus: BindingStatus.ok.code
+        )
+    }
+
+    private func restoreNonEmptySlot(
+        _ db: Database,
+        chassisID: String,
+        slot: SlotRow,
+        slotNumber: Int,
+        record: SlotRecord
+    ) throws {
+        let quantityBefore = slot.quantity
+        let didChange = slot.protocolPartId != record.partId ||
+            slot.quantity != record.quantity ||
+            slot.flags != Int(record.flags)
+        guard didChange else {
+            return
+        }
+
+        try db.execute(sql: """
+            INSERT OR REPLACE INTO stock_item (
+                id, container_id, container_slot_id, protocol_part_id,
+                quantity, flags
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """, arguments: [
+                slot.stockID ?? "stock-\(slot.id)",
+                chassisID,
+                slot.id,
+                record.partId,
+                record.quantity,
+                Int(record.flags)
+            ])
+        try appendOperation(
+            db,
+            type: .restore,
+            chassisID: chassisID,
+            slotID: slot.id,
+            slotNumber: slotNumber,
+            protocolPartId: record.partId,
+            quantityBefore: quantityBefore,
+            quantityAfter: record.quantity,
+            source: .restore,
+            bleOpcode: BindingOp.readAll.code,
+            bleStatus: BindingStatus.ok.code
+        )
     }
 
     private func fetchSlotRow(_ db: Database, chassisID: String, slotNumber: Int) throws -> SlotRow {

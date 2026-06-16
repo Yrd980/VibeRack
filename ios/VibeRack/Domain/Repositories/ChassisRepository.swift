@@ -29,5 +29,9 @@ public protocol ChassisRepository {
         bleOpcode: UInt8?,
         bleStatus: UInt8?
     ) throws
+    func restoreFromBindingTableSnapshot(
+        chassisID: String,
+        snapshot: BindingTableSnapshot
+    ) throws
     func fetchStockOperations(chassisID: String) throws -> [StockOperationRecord]
 }

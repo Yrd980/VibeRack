@@ -76,6 +76,59 @@ final class ChassisRepositoryTests: XCTestCase {
         XCTAssertEqual(operations.map(\.bleStatus), [0, 0, 0])
     }
 
+    func testRestoreFromBindingTableSnapshotReplacesLocalSlotFactsAndRecordsRestoreOperations() throws {
+        let database = try DatabaseFactory.makeInMemoryQueue()
+        let repository = GRDBChassisRepository(database: database)
+
+        try repository.seedSimulatorData()
+        try repository.bindSlot(
+            chassisID: "simulator",
+            slotNumber: 2,
+            protocolPartId: "R2222222",
+            quantity: 4,
+            source: .stockIn,
+            bleOpcode: BindingOp.writeOne.code,
+            bleStatus: BindingStatus.ok.code
+        )
+
+        let records = makeRestoreRecords([
+            1: ("C1111111", 5, 0),
+            3: ("C3333333", 9, 1)
+        ])
+        let snapshot = BindingTableSnapshot(
+            tableInfo: TableInfo(
+                tableSeq: 42,
+                crc16: SmartChassisCodec.tableCRC16(records),
+                slotCount: SmartChassisProtocol.slotCount
+            ),
+            records: records
+        )
+
+        try repository.restoreFromBindingTableSnapshot(chassisID: "simulator", snapshot: snapshot)
+
+        let chassis = try XCTUnwrap(try repository.fetchChassisList().first)
+        XCTAssertEqual(chassis.tableSeq, 42)
+        XCTAssertEqual(chassis.tableCRC16, Int(SmartChassisCodec.tableCRC16(records)))
+
+        let slots = try repository.fetchSlots(chassisID: "simulator")
+        XCTAssertEqual(slots.first { $0.slotNumber == 1 }?.protocolPartId, "C1111111")
+        XCTAssertEqual(slots.first { $0.slotNumber == 1 }?.quantity, 5)
+        XCTAssertTrue(try XCTUnwrap(slots.first { $0.slotNumber == 2 }).isEmpty)
+        XCTAssertEqual(slots.first { $0.slotNumber == 3 }?.protocolPartId, "C3333333")
+        XCTAssertEqual(slots.first { $0.slotNumber == 3 }?.quantity, 9)
+        XCTAssertEqual(slots.first { $0.slotNumber == 3 }?.flags, 1)
+
+        let restoreOperations = try repository.fetchStockOperations(chassisID: "simulator")
+            .filter { $0.type == .restore }
+        XCTAssertEqual(restoreOperations.map(\.slotNumber), [1, 2, 3])
+        XCTAssertEqual(restoreOperations.map(\.protocolPartId), ["C1111111", "R2222222", "C3333333"])
+        XCTAssertEqual(restoreOperations.map(\.quantityBefore), [12, 4, nil])
+        XCTAssertEqual(restoreOperations.map(\.quantityAfter), [5, nil, 9])
+        XCTAssertEqual(restoreOperations.map(\.quantityDelta), [-7, -4, 9])
+        XCTAssertEqual(restoreOperations.map(\.source), [.restore, .restore, .restore])
+        XCTAssertEqual(restoreOperations.map(\.bleOpcode), [BindingOp.readAll.code, BindingOp.readAll.code, BindingOp.readAll.code])
+    }
+
     func testMigrationToleratesDevelopmentDatabaseWhereOperationTableWasCreatedByM1() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
@@ -144,5 +197,19 @@ final class ChassisRepositoryTests: XCTestCase {
         try repository.seedSimulatorData()
 
         XCTAssertEqual(try repository.fetchChassisList().first?.code, "VBRK-0000")
+    }
+}
+
+private func makeRestoreRecords(_ nonEmptyRecords: [Int: (partId: String, quantity: Int, flags: Int)]) -> [Data] {
+    (1...SmartChassisProtocol.slotCount).map { slot in
+        if let record = nonEmptyRecords[slot] {
+            return SmartChassisCodec.encodeSlotRecord(
+                slot: slot,
+                partId: record.partId,
+                quantity: record.quantity,
+                flags: record.flags
+            )
+        }
+        return Data(repeating: 0, count: SmartChassisProtocol.slotRecordSize)
     }
 }

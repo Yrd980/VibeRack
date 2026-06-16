@@ -19,7 +19,7 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
         case .search:
             SearchView(repository: dependencies.chassisRepository)
         case .settings:
-            SettingsView()
+            SettingsView(repository: dependencies.chassisRepository)
         }
     }
 
