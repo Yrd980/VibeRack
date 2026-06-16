@@ -1,0 +1,3 @@
+# Prefer protocol-first VibeRack behavior over legacy LCSC compatibility
+
+VibeRack is in a fast development phase and is built from an inherited unofficial LCSC-oriented Android app, but that codebase is a reusable starting point rather than a compatibility target. When legacy locations, storage boxes, labels, NFC flows, or inventory behavior conflict with the current smart-chassis hardware protocol and VibeRack domain model, we will migrate, replace, or delete the legacy behavior instead of preserving compatibility; the app can be substantially rebuilt when that is the fastest path to the protocol-first product.
