@@ -100,6 +100,40 @@ public final class GRDBChassisRepository: ChassisRepository {
         }
     }
 
+    public func searchStock(query: String) throws -> [StockSearchResult] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard normalizedQuery.isEmpty == false else {
+            return []
+        }
+
+        return try database.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT stock.id, container.id AS chassis_id,
+                       container.code AS chassis_code,
+                       container.display_name AS chassis_display_name,
+                       slot.id AS slot_id, slot.slot_number,
+                       stock.protocol_part_id, stock.quantity, stock.flags
+                FROM stock_item stock
+                JOIN container ON container.id = stock.container_id
+                JOIN container_slot slot ON slot.id = stock.container_slot_id
+                WHERE UPPER(stock.protocol_part_id) LIKE ?
+                ORDER BY stock.protocol_part_id, container.code, slot.slot_number
+                """, arguments: ["%\(normalizedQuery)%"]).map { row in
+                StockSearchResult(
+                    id: row["id"],
+                    chassisID: row["chassis_id"],
+                    chassisCode: row["chassis_code"],
+                    chassisDisplayName: row["chassis_display_name"],
+                    slotID: row["slot_id"],
+                    slotNumber: row["slot_number"],
+                    protocolPartId: row["protocol_part_id"],
+                    quantity: row["quantity"],
+                    flags: row["flags"] ?? 0
+                )
+            }
+        }
+    }
+
     public func bindSlot(
         chassisID: String,
         slotNumber: Int,

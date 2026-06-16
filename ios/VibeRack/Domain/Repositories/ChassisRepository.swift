@@ -4,6 +4,7 @@ public protocol ChassisRepository {
     func seedSimulatorData() throws
     func fetchChassisList() throws -> [SmartChassisSummary]
     func fetchSlots(chassisID: String) throws -> [ChassisSlotState]
+    func searchStock(query: String) throws -> [StockSearchResult]
     func bindSlot(
         chassisID: String,
         slotNumber: Int,

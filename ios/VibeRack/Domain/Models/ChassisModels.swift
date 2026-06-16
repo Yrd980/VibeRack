@@ -60,6 +60,49 @@ public struct ChassisSlotState: Identifiable, Equatable {
     }
 }
 
+public struct StockSearchResult: Identifiable, Equatable {
+    public let id: String
+    public let chassisID: String
+    public let chassisCode: String
+    public let chassisDisplayName: String
+    public let slotID: String
+    public let slotNumber: Int
+    public let protocolPartId: String
+    public let quantity: Int
+    public let flags: Int
+
+    public init(
+        id: String,
+        chassisID: String,
+        chassisCode: String,
+        chassisDisplayName: String,
+        slotID: String,
+        slotNumber: Int,
+        protocolPartId: String,
+        quantity: Int,
+        flags: Int
+    ) {
+        self.id = id
+        self.chassisID = chassisID
+        self.chassisCode = chassisCode
+        self.chassisDisplayName = chassisDisplayName
+        self.slotID = slotID
+        self.slotNumber = slotNumber
+        self.protocolPartId = protocolPartId
+        self.quantity = quantity
+        self.flags = flags
+    }
+
+    public func makeFindLightCommand() -> LightCommand {
+        LightCommand(
+            mode: .find,
+            maskA: SmartChassisCodec.slotMask(slot: slotNumber),
+            colorA: RGBColor(0, 255, 0),
+            timeoutSeconds: SmartChassisProtocol.defaultLightTimeoutSeconds
+        )
+    }
+}
+
 public enum StockOperationType: String, Equatable {
     case stockIn = "stock_in"
     case setQuantity = "set_quantity"
