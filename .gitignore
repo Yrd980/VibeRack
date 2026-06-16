@@ -6,6 +6,7 @@
 /.idea/modules.xml
 /.idea/workspace.xml
 /.idea/deploymentTargetSelector.xml
+/.idea/markdown.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 /.kotlin
@@ -34,8 +35,10 @@ uni-appX/
 .backup/
 .superpowers/
 .gradle-user-home*/
+.commit-verify-worktrees/
 
 /asset/BOM.xlsx
 /tmp/
 
+screen-*.png
 
