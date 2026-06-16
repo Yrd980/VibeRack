@@ -31,11 +31,14 @@
 		AA0000000000000000000206 /* SmartChassisBindingTableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000019 /* SmartChassisBindingTableTests.swift */; };
 		AA0000000000000000000207 /* ChassisRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000021 /* ChassisRepositoryTests.swift */; };
 		AA0000000000000000000208 /* SearchRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000027 /* SearchRepositoryTests.swift */; };
+		AA0000000000000000000209 /* BOMPickPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000028 /* BOMPickPlannerTests.swift */; };
 		AA0000000000000000000117 /* ChassisModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000022 /* ChassisModels.swift */; };
 		AA0000000000000000000118 /* ChassisRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000023 /* ChassisRepository.swift */; };
 		AA0000000000000000000119 /* DatabaseFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000024 /* DatabaseFactory.swift */; };
 		AA0000000000000000000120 /* GRDBChassisRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000025 /* GRDBChassisRepository.swift */; };
 		AA0000000000000000000121 /* DependencyGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000026 /* DependencyGraph.swift */; };
+		AA0000000000000000000122 /* BOMModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000029 /* BOMModels.swift */; };
+		AA0000000000000000000123 /* BOMPickPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000030 /* BOMPickPlanner.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,6 +79,9 @@
 		AA0000000000000000000025 /* GRDBChassisRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GRDBChassisRepository.swift; sourceTree = "<group>"; };
 		AA0000000000000000000026 /* DependencyGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependencyGraph.swift; sourceTree = "<group>"; };
 		AA0000000000000000000027 /* SearchRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchRepositoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000028 /* BOMPickPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMPickPlannerTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000029 /* BOMModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMModels.swift; sourceTree = "<group>"; };
+		AA0000000000000000000030 /* BOMPickPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMPickPlanner.swift; sourceTree = "<group>"; };
 		AA0000000000000000000615 /* ProtocolFixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ProtocolFixtures; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* VibeRack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeRack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000402 /* VibeRackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeRackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -157,6 +163,7 @@
 				AA0000000000000000000608 /* ProtocolTests */,
 				AA0000000000000000000616 /* BluetoothTests */,
 				AA0000000000000000000618 /* PersistenceTests */,
+				AA0000000000000000000623 /* UseCaseTests */,
 				AA0000000000000000000615 /* ProtocolFixtures */,
 				AA0000000000000000000012 /* RouterTests.swift */,
 			);
@@ -268,6 +275,7 @@
 			children = (
 				AA0000000000000000000621 /* Models */,
 				AA0000000000000000000622 /* Repositories */,
+				AA0000000000000000000624 /* UseCases */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -276,6 +284,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000022 /* ChassisModels.swift */,
+				AA0000000000000000000029 /* BOMModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -286,6 +295,22 @@
 				AA0000000000000000000023 /* ChassisRepository.swift */,
 			);
 			path = Repositories;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000623 /* UseCaseTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000028 /* BOMPickPlannerTests.swift */,
+			);
+			path = UseCaseTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000624 /* UseCases */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000030 /* BOMPickPlanner.swift */,
+			);
+			path = UseCases;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -414,6 +439,8 @@
 				AA0000000000000000000119 /* DatabaseFactory.swift in Sources */,
 				AA0000000000000000000120 /* GRDBChassisRepository.swift in Sources */,
 				AA0000000000000000000121 /* DependencyGraph.swift in Sources */,
+				AA0000000000000000000122 /* BOMModels.swift in Sources */,
+				AA0000000000000000000123 /* BOMPickPlanner.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -427,6 +454,7 @@
 				AA0000000000000000000206 /* SmartChassisBindingTableTests.swift in Sources */,
 				AA0000000000000000000207 /* ChassisRepositoryTests.swift in Sources */,
 				AA0000000000000000000208 /* SearchRepositoryTests.swift in Sources */,
+				AA0000000000000000000209 /* BOMPickPlannerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
