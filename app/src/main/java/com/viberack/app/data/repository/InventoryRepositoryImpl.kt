@@ -11,9 +11,6 @@ import com.viberack.app.core.database.dao.DashboardDao
 import com.viberack.app.core.database.dao.InventoryItemDao
 import com.viberack.app.core.database.dao.InventoryTransactionDao
 import com.viberack.app.core.database.dao.StorageLocationDao
-import com.viberack.app.core.database.entity.ComponentEntity
-import com.viberack.app.core.database.entity.ContainerEntity
-import com.viberack.app.core.database.entity.ContainerSlotEntity
 import com.viberack.app.core.database.entity.InventoryItemEntity
 import com.viberack.app.core.database.entity.InventoryTransactionEntity
 import com.viberack.app.core.database.entity.StorageLocationEntity
@@ -32,12 +29,9 @@ import com.viberack.app.domain.model.StorageLocationSortMode
 import com.viberack.app.domain.model.calculateDominantLocationCategoryProfile
 import com.viberack.app.domain.repository.InventoryRepository
 import com.viberack.app.domain.repository.StockPlacementRepository
-import com.viberack.app.domain.repository.StockPlacementWrite
-import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import org.json.JSONObject
 
 class InventoryRepositoryImpl(
     private val context: Context,
@@ -53,76 +47,41 @@ class InventoryRepositoryImpl(
     private val componentImageStore: ComponentImageStore,
     private val protocolPartIdStrategy: ProtocolPartIdStrategy
 ) : InventoryRepository {
+    private val legacyLocationContainerWriter = LegacyLocationContainerWriter(
+        containerDao = containerDao,
+        stockPlacementRepository = stockPlacementRepository
+    )
+    private val componentWriter = InventoryComponentWriter(
+        componentDao = componentDao,
+        inventoryItemDao = inventoryItemDao,
+        protocolPartIdStrategy = protocolPartIdStrategy
+    )
+    private val inboundRecordPreparer = InboundRecordPreparer(componentImageStore)
+
     private companion object {
         private const val TAG = "InventoryRepository"
         private val LOCATION_CODE_REGEX = Regex("^[A-Z]\\d+$")
     }
 
     override fun observeDashboardSummary(): Flow<DashboardSummary> {
-        return dashboardDao.observeSummary().map { summary ->
-            DashboardSummary(
-                componentCount = summary.componentCount,
-                locationCount = summary.locationCount,
-                inventoryCount = summary.inventoryCount,
-                totalQuantity = summary.totalQuantity,
-                transactionCount = summary.transactionCount
-            )
-        }
+        return dashboardDao.observeSummary().map(InventoryReadModelMapper::toDashboardSummary)
     }
 
     override fun observeStorageLocations(): Flow<List<StorageLocation>> {
         return storageLocationDao.observeAll().map { locations ->
-            locations.map { location ->
-                StorageLocation(
-                    id = location.id,
-                    code = location.code,
-                    displayName = location.displayName,
-                    colorHex = location.colorHex,
-                    sortMode = location.sortMode,
-                    remark = location.remark
-                )
-            }
+            locations.map(InventoryReadModelMapper::toStorageLocation)
         }
     }
 
     override fun observeStockLocationCells(): Flow<List<StockLocationCell>> {
         return storageLocationDao.observeLocationSummaries().map { locations ->
-            locations.map { location ->
-                StockLocationCell(
-                    id = location.id,
-                    code = location.code,
-                    displayName = location.displayName,
-                    colorHex = location.colorHex,
-                    sortMode = location.sortMode,
-                    remark = location.remark,
-                    inventoryItemCount = location.inventoryItemCount,
-                    totalQuantity = location.totalQuantity
-                )
-            }
+            locations.map(InventoryReadModelMapper::toStockLocationCell)
         }
     }
 
     override fun observeLocationInventory(locationId: Long): Flow<List<LocationInventoryItem>> {
         return inventoryItemDao.observeItemsByLocation(locationId).map { items ->
-            items.map { item ->
-                LocationInventoryItem(
-                    inventoryItemId = item.inventoryItemId,
-                    componentId = item.componentId,
-                    partNumber = item.partNumber,
-                    mpn = item.mpn,
-                    name = item.name,
-                    brand = item.brand,
-                    packageName = item.packageName,
-                    category = item.category,
-                    description = item.description,
-                    sourceUrl = item.sourceUrl,
-                    specifications = parseSpecifications(item.specJson),
-                    imageLocalPath = item.imageLocalPath,
-                    imageUrl = null,
-                    quantity = item.quantity,
-                    lastInboundAt = item.lastInboundAt
-                )
-            }
+            items.map(InventoryReadModelMapper::toLocationInventoryItem)
         }
     }
 
@@ -145,47 +104,13 @@ class InventoryRepositoryImpl(
 
     override fun observeSearchInventoryRecords(): Flow<List<SearchInventoryRecord>> {
         return inventoryItemDao.observeSearchInventoryRecords().map { items ->
-            items.map { item ->
-                SearchInventoryRecord(
-                    inventoryItemId = item.inventoryItemId,
-                    stockItemId = item.stockItemId,
-                    isLegacyEditable = item.legacyInventoryItemId != null &&
-                        item.containerType == ContainerType.LEGACY_LOCATION.name,
-                    componentId = item.componentId,
-                    partNumber = item.partNumber,
-                    mpn = item.mpn,
-                    name = item.name,
-                    brand = item.brand,
-                    packageName = item.packageName,
-                    category = item.category,
-                    description = item.description,
-                    sourceUrl = item.sourceUrl,
-                    specifications = parseSpecifications(item.specJson),
-                    imageLocalPath = item.imageLocalPath,
-                    quantity = item.quantity,
-                    locationId = item.locationId,
-                    locationCode = item.locationCode,
-                    locationDisplayName = item.locationDisplayName,
-                    locationColorHex = item.locationColorHex,
-                    containerType = item.containerType.toContainerType(),
-                    containerMacAddress = item.containerMacAddress,
-                    slotId = item.slotId,
-                    slotNumber = item.slotNumber,
-                    slotCode = item.slotCode,
-                    slotDisplayName = item.slotDisplayName
-                )
-            }
+            items.map(InventoryReadModelMapper::toSearchInventoryRecord)
         }
     }
 
     override suspend fun findExistingStockLocations(partNumber: String): List<ExistingStockLocation> {
-        return inventoryItemDao.findExistingStockLocations(partNumber.trim().uppercase()).map { item ->
-            ExistingStockLocation(
-                locationCode = item.locationCode,
-                locationDisplayName = item.locationDisplayName,
-                quantity = item.quantity
-            )
-        }
+        return inventoryItemDao.findExistingStockLocations(partNumber.trim().uppercase())
+            .map(InventoryReadModelMapper::toExistingStockLocation)
     }
 
     override suspend fun refreshMissingLocationCategoryProfiles() {
@@ -199,7 +124,7 @@ class InventoryRepositoryImpl(
     override suspend fun refreshAllLocationCategoryProfiles() {
         database.withTransaction {
             val profilesByLocation = inventoryItemDao.getAllLocationCategoryProfiles()
-                .map(::toLocationCategoryProfile)
+                .map(InventoryReadModelMapper::toLocationCategoryProfile)
                 .groupBy(LocationCategoryProfile::locationId)
             storageLocationDao.getAll().forEach { location ->
                 val profile = calculateDominantLocationCategoryProfile(profilesByLocation[location.id].orEmpty())
@@ -222,11 +147,8 @@ class InventoryRepositoryImpl(
     override suspend fun getNextManualInboundPartNumber(): String {
         val inStockC0PrefixedPartNumbers = inventoryItemDao.getInStockC0PrefixedPartNumbers()
         val parsedIndexes = inStockC0PrefixedPartNumbers
-            .asSequence()
-            .mapNotNull(::parseManualInboundIndex)
-            .toList()
-        val nextIndex = parsedIndexes.maxOrNull()?.plus(1) ?: 1
-        val nextPartNumber = formatManualInboundPartNumber(nextIndex)
+            .mapNotNull(ManualInboundPartNumberStrategy::parseIndex)
+        val nextPartNumber = ManualInboundPartNumberStrategy.nextPartNumber(inStockC0PrefixedPartNumbers)
         Log.d(
             TAG,
             "getNextManualInboundPartNumber inStockC0PartNumbers=$inStockC0PrefixedPartNumbers, parsedIndexes=$parsedIndexes, nextPartNumber=$nextPartNumber"
@@ -238,7 +160,7 @@ class InventoryRepositoryImpl(
         val existingLocations = storageLocationDao.getAll()
         if (existingLocations.isNotEmpty()) {
             existingLocations.forEach { location ->
-                ensureLegacyLocationContainer(location)
+                legacyLocationContainerWriter.ensureContainer(location)
             }
             return
         }
@@ -260,17 +182,17 @@ class InventoryRepositoryImpl(
             )
         )
         storageLocationDao.getAll().forEach { location ->
-            ensureLegacyLocationContainer(location)
+            legacyLocationContainerWriter.ensureContainer(location)
         }
     }
 
     override suspend fun addInbound(record: InboundRecord) {
-        val preparedRecord = prepareInboundRecord(record)
+        val preparedRecord = inboundRecordPreparer.prepare(record)
         val inboundAt = preparedRecord.inboundAt
         database.withTransaction {
             val location = findOrCreateLocation(preparedRecord.locationCode)
-            val componentId = upsertComponent(preparedRecord)
-            val slot = ensureLegacyLocationContainer(location)
+            val componentId = componentWriter.upsert(preparedRecord)
+            val slot = legacyLocationContainerWriter.ensureContainer(location)
             val existingItem = inventoryItemDao.findByComponentAndLocation(componentId, location.id)
 
             val resolvedInventoryItem = if (existingItem == null) {
@@ -292,7 +214,7 @@ class InventoryRepositoryImpl(
                     inventoryItemDao.update(updated)
                 }
             }
-            upsertStockItemForLegacyInventoryItem(
+            legacyLocationContainerWriter.upsertStockItem(
                 item = resolvedInventoryItem,
                 slot = slot,
                 updatedAt = inboundAt
@@ -364,7 +286,7 @@ class InventoryRepositoryImpl(
         )
         database.withTransaction {
             storageLocationDao.update(updatedLocation)
-            ensureLegacyLocationContainer(updatedLocation)
+            legacyLocationContainerWriter.ensureContainer(updatedLocation)
         }
         return null
     }
@@ -391,7 +313,7 @@ class InventoryRepositoryImpl(
             if (id <= 0) {
                 false
             } else {
-                ensureLegacyLocationContainer(
+                legacyLocationContainerWriter.ensureContainer(
                     location.copy(id = id)
                 )
                 true
@@ -417,7 +339,7 @@ class InventoryRepositoryImpl(
         return database.withTransaction<String?> {
             val location = storageLocationDao.findById(locationId)
                 ?: return@withTransaction context.getString(R.string.inventory_error_location_not_found)
-            val slot = ensureLegacyLocationContainer(location)
+            val slot = legacyLocationContainerWriter.ensureContainer(location)
             val items = inventoryItemDao.getAll().filter { it.locationId == location.id }
             val now = System.currentTimeMillis()
             items.forEach { item ->
@@ -467,8 +389,8 @@ class InventoryRepositoryImpl(
             inventoryItemDao.update(updatedItem)
             val location = storageLocationDao.findById(item.locationId)
                 ?: return@withTransaction context.getString(R.string.inventory_error_location_not_found)
-            val slot = ensureLegacyLocationContainer(location)
-            upsertStockItemForLegacyInventoryItem(
+            val slot = legacyLocationContainerWriter.ensureContainer(location)
+            legacyLocationContainerWriter.upsertStockItem(
                 item = updatedItem,
                 slot = slot,
                 updatedAt = now
@@ -538,8 +460,8 @@ class InventoryRepositoryImpl(
             val component = componentDao.findById(item.componentId)
             val sourceLocation = storageLocationDao.findById(item.locationId)
                 ?: return@withTransaction context.getString(R.string.inventory_error_location_not_found)
-            val sourceSlot = ensureLegacyLocationContainer(sourceLocation)
-            val targetSlot = ensureLegacyLocationContainer(targetLocation)
+            val sourceSlot = legacyLocationContainerWriter.ensureContainer(sourceLocation)
+            val targetSlot = legacyLocationContainerWriter.ensureContainer(targetLocation)
             val targetItem = inventoryItemDao.findByComponentAndLocation(item.componentId, targetLocation.id)
             val now = System.currentTimeMillis()
             if (targetItem == null) {
@@ -549,7 +471,7 @@ class InventoryRepositoryImpl(
                 )
                 inventoryItemDao.update(movedItem)
                 stockPlacementRepository.deleteComponentFromSlot(item.componentId, sourceSlot.id)
-                upsertStockItemForLegacyInventoryItem(
+                legacyLocationContainerWriter.upsertStockItem(
                     item = movedItem,
                     slot = targetSlot,
                     updatedAt = now
@@ -562,7 +484,7 @@ class InventoryRepositoryImpl(
                 inventoryItemDao.update(mergedItem)
                 inventoryItemDao.deleteById(item.id)
                 stockPlacementRepository.deleteComponentFromSlot(item.componentId, sourceSlot.id)
-                upsertStockItemForLegacyInventoryItem(
+                legacyLocationContainerWriter.upsertStockItem(
                     item = mergedItem,
                     slot = targetSlot,
                     updatedAt = now
@@ -626,7 +548,7 @@ class InventoryRepositoryImpl(
             val component = componentDao.findById(item.componentId)
             val location = storageLocationDao.findById(item.locationId)
                 ?: return@withTransaction context.getString(R.string.inventory_error_location_not_found)
-            val slot = ensureLegacyLocationContainer(location)
+            val slot = legacyLocationContainerWriter.ensureContainer(location)
             val now = System.currentTimeMillis()
             inventoryItemDao.deleteById(item.id)
             stockPlacementRepository.deleteComponentFromSlot(item.componentId, slot.id)
@@ -659,7 +581,8 @@ class InventoryRepositoryImpl(
 
     private suspend fun refreshLocationCategoryProfileInternal(locationId: Long) {
         val profile = calculateDominantLocationCategoryProfile(
-            inventoryItemDao.getLocationCategoryProfiles(locationId).map(::toLocationCategoryProfile)
+            inventoryItemDao.getLocationCategoryProfiles(locationId)
+                .map(InventoryReadModelMapper::toLocationCategoryProfile)
         )
         storageLocationDao.updateInboundProfile(
             locationId = locationId,
@@ -669,21 +592,10 @@ class InventoryRepositoryImpl(
         )
     }
 
-    private fun toLocationCategoryProfile(
-        projection: com.viberack.app.core.database.model.LocationCategoryProfileProjection
-    ): LocationCategoryProfile {
-        return LocationCategoryProfile(
-            locationId = projection.locationId,
-            category = projection.category,
-            packageName = projection.packageName,
-            quantity = projection.quantity
-        )
-    }
-
     private suspend fun findOrCreateLocation(code: String): StorageLocationEntity {
         val normalizedCode = code.trim().uppercase()
         storageLocationDao.findByCode(normalizedCode)?.let { location ->
-            ensureLegacyLocationContainer(location)
+            legacyLocationContainerWriter.ensureContainer(location)
             return location
         }
         val duplicatedContainer = containerDao.findContainerByCode(normalizedCode)
@@ -706,252 +618,10 @@ class InventoryRepositoryImpl(
                 displayName = normalizedCode,
                 sortMode = StorageLocationSortMode.NONE
             )
-        ensureLegacyLocationContainer(location)
+        legacyLocationContainerWriter.ensureContainer(location)
         return location
     }
 
-    private suspend fun ensureLegacyLocationContainer(location: StorageLocationEntity): ContainerSlotEntity {
-        val now = System.currentTimeMillis()
-        val container = containerDao.findContainerById(location.id)
-        if (container == null) {
-            val insertId = containerDao.insertContainer(
-                ContainerEntity(
-                    id = location.id,
-                    code = location.code,
-                    displayName = location.displayName,
-                    type = ContainerType.LEGACY_LOCATION.name,
-                    slotCount = 1,
-                    colorHex = location.colorHex,
-                    sortMode = location.sortMode,
-                    remark = location.remark,
-                    createdAt = location.createdAt,
-                    updatedAt = now
-                )
-            )
-            if (insertId <= 0) {
-                containerDao.findContainerById(location.id)?.let { existing ->
-                    containerDao.updateContainer(existing.toLegacyContainer(location, now))
-                }
-            }
-        } else {
-            containerDao.updateContainer(container.toLegacyContainer(location, now))
-        }
 
-        val slot = containerDao.findSlotByContainerAndNumber(location.id, 1)
-        if (slot != null) {
-            val updatedSlot = slot.copy(
-                slotCode = location.code,
-                displayName = location.displayName ?: location.code,
-                sortOrder = 1,
-                updatedAt = now
-            )
-            if (updatedSlot != slot) {
-                containerDao.updateSlot(updatedSlot)
-            }
-            return updatedSlot
-        }
 
-        val newSlot = ContainerSlotEntity(
-            containerId = location.id,
-            slotNumber = 1,
-            slotCode = location.code,
-            displayName = location.displayName ?: location.code,
-            sortOrder = 1,
-            createdAt = location.createdAt,
-            updatedAt = now
-        )
-        val slotId = containerDao.insertSlot(newSlot)
-        return containerDao.findSlotByContainerAndNumber(location.id, 1)
-            ?: newSlot.copy(id = slotId)
-    }
-
-    private fun ContainerEntity.toLegacyContainer(
-        location: StorageLocationEntity,
-        updatedAt: Long
-    ): ContainerEntity {
-        return copy(
-            code = location.code,
-            displayName = location.displayName,
-            type = ContainerType.LEGACY_LOCATION.name,
-            slotCount = 1,
-            colorHex = location.colorHex,
-            sortMode = location.sortMode,
-            remark = location.remark,
-            updatedAt = updatedAt
-        )
-    }
-
-    private suspend fun upsertStockItemForLegacyInventoryItem(
-        item: InventoryItemEntity,
-        slot: ContainerSlotEntity,
-        updatedAt: Long
-    ) {
-        stockPlacementRepository.upsertStock(
-            StockPlacementWrite(
-                componentId = item.componentId,
-                containerId = item.locationId,
-                slotId = slot.id,
-                quantity = item.quantity,
-                lastInboundAt = item.lastInboundAt,
-                updatedAt = updatedAt
-            )
-        )
-    }
-
-    private suspend fun prepareInboundRecord(record: InboundRecord): InboundRecord {
-        val existingLocalPath = record.component.imageLocalPath
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.takeIf { path ->
-                runCatching { File(path).exists() && File(path).length() > 0L }.getOrDefault(false)
-            }
-        if (existingLocalPath != null) {
-            return record
-        }
-        val persistedLocalPath = componentImageStore.persistImage(
-            partNumber = record.component.partNumber,
-            imageUrl = record.component.imageUrl
-        ) ?: return record
-        return record.copy(
-            component = record.component.copy(
-                imageLocalPath = persistedLocalPath
-            )
-        )
-    }
-
-    private suspend fun upsertComponent(record: InboundRecord): Long {
-        val normalizedPartNumber = record.component.partNumber.trim().uppercase()
-        val existing = componentDao.findByPartNumber(normalizedPartNumber)
-        val specJson = record.component.specifications
-            .takeIf { it.isNotEmpty() }
-            ?.let { JSONObject(it).toString() }
-        if (existing != null) {
-            val shouldResetStaleManualComponent = record.sourceType == "MANUAL_INPUT" &&
-                inventoryItemDao.countByComponent(existing.id) == 0
-            val protocolPartId = existing.protocolPartId
-                ?: protocolPartIdStrategy.forComponent(
-                    componentId = existing.id,
-                    partNumber = normalizedPartNumber,
-                    sourceType = record.sourceType
-                )
-            val updated = if (shouldResetStaleManualComponent) {
-                existing.copy(
-                    partNumber = normalizedPartNumber,
-                    protocolPartId = protocolPartIdStrategy.forComponent(
-                        componentId = existing.id,
-                        partNumber = normalizedPartNumber,
-                        sourceType = record.sourceType
-                    ),
-                    mpn = record.component.mpn,
-                    name = record.component.name,
-                    brand = record.component.brand,
-                    packageName = record.component.packageName,
-                    category = record.component.category,
-                    specJson = specJson,
-                    description = record.component.description,
-                    sourceUrl = record.component.productUrl,
-                    imageLocalPath = record.component.imageLocalPath,
-                    updatedAt = System.currentTimeMillis()
-                )
-            } else {
-                existing.copy(
-                    partNumber = normalizedPartNumber,
-                    protocolPartId = protocolPartId,
-                    mpn = existing.mpn ?: record.component.mpn,
-                    name = existing.name ?: record.component.name,
-                    brand = existing.brand ?: record.component.brand,
-                    packageName = existing.packageName ?: record.component.packageName,
-                    category = existing.category ?: record.component.category,
-                    specJson = existing.specJson ?: specJson,
-                    description = existing.description ?: record.component.description,
-                    sourceUrl = existing.sourceUrl ?: record.component.productUrl,
-                    imageLocalPath = existing.imageLocalPath ?: record.component.imageLocalPath,
-                    updatedAt = System.currentTimeMillis()
-                )
-            }
-            if (shouldResetStaleManualComponent) {
-                Log.d(
-                    TAG,
-                    "upsertComponent reset stale manual component partNumber=$normalizedPartNumber, existingId=${existing.id}, previousImage=${existing.imageLocalPath}, newImage=${record.component.imageLocalPath}"
-                )
-            }
-            if (updated != existing) {
-                componentDao.update(updated)
-            }
-            return existing.id
-        }
-
-        val componentEntity = ComponentEntity(
-            partNumber = normalizedPartNumber,
-            protocolPartId = protocolPartIdStrategy.forComponent(
-                componentId = null,
-                partNumber = normalizedPartNumber,
-                sourceType = record.sourceType
-            ),
-            mpn = record.component.mpn,
-            name = record.component.name,
-            brand = record.component.brand,
-            packageName = record.component.packageName,
-            category = record.component.category,
-            specJson = specJson,
-            description = record.component.description,
-            sourceUrl = record.component.productUrl,
-            imageLocalPath = record.component.imageLocalPath
-        )
-
-        val insertId = componentDao.insert(componentEntity)
-        if (insertId > 0) {
-            val resolvedProtocolPartId = protocolPartIdStrategy.forComponent(
-                componentId = insertId,
-                partNumber = normalizedPartNumber,
-                sourceType = record.sourceType
-            )
-            if (resolvedProtocolPartId != componentEntity.protocolPartId) {
-                componentDao.update(
-                    componentEntity.copy(
-                        id = insertId,
-                        protocolPartId = resolvedProtocolPartId,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                )
-            }
-            return insertId
-        }
-
-        return componentDao.findByPartNumber(normalizedPartNumber)?.id
-            ?: error("Failed to resolve component id for $normalizedPartNumber")
-    }
-
-    private fun parseSpecifications(specJson: String?): Map<String, String> {
-        if (specJson.isNullOrBlank()) {
-            return emptyMap()
-        }
-
-        return runCatching {
-            val json = JSONObject(specJson)
-            json.keys().asSequence().associateWith { key ->
-                json.optString(key)
-            }.filterValues { value ->
-                value.isNotBlank() && value != "null"
-            }
-        }.getOrDefault(emptyMap())
-    }
-
-    private fun String.toContainerType(): ContainerType {
-        return runCatching { ContainerType.valueOf(this) }
-            .getOrDefault(ContainerType.LEGACY_LOCATION)
-    }
-}
-
-private fun parseManualInboundIndex(partNumber: String?): Int? {
-    return partNumber
-        ?.trim()
-        ?.uppercase()
-        ?.takeIf { it.matches(Regex("^C0\\d+$")) }
-        ?.removePrefix("C0")
-        ?.toIntOrNull()
-}
-
-private fun formatManualInboundPartNumber(index: Int): String {
-    return "C0$index"
 }

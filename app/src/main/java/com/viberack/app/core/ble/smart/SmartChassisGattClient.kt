@@ -63,6 +63,12 @@ class SmartChassisGattClient(
 
     private val _tableInfoUpdates = MutableStateFlow<SmartChassisTableInfo?>(null)
     override val tableInfoUpdates: StateFlow<SmartChassisTableInfo?> = _tableInfoUpdates.asStateFlow()
+    private val bindingNotificationHandler = SmartChassisGattBindingNotificationHandler(
+        getPendingReadAll = { pendingReadAll },
+        setPendingReadAll = { pendingReadAll = it },
+        getPendingBindingOp = { pendingBindingOp },
+        setPendingBindingOp = { pendingBindingOp = it }
+    )
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -288,7 +294,7 @@ class SmartChassisGattClient(
                 when (val infoResult = readTableInfo()) {
                     is SmartChassisClientResult.Success -> {
                         val records = recordsResult.value
-                        val validationError = validateReadAll(records, infoResult.value)
+                        val validationError = SmartChassisReadAllValidator.validate(records, infoResult.value)
                         if (validationError != null) {
                             SmartChassisClientResult.Failure(
                                 message = validationError,
@@ -313,16 +319,16 @@ class SmartChassisGattClient(
     }
 
     override suspend fun writeOne(record: SmartChassisSlotRecord): SmartChassisClientResult<SmartChassisTableInfo> {
-        val payload = encodeBindingPayload(SmartChassisBindingOp.WRITE_ONE) {
+        val payload = SmartChassisGattBindingPayloads.encode {
             SmartChassisCodec.encodeWriteOne(SmartChassisCodec.encodeSlotRecordForTable(record))
-        } ?: return bindingEncodeFailure(SmartChassisBindingOp.WRITE_ONE)
+        } ?: return SmartChassisGattBindingPayloads.encodeFailure(SmartChassisBindingOp.WRITE_ONE)
         return writeAndRefreshTableInfo(SmartChassisBindingOp.WRITE_ONE, payload)
     }
 
     override suspend fun clearOne(slot: Int): SmartChassisClientResult<SmartChassisTableInfo> {
-        val payload = encodeBindingPayload(SmartChassisBindingOp.CLEAR_ONE) {
+        val payload = SmartChassisGattBindingPayloads.encode {
             SmartChassisCodec.encodeClearOne(slot)
-        } ?: return bindingEncodeFailure(SmartChassisBindingOp.CLEAR_ONE)
+        } ?: return SmartChassisGattBindingPayloads.encodeFailure(SmartChassisBindingOp.CLEAR_ONE)
         return writeAndRefreshTableInfo(SmartChassisBindingOp.CLEAR_ONE, payload)
     }
 
@@ -330,16 +336,16 @@ class SmartChassisGattClient(
         slot: Int,
         record: SmartChassisSlotRecord
     ): SmartChassisClientResult<SmartChassisTableInfo> {
-        val payload = encodeBindingPayload(SmartChassisBindingOp.INSERT_AT) {
+        val payload = SmartChassisGattBindingPayloads.encode {
             SmartChassisCodec.encodeInsertAt(slot, SmartChassisCodec.encodeSlotRecordForTable(record))
-        } ?: return bindingEncodeFailure(SmartChassisBindingOp.INSERT_AT)
+        } ?: return SmartChassisGattBindingPayloads.encodeFailure(SmartChassisBindingOp.INSERT_AT)
         return writeAndRefreshTableInfo(SmartChassisBindingOp.INSERT_AT, payload)
     }
 
     override suspend fun removeAt(slot: Int): SmartChassisClientResult<SmartChassisTableInfo> {
-        val payload = encodeBindingPayload(SmartChassisBindingOp.REMOVE_AT) {
+        val payload = SmartChassisGattBindingPayloads.encode {
             SmartChassisCodec.encodeRemoveAt(slot)
-        } ?: return bindingEncodeFailure(SmartChassisBindingOp.REMOVE_AT)
+        } ?: return SmartChassisGattBindingPayloads.encodeFailure(SmartChassisBindingOp.REMOVE_AT)
         return writeAndRefreshTableInfo(SmartChassisBindingOp.REMOVE_AT, payload)
     }
 
@@ -348,16 +354,16 @@ class SmartChassisGattClient(
         to: Int,
         length: Int
     ): SmartChassisClientResult<SmartChassisTableInfo> {
-        val payload = encodeBindingPayload(SmartChassisBindingOp.MOVE_BLOCK) {
+        val payload = SmartChassisGattBindingPayloads.encode {
             SmartChassisCodec.encodeMoveBlock(from, to, length)
-        } ?: return bindingEncodeFailure(SmartChassisBindingOp.MOVE_BLOCK)
+        } ?: return SmartChassisGattBindingPayloads.encodeFailure(SmartChassisBindingOp.MOVE_BLOCK)
         return writeAndRefreshTableInfo(SmartChassisBindingOp.MOVE_BLOCK, payload)
     }
 
     override suspend fun setQuantity(slot: Int, quantity: Int): SmartChassisClientResult<SmartChassisTableInfo> {
-        val payload = encodeBindingPayload(SmartChassisBindingOp.SET_QTY) {
+        val payload = SmartChassisGattBindingPayloads.encode {
             SmartChassisCodec.encodeSetQuantity(slot, quantity)
-        } ?: return bindingEncodeFailure(SmartChassisBindingOp.SET_QTY)
+        } ?: return SmartChassisGattBindingPayloads.encodeFailure(SmartChassisBindingOp.SET_QTY)
         return writeAndRefreshTableInfo(SmartChassisBindingOp.SET_QTY, payload)
     }
 
@@ -392,21 +398,7 @@ class SmartChassisGattClient(
         }
     }
 
-    private fun encodeBindingPayload(
-        op: SmartChassisBindingOp,
-        block: () -> ByteArray
-    ): ByteArray? {
-        return runCatching { block() }
-            .getOrNull()
-    }
 
-    private fun bindingEncodeFailure(op: SmartChassisBindingOp): SmartChassisClientResult.Failure {
-        return SmartChassisClientResult.Failure(
-            message = "Invalid binding command payload",
-            op = op,
-            status = SmartChassisBindingStatus.ERR_PARAM
-        )
-    }
 
     private suspend fun writeAndRefreshTableInfo(
         op: SmartChassisBindingOp,
@@ -490,22 +482,11 @@ class SmartChassisGattClient(
 
     private fun writeNextDescriptor(gatt: BluetoothGatt) {
         val descriptor = pendingDescriptors.firstOrNull() ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val status = gatt.writeDescriptor(
-                descriptor,
-                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            )
-            if (status != BluetoothStatusCodes.SUCCESS) {
+        when (val result = SmartChassisGattDescriptorWriter.writeEnableNotification(gatt, descriptor)) {
+            DescriptorWriteStart.Started -> Unit
+            is DescriptorWriteStart.Failed -> {
                 pendingDescriptorSetup?.complete(false)
-                failConnect("Notification descriptor write failed to start: $status")
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            @Suppress("DEPRECATION")
-            if (!gatt.writeDescriptor(descriptor)) {
-                pendingDescriptorSetup?.complete(false)
-                failConnect("Notification descriptor write failed to start")
+                failConnect(result.message)
             }
         }
         pendingDescriptors.removeFirst()
@@ -578,75 +559,7 @@ class SmartChassisGattClient(
     }
 
     private fun handleBindingNotification(value: ByteArray) {
-        val result = SmartChassisCodec.parseBindingResult(value) ?: return
-        val readAll = pendingReadAll
-        if (readAll != null && result.op == SmartChassisBindingOp.READ_ALL) {
-            if (result.status != SmartChassisBindingStatus.OK) {
-                pendingReadAll = null
-                readAll.deferred.complete(
-                    SmartChassisClientResult.Failure(
-                        message = "READ_ALL failed: ${result.status}",
-                        op = SmartChassisBindingOp.READ_ALL,
-                        status = result.status
-                    )
-                )
-                return
-            }
-            if (SmartChassisCodec.isReadAllEndPayload(result.payload)) {
-                if (readAll.records.size != SmartChassisProtocol.SLOT_COUNT) {
-                    pendingReadAll = null
-                    readAll.deferred.complete(
-                        SmartChassisClientResult.Failure(
-                            message = "READ_ALL returned ${readAll.records.size} records, expected ${SmartChassisProtocol.SLOT_COUNT}",
-                            op = SmartChassisBindingOp.READ_ALL,
-                            status = SmartChassisBindingStatus.ERR_PARAM
-                        )
-                    )
-                    return
-                }
-                pendingReadAll = null
-                readAll.deferred.complete(
-                    SmartChassisClientResult.Success(
-                        readAll.records.toList(),
-                        SmartChassisBindingOp.READ_ALL
-                    )
-                )
-                return
-            }
-            val record = SmartChassisCodec.parseSlotRecord(result.payload)
-            if (record == null) {
-                pendingReadAll = null
-                readAll.deferred.complete(
-                    SmartChassisClientResult.Failure("Invalid READ_ALL record", SmartChassisBindingOp.READ_ALL)
-                )
-            } else {
-                readAll.records += record
-            }
-            return
-        }
-
-        val pending = pendingBindingOp ?: return
-        if (pending.op != result.op) {
-            return
-        }
-        pendingBindingOp = null
-        if (result.status == SmartChassisBindingStatus.OK) {
-            pending.deferred.complete(
-                SmartChassisClientResult.Success(
-                    value = result.payload,
-                    op = result.op,
-                    status = result.status
-                )
-            )
-        } else {
-            pending.deferred.complete(
-                SmartChassisClientResult.Failure(
-                    message = "Binding command failed: ${result.status}",
-                    op = result.op,
-                    status = result.status
-                )
-            )
-        }
+        bindingNotificationHandler.handle(value)
     }
 
     private suspend fun readLightStatus(): SmartChassisClientResult<SmartChassisLightStatus> {
@@ -794,33 +707,6 @@ class SmartChassisGattClient(
         bondingDeviceAddress = null
     }
 
-    private fun validateReadAll(
-        records: List<SmartChassisSlotRecord>,
-        tableInfo: SmartChassisTableInfo
-    ): String? {
-        if (tableInfo.slotCount != SmartChassisProtocol.SLOT_COUNT) {
-            return "Table Info slot_count ${tableInfo.slotCount} does not match ${SmartChassisProtocol.SLOT_COUNT}"
-        }
-        if (records.size != tableInfo.slotCount) {
-            return "READ_ALL returned ${records.size} records, table reports ${tableInfo.slotCount}"
-        }
-        records.forEachIndexed { index, record ->
-            if (record.slot != 0 && record.slot != index + 1) {
-                return "READ_ALL record ${index + 1} contains slot ${record.slot}"
-            }
-        }
-        val tableBytes = records
-            .flatMap { record ->
-                SmartChassisCodec.encodeSlotRecordForTable(record).asIterable()
-            }
-            .toByteArray()
-        val crc16 = SmartChassisCodec.crc16CcittFalse(tableBytes)
-        return if (crc16 == tableInfo.crc16) {
-            null
-        } else {
-            "READ_ALL CRC $crc16 does not match table CRC ${tableInfo.crc16}"
-        }
-    }
 
     private suspend fun <T> withBleTimeout(
         timeoutMessage: String,
@@ -843,15 +729,7 @@ class SmartChassisGattClient(
         }
     }
 
-    private data class PendingBindingOp(
-        val op: SmartChassisBindingOp,
-        val deferred: CompletableDeferred<SmartChassisClientResult<ByteArray>>
-    )
 
-    private data class PendingReadAll(
-        val deferred: CompletableDeferred<SmartChassisClientResult<List<SmartChassisSlotRecord>>>,
-        val records: MutableList<SmartChassisSlotRecord> = mutableListOf()
-    )
 
     private companion object {
         private const val OPERATION_TIMEOUT_MS = 12_000L
