@@ -11,7 +11,7 @@ Read these in order before architecture, diagnosis, PRD, issue-breakdown, or imp
 1. `CONTEXT.md` at the repo root.
 2. `docs/智能物料管理系统_项目技术文档_v1.0.md` for full product, hardware, firmware, algorithm, roadmap, and risk context.
 3. `docs/智能底盘BLE接口规格_v0.1.md` for byte-level BLE/NFC protocol details.
-4. Relevant Kotlin code under `app/src/main/java/com/example/lcsc_android_erp`.
+4. Relevant Kotlin code under `app/src/main/java/com/viberack/app`.
 5. `docs/adr/` if it exists later.
 
 If `docs/adr/` or another optional domain file does not exist, proceed silently. Do not suggest creating it upfront. Decision records can be added lazily when decisions actually get resolved.

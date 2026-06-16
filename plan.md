@@ -25,6 +25,7 @@ Product rule: smart chassis binding table is the source of truth. App-side `stoc
 - Search supports find-by-light for smart chassis stock records.
 - BOM has an initial pick-to-light path grouped by chassis MAC.
 - NFC device URI parsing and routing exist for `lcscerp://device?mac=...&batch=...&ver=...`.
+- Project identity is now VibeRack-aligned: package/application id `com.viberack.app`, app label `VibeRack`, Room database file `viberack.db`, VibeRack launcher vector, `VibeRackApplication`, `VibeRackApp`, `VibeRackTheme`, and Room schemas under `app/schemas/com.viberack.app.core.database.AppDatabase`.
 
 ## Remaining Critical Gaps
 
@@ -50,9 +51,9 @@ Implemented JVM tests for:
 
 Target files:
 
-- `app/src/test/java/com/example/lcsc_android_erp/core/ble/smart/SmartChassisCodecTest.kt`
-- `app/src/test/java/com/example/lcsc_android_erp/core/ble/smart/FakeSmartChassisClientTest.kt`
-- `app/src/test/java/com/example/lcsc_android_erp/core/nfc/NfcLabelPayloadCodecTest.kt`
+- `app/src/test/java/com/viberack/app/core/ble/smart/SmartChassisCodecTest.kt`
+- `app/src/test/java/com/viberack/app/core/ble/smart/FakeSmartChassisClientTest.kt`
+- `app/src/test/java/com/viberack/app/core/nfc/NfcLabelPayloadCodecTest.kt`
 
 Verify:
 
@@ -70,9 +71,9 @@ Implemented before product UI work:
 Target files:
 
 - `docs/智能底盘BLE接口规格_v0.1.md`
-- `app/src/main/java/com/example/lcsc_android_erp/core/ble/smart/SmartChassisGattClient.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/core/ble/smart/SmartChassisManager.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersViewModel.kt`
+- `app/src/main/java/com/viberack/app/core/ble/smart/SmartChassisGattClient.kt`
+- `app/src/main/java/com/viberack/app/core/ble/smart/SmartChassisManager.kt`
+- `app/src/main/java/com/viberack/app/feature/containers/ContainersViewModel.kt`
 
 ### 3. Create Hardware-First Commit Boundary - Complete
 
@@ -131,10 +132,10 @@ Extracted one service for protocol part id rules:
 
 Target starting points:
 
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/InventoryRepositoryImpl.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/BoxRepositoryImpl.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/SlotOperationRepositoryImpl.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/ContainerRepositoryImpl.kt`
+- `app/src/main/java/com/viberack/app/data/repository/InventoryRepositoryImpl.kt`
+- `app/src/main/java/com/viberack/app/data/repository/BoxRepositoryImpl.kt`
+- `app/src/main/java/com/viberack/app/data/repository/SlotOperationRepositoryImpl.kt`
+- `app/src/main/java/com/viberack/app/data/repository/ContainerRepositoryImpl.kt`
 
 ### 7. Digital Twin MVP - Complete
 
@@ -149,12 +150,29 @@ Made smart chassis visible as an MVP workflow:
 
 Target files:
 
-- `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersScreen.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersViewModel.kt`
+- `app/src/main/java/com/viberack/app/feature/containers/ContainersScreen.kt`
+- `app/src/main/java/com/viberack/app/feature/containers/ContainersViewModel.kt`
+
+### 8. Project Identity Alignment - Complete
+
+Aligned the inherited Android project identity with `CONTEXT.md` and ADR 0001:
+
+- Renamed Gradle namespace and `applicationId` to `com.viberack.app`.
+- Moved Kotlin sources and tests from `com/example/lcsc_android_erp` to `com/viberack/app`.
+- Renamed app entry points to `VibeRackApplication`, `VibeRackApp`, and `VibeRackTheme`.
+- Changed the Room database filename from `lcsc_erp.db` to `viberack.db`.
+- Moved exported Room schemas to `app/schemas/com.viberack.app.core.database.AppDatabase`.
+- Changed the visible app name to `VibeRack` and replaced the old LCSC launcher bitmap with a VibeRack vector mark.
+- Updated README, AGENTS, domain docs, settings content, visible strings, and this plan to use VibeRack product language.
+- Kept LCSC references only for catalog lookup, QR label parsing, supplier part identifiers, inherited lineage, or documented protocol URI compatibility.
+
+Verification:
+
+- `./gradlew :app:compileDebugKotlin`
 
 ## Next Implementation Batch
 
-### 8. Smart Chassis Inbound Flow
+### 9. Smart Chassis Inbound Flow
 
 Add a first-class stock-in workflow:
 
@@ -167,9 +185,9 @@ Add a first-class stock-in workflow:
 
 Target files:
 
-- `app/src/main/java/com/example/lcsc_android_erp/feature/inbound/InboundViewModel.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/inbound/MaterialInboundDialog.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersViewModel.kt`
+- `app/src/main/java/com/viberack/app/feature/inbound/InboundViewModel.kt`
+- `app/src/main/java/com/viberack/app/feature/inbound/MaterialInboundDialog.kt`
+- `app/src/main/java/com/viberack/app/feature/containers/ContainersViewModel.kt`
 
 Acceptance:
 
@@ -177,7 +195,7 @@ Acceptance:
 - BLE `WRITE_ONE` is the only binding-table mutation for smart chassis stock-in.
 - Local `stock_item` and operation log update only after BLE success and returned table info.
 
-### 9. BOM Pick-To-Light Completion Loop
+### 10. BOM Pick-To-Light Completion Loop
 
 Complete the pick session:
 
@@ -189,11 +207,11 @@ Complete the pick session:
 
 Target files:
 
-- `app/src/main/java/com/example/lcsc_android_erp/feature/search/BomWorkflow.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/search/SearchViewModel.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/search/SearchScreen.kt`
+- `app/src/main/java/com/viberack/app/feature/search/BomWorkflow.kt`
+- `app/src/main/java/com/viberack/app/feature/search/SearchViewModel.kt`
+- `app/src/main/java/com/viberack/app/feature/search/SearchScreen.kt`
 
-### 10. Reflow Cache Hardening
+### 11. Reflow Cache Hardening
 
 For smart chassis reflow operations:
 
@@ -203,11 +221,11 @@ For smart chassis reflow operations:
 
 Target files:
 
-- `app/src/main/java/com/example/lcsc_android_erp/data/repository/SlotOperationRepositoryImpl.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/core/ble/smart/SmartChassisOperations.kt`
-- `app/src/test/java/com/example/lcsc_android_erp/data/repository/SlotOperationRepositoryImplTest.kt`
+- `app/src/main/java/com/viberack/app/data/repository/SlotOperationRepositoryImpl.kt`
+- `app/src/main/java/com/viberack/app/core/ble/smart/SmartChassisOperations.kt`
+- `app/src/test/java/com/viberack/app/data/repository/SlotOperationRepositoryImplTest.kt`
 
-### 11. Digital Twin Entry Polish
+### 12. Digital Twin Entry Polish
 
 - Route Home / Inventory / NFC resume flows into the selected smart chassis digital twin when hardware identity is known.
 - Improve slot action menu anchoring and compact controls.
@@ -215,10 +233,10 @@ Target files:
 
 Target files:
 
-- `app/src/main/java/com/example/lcsc_android_erp/ui/LcscApp.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/home/HomeScreen.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/inventory/InventoryScreen.kt`
-- `app/src/main/java/com/example/lcsc_android_erp/feature/containers/ContainersScreen.kt`
+- `app/src/main/java/com/viberack/app/ui/VibeRackApp.kt`
+- `app/src/main/java/com/viberack/app/feature/home/HomeScreen.kt`
+- `app/src/main/java/com/viberack/app/feature/inventory/InventoryScreen.kt`
+- `app/src/main/java/com/viberack/app/feature/containers/ContainersScreen.kt`
 
 ## Deferred Work
 

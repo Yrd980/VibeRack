@@ -1,4 +1,4 @@
-# LCSC Android ERP / VibeRack
+# VibeRack
 
 This context defines the domain language for the smart component management system. Use these terms when writing issues, PRDs, plans, tests, and implementation notes for this repo.
 

@@ -11,7 +11,7 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
 
-Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone. This workspace has GitHub remotes for `BrokenClient/LCSC_android_erp` and `Yrd980/LCSC_android_erp`.
+Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone. This workspace has GitHub remotes for `BrokenClient/viberack_app` and `Yrd980/viberack_app`.
 
 ## When a skill says "publish to the issue tracker"
 

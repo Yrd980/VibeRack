@@ -33,11 +33,11 @@ val hasReleaseSigning = listOf(
 ).all { !it.isNullOrBlank() }
 
 android {
-    namespace = "com.example.lcsc_android_erp"
+    namespace = "com.viberack.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.lcsc_android_erp"
+        applicationId = "com.viberack.app"
         minSdk = 29
         targetSdk = 36
         versionCode = 6

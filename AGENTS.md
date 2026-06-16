@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a single-module Android app in `app/`. Kotlin source lives under `app/src/main/java/com/example/lcsc_android_erp`, organized by layer and feature:
+This repository is a single-module Android app in `app/`. Kotlin source lives under `app/src/main/java/com/viberack/app`, organized by layer and feature:
 
 - `feature/`: Compose screens and view models for `home`, `inbound`, `inventory`, `search`, and `settings`
 - `core/`: app container, Room database, DataStore, network, and shared UI helpers

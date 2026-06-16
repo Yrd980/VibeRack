@@ -27,5 +27,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LCSC_android_erp"
+rootProject.name = "viberack_app"
 include(":app")
