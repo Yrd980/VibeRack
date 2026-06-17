@@ -39,6 +39,12 @@
 		AA0000000000000000000121 /* DependencyGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000026 /* DependencyGraph.swift */; };
 		AA0000000000000000000122 /* BOMModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000029 /* BOMModels.swift */; };
 		AA0000000000000000000123 /* BOMPickPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000030 /* BOMPickPlanner.swift */; };
+AA0000000000000000000130 /* PrinterModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000043 /* PrinterModels.swift */; };
+AA0000000000000000000131 /* BoxLayerLabelRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */; };
+AA0000000000000000000132 /* PrinterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000045 /* PrinterView.swift */; };
+AA0000000000000000000217 /* PrinterLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000046 /* PrinterLabelTests.swift */; };
+AA0000000000000000000133 /* P0BitmapProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000047 /* P0BitmapProtocol.swift */; };
+AA0000000000000000000134 /* P0BlePrinterClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000048 /* P0BlePrinterClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +88,12 @@
 		AA0000000000000000000028 /* BOMPickPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMPickPlannerTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000029 /* BOMModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMModels.swift; sourceTree = "<group>"; };
 		AA0000000000000000000030 /* BOMPickPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMPickPlanner.swift; sourceTree = "<group>"; };
+AA0000000000000000000043 /* PrinterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterModels.swift; sourceTree = "<group>"; };
+AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxLayerLabelRenderer.swift; sourceTree = "<group>"; };
+AA0000000000000000000045 /* PrinterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterView.swift; sourceTree = "<group>"; };
+AA0000000000000000000046 /* PrinterLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterLabelTests.swift; sourceTree = "<group>"; };
+AA0000000000000000000047 /* P0BitmapProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P0BitmapProtocol.swift; sourceTree = "<group>"; };
+AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P0BlePrinterClient.swift; sourceTree = "<group>"; };
 		AA0000000000000000000615 /* ProtocolFixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ProtocolFixtures; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* VibeRack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeRack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000402 /* VibeRackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeRackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -122,6 +134,7 @@
 				AA0000000000000000000603 /* App */,
 				AA0000000000000000000613 /* Core */,
 				AA0000000000000000000620 /* Domain */,
+				AA0000000000000000000625 /* FeatureSupport */,
 				AA0000000000000000000604 /* Features */,
 			);
 			path = VibeRack;
@@ -144,6 +157,7 @@
 				AA0000000000000000000605 /* Chassis */,
 				AA0000000000000000000610 /* StockIn */,
 				AA0000000000000000000611 /* Search */,
+				AA0000000000000000000627 /* Printer */,
 				AA0000000000000000000612 /* Settings */,
 			);
 			path = Features;
@@ -163,6 +177,7 @@
 				AA0000000000000000000608 /* ProtocolTests */,
 				AA0000000000000000000616 /* BluetoothTests */,
 				AA0000000000000000000618 /* PersistenceTests */,
+				AA0000000000000000000628 /* PrinterTests */,
 				AA0000000000000000000623 /* UseCaseTests */,
 				AA0000000000000000000615 /* ProtocolFixtures */,
 				AA0000000000000000000012 /* RouterTests.swift */,
@@ -313,6 +328,33 @@
 			path = UseCases;
 			sourceTree = "<group>";
 		};
+AA0000000000000000000625 /* FeatureSupport */ = {
+	isa = PBXGroup;
+	children = (
+		AA0000000000000000000043 /* PrinterModels.swift */,
+		AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */,
+		AA0000000000000000000047 /* P0BitmapProtocol.swift */,
+		AA0000000000000000000048 /* P0BlePrinterClient.swift */,
+	);
+	path = FeatureSupport;
+	sourceTree = "<group>";
+};
+AA0000000000000000000627 /* Printer */ = {
+	isa = PBXGroup;
+	children = (
+		AA0000000000000000000045 /* PrinterView.swift */,
+	);
+	path = Printer;
+	sourceTree = "<group>";
+};
+AA0000000000000000000628 /* PrinterTests */ = {
+	isa = PBXGroup;
+	children = (
+		AA0000000000000000000046 /* PrinterLabelTests.swift */,
+	);
+	path = PrinterTests;
+	sourceTree = "<group>";
+};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -441,6 +483,11 @@
 				AA0000000000000000000121 /* DependencyGraph.swift in Sources */,
 				AA0000000000000000000122 /* BOMModels.swift in Sources */,
 				AA0000000000000000000123 /* BOMPickPlanner.swift in Sources */,
+AA0000000000000000000130 /* PrinterModels.swift in Sources */,
+AA0000000000000000000131 /* BoxLayerLabelRenderer.swift in Sources */,
+AA0000000000000000000133 /* P0BitmapProtocol.swift in Sources */,
+AA0000000000000000000134 /* P0BlePrinterClient.swift in Sources */,
+AA0000000000000000000132 /* PrinterView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -455,6 +502,7 @@
 				AA0000000000000000000207 /* ChassisRepositoryTests.swift in Sources */,
 				AA0000000000000000000208 /* SearchRepositoryTests.swift in Sources */,
 				AA0000000000000000000209 /* BOMPickPlannerTests.swift in Sources */,
+				AA0000000000000000000217 /* PrinterLabelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

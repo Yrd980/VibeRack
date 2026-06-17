@@ -4,6 +4,7 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case chassis
     case stockIn
     case search
+    case printer
     case settings
 
     var id: String { rawValue }
@@ -18,6 +19,8 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
             StockInFlowView(repository: dependencies.chassisRepository)
         case .search:
             SearchView(repository: dependencies.chassisRepository)
+        case .printer:
+            PrinterView()
         case .settings:
             SettingsView(repository: dependencies.chassisRepository)
         }
@@ -32,6 +35,8 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
             Label("入库", systemImage: "tray.and.arrow.down")
         case .search:
             Label("搜索", systemImage: "magnifyingglass")
+        case .printer:
+            Label("打印", systemImage: "printer")
         case .settings:
             Label("设置", systemImage: "gearshape")
         }
