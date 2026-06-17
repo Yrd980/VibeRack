@@ -157,7 +157,6 @@
     <string name="search_bom_manufacturer">Manufacturer</string>
     <string name="search_bom_unmatched">No matching stock ledger was found.</string>
     <string name="search_bom_match_title">%1$d local material matches</string>
-    <string name="search_bom_assign_to_box_layer">Assign to Empty Layer</string>
     <string name="search_bom_assigning_to_layer">Assigning…</string>
     <string name="search_bom_assigned_layer_title">Assigned Box Layers</string>
     <string name="search_bom_assigned_layer">%1$s · %2$s</string>
@@ -190,8 +189,8 @@
     <string name="search_container_slot">Slot</string>
     <string name="search_container_mac">Chassis MAC</string>
     <string name="search_container_read_only">This record is from the unified container ledger. Box-layer and smart-chassis writes must be updated through the container flow or after hardware confirmation.</string>
-    <string name="search_container_type_location">Legacy Location</string>
-    <string name="search_container_type_box">Box Layer</string>
+    <string name="search_container_type_location">Container</string>
+    <string name="search_container_type_box">Multi-slot Container</string>
     <string name="search_container_type_smart_chassis">Smart Chassis</string>
     <string name="inventory_title">Stock Ledger</string>
     <string name="inventory_subtitle">This view still exposes legacy location containers; future work should converge it into the unified container model and smart chassis digital twin entry.</string>
@@ -202,7 +201,6 @@
     <string name="inventory_add_location_hint">For example C0 or A10. Use one letter followed by digits;</string>
     <string name="inventory_cell_count">%1$d item types</string>
     <string name="inventory_cell_summary">%1$s: %2$d item types</string>
-    <string name="inventory_item_quantity">Quantity: %1$s</string>
     <string name="inventory_quantity_label">Quantity</string>
     <string name="inventory_source_label">Material Source</string>
     <string name="inventory_open_source">Open source link</string>
@@ -281,8 +279,6 @@
     <string name="boxes_layers_empty">This box does not have any layers.</string>
     <string name="boxes_layer_empty">Empty layer</string>
     <string name="boxes_layer_occupied">%1$s</string>
-    <string name="boxes_bind_layer_material">Bind LCSC</string>
-    <string name="boxes_replace_layer_material">Replace LCSC</string>
     <string name="boxes_bind_dialog_title">Bind Layer Material</string>
     <string name="boxes_bind_part_label">LCSC Part</string>
     <string name="boxes_bind_quantity_label">Quantity</string>

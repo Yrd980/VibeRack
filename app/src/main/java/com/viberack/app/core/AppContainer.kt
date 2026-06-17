@@ -5,7 +5,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
-import androidx.room.withTransaction
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -17,11 +16,7 @@ import com.viberack.app.core.ble.smart.SmartChassisScanner
 import com.viberack.app.core.database.AppDatabase
 import com.viberack.app.core.datastore.UserPreferencesRepository
 import com.viberack.app.core.nfc.NfcLabelManager
-import com.viberack.app.core.printer.P0PrinterManager
-import com.viberack.app.core.printer.PrinterManager
-import com.viberack.app.core.printer.Q5PrinterManager
 import com.viberack.app.data.repository.ComponentEnrichmentManager
-import com.viberack.app.data.repository.BoxRepositoryImpl
 import com.viberack.app.data.remote.LcscCatalogRemoteDataSource
 import com.viberack.app.data.repository.ComponentImageStore
 import com.viberack.app.data.repository.ContainerRepositoryImpl
@@ -31,9 +26,6 @@ import com.viberack.app.data.repository.LcscCatalogRepositoryImpl
 import com.viberack.app.data.repository.ProtocolPartIdStrategy
 import com.viberack.app.data.repository.SlotOperationRepositoryImpl
 import com.viberack.app.data.repository.StockPlacementRepositoryImpl
-import com.viberack.app.domain.model.LocationCategoryProfile
-import com.viberack.app.domain.model.calculateDominantLocationCategoryProfile
-import com.viberack.app.domain.repository.BoxRepository
 import com.viberack.app.domain.repository.ContainerRepository
 import com.viberack.app.domain.repository.InventoryRepository
 import com.viberack.app.domain.repository.LcscCatalogRepository
@@ -89,35 +81,7 @@ class AppContainer(context: Context) {
             remoteDataSource = LcscCatalogRemoteDataSource(okHttpClient)
         ),
         componentImageStore = componentImageStore,
-        onComponentEnriched = { componentId ->
-            database.withTransaction {
-                val inventoryItemDao = database.inventoryItemDao()
-                val locationIds = inventoryItemDao
-                    .getLegacyLocationIdsByComponentFromStock(componentId)
-                    .ifEmpty { inventoryItemDao.getLocationIdsByComponent(componentId) }
-                locationIds
-                    .forEach { locationId ->
-                        val profile = calculateDominantLocationCategoryProfile(
-                            inventoryItemDao
-                                .getLocationCategoryProfiles(locationId)
-                                .map { projection ->
-                                    LocationCategoryProfile(
-                                        locationId = projection.locationId,
-                                        category = projection.category,
-                                        packageName = projection.packageName,
-                                        quantity = projection.quantity
-                                    )
-                                }
-                        )
-                        database.storageLocationDao().updateInboundProfile(
-                            locationId = locationId,
-                            category = profile.category,
-                            packageName = profile.packageName,
-                            updatedAt = System.currentTimeMillis()
-                        )
-                    }
-            }
-        }
+        onComponentEnriched = { }
     )
 
     val inventoryRepository: InventoryRepository = InventoryRepositoryImpl(
@@ -125,22 +89,11 @@ class AppContainer(context: Context) {
         database = database,
         componentDao = database.componentDao(),
         dashboardDao = database.dashboardDao(),
-        storageLocationDao = database.storageLocationDao(),
-        inventoryItemDao = database.inventoryItemDao(),
-        inventoryTransactionDao = database.inventoryTransactionDao(),
+        stockItemDao = database.stockItemDao(),
         containerDao = database.containerDao(),
         stockPlacementRepository = stockPlacementRepository,
         componentEnrichmentManager = componentEnrichmentManager,
         componentImageStore = componentImageStore,
-        protocolPartIdStrategy = protocolPartIdStrategy
-    )
-
-    val boxRepository: BoxRepository = BoxRepositoryImpl(
-        database = database,
-        boxDao = database.boxDao(),
-        componentDao = database.componentDao(),
-        containerDao = database.containerDao(),
-        stockPlacementRepository = stockPlacementRepository,
         protocolPartIdStrategy = protocolPartIdStrategy
     )
 
@@ -177,11 +130,7 @@ class AppContainer(context: Context) {
     val inventoryBackupManager = InventoryBackupManager(
         context = appContext,
         database = database,
-        boxDao = database.boxDao(),
-        storageLocationDao = database.storageLocationDao(),
         componentDao = database.componentDao(),
-        inventoryItemDao = database.inventoryItemDao(),
-        inventoryTransactionDao = database.inventoryTransactionDao(),
         containerDao = database.containerDao(),
         stockItemDao = database.stockItemDao(),
         stockOperationDao = database.stockOperationDao(),
@@ -194,16 +143,6 @@ class AppContainer(context: Context) {
     val lcscCatalogRepository: LcscCatalogRepository = LcscCatalogRepositoryImpl(
         remoteDataSource = LcscCatalogRemoteDataSource(okHttpClient)
     )
-
-    val q5PrinterManager = Q5PrinterManager(appContext)
-    val p0PrinterManager = P0PrinterManager(appContext)
-
-    fun printerManagerForType(printerType: String): PrinterManager {
-        return when (printerType) {
-            UserPreferencesRepository.PRINTER_TYPE_YINLIFANG_P0 -> p0PrinterManager
-            else -> q5PrinterManager
-        }
-    }
 
     private fun hasSmartChassisBluetoothPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

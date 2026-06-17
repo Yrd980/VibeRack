@@ -5,7 +5,6 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.viberack.app.domain.model.ContainerType
-import com.viberack.app.domain.model.StorageLocationSortMode
 
 @Entity(
     tableName = "container",
@@ -23,7 +22,7 @@ data class ContainerEntity(
     val slotCount: Int,
     val colorHex: String? = null,
     @ColumnInfo(defaultValue = "")
-    val sortMode: String = StorageLocationSortMode.NONE,
+    val sortMode: String = "",
     val remark: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),

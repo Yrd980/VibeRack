@@ -14,7 +14,7 @@ interface DashboardDao {
             (SELECT COUNT(*) FROM `container`) AS locationCount,
             (SELECT COUNT(*) FROM stock_item) AS inventoryCount,
             (SELECT COALESCE(SUM(quantity), 0) FROM stock_item) AS totalQuantity,
-            (SELECT COUNT(*) FROM inventory_txn) AS transactionCount
+            (SELECT COUNT(*) FROM stock_operation) AS transactionCount
         """
     )
     fun observeSummary(): Flow<DashboardSummaryProjection>

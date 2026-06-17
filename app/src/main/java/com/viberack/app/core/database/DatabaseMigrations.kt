@@ -4,7 +4,6 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.viberack.app.domain.model.ContainerType
 import com.viberack.app.domain.model.QuantityState
-import com.viberack.app.domain.model.StorageLocationSortMode
 
 object DatabaseMigrations {
     val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -24,7 +23,7 @@ object DatabaseMigrations {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
                 "ALTER TABLE storage_location ADD COLUMN sortMode TEXT NOT NULL " +
-                    "DEFAULT '${StorageLocationSortMode.NONE}'"
+                    "DEFAULT ''"
             )
         }
     }
@@ -275,7 +274,7 @@ object DatabaseMigrations {
                     '${ContainerType.BOX.name}',
                     component_box.layerCount,
                     NULL,
-                    '${StorageLocationSortMode.NONE}',
+                    '',
                     NULL,
                     component_box.createdAt,
                     component_box.updatedAt
@@ -483,12 +482,24 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS layer_material")
+            db.execSQL("DROP TABLE IF EXISTS box_layer")
+            db.execSQL("DROP TABLE IF EXISTS component_box")
+            db.execSQL("DROP TABLE IF EXISTS inventory_txn")
+            db.execSQL("DROP TABLE IF EXISTS inventory_item")
+            db.execSQL("DROP TABLE IF EXISTS storage_location")
+        }
+    }
+
     val ALL = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
         MIGRATION_3_4,
         MIGRATION_4_5,
         MIGRATION_5_6,
-        MIGRATION_6_7
+        MIGRATION_6_7,
+        MIGRATION_7_8
     )
 }

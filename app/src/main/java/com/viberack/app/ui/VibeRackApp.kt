@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.Print
-import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
@@ -36,15 +34,9 @@ import androidx.navigation.compose.rememberNavController
 import com.viberack.app.VibeRackApplication
 import com.viberack.app.R
 import com.viberack.app.core.nfc.NfcScanResult
-import com.viberack.app.feature.boxes.BoxesOpenRequest
-import com.viberack.app.feature.boxes.BoxesRoute
 import com.viberack.app.feature.containers.ContainersOpenRequest
 import com.viberack.app.feature.containers.ContainersRoute
 import com.viberack.app.feature.home.HomeRoute
-import com.viberack.app.feature.inbound.InboundRoute
-import com.viberack.app.feature.inventory.InventoryOpenRequest
-import com.viberack.app.feature.inventory.InventoryRoute
-import com.viberack.app.feature.printer.PrinterRoute
 import com.viberack.app.feature.search.SearchRoute
 import com.viberack.app.feature.settings.SettingsRoute
 
@@ -57,11 +49,6 @@ fun VibeRackApp() {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val items = topLevelDestinations
-    var inventoryResetToOverviewSignal by remember { mutableIntStateOf(0) }
-    var inventoryOpenRequestSignal by remember { mutableIntStateOf(0) }
-    var inventoryOpenRequest by remember { mutableStateOf<InventoryOpenRequest?>(null) }
-    var boxesOpenRequestSignal by remember { mutableIntStateOf(0) }
-    var boxesOpenRequest by remember { mutableStateOf<BoxesOpenRequest?>(null) }
     var containersOpenRequestSignal by remember { mutableIntStateOf(0) }
     var containersOpenRequest by remember { mutableStateOf<ContainersOpenRequest?>(null) }
 
@@ -77,28 +64,12 @@ fun VibeRackApp() {
 
     val openPhysicalTarget: (PhysicalTarget) -> Unit = { target ->
         when (val route = PhysicalTargetRouting.toRoute(target)) {
-            is PhysicalTargetRoute.Inventory -> {
-                inventoryOpenRequest = route.request
-                inventoryOpenRequestSignal++
-                navigateTo(Destination.Inventory)
-            }
-
-            is PhysicalTargetRoute.Boxes -> {
-                boxesOpenRequest = route.request
-                boxesOpenRequestSignal++
-                navigateTo(Destination.Boxes)
-            }
-
             is PhysicalTargetRoute.Containers -> {
                 containersOpenRequest = route.request
                 containersOpenRequestSignal++
                 navigateTo(Destination.Containers)
             }
         }
-    }
-
-    val jumpToInventoryItem: (String, String) -> Unit = { locationCode, partNumber ->
-        openPhysicalTarget(PhysicalTargetRouting.inventoryItem(locationCode, partNumber))
     }
 
     DisposableEffect(activity, appContainer) {
@@ -154,15 +125,7 @@ fun VibeRackApp() {
                     NavigationBarItem(
                         selected = selected,
                         onClick = {
-                            if (selected) {
-                                if (destination.route == Destination.Inventory.route) {
-                                    inventoryResetToOverviewSignal++
-                                }
-                                return@NavigationBarItem
-                            }
-                            if (destination.route == Destination.Inventory.route) {
-                                inventoryResetToOverviewSignal++
-                            }
+                            if (selected) return@NavigationBarItem
                             navigateTo(destination)
                         },
                         icon = {
@@ -187,36 +150,14 @@ fun VibeRackApp() {
             composable(Destination.Home.route) {
                 HomeRoute()
             }
-            composable(Destination.Boxes.route) {
-                BoxesRoute(
-                    openRequest = boxesOpenRequest,
-                    openRequestSignal = boxesOpenRequestSignal
-                )
-            }
             composable(Destination.Containers.route) {
                 ContainersRoute(
                     openRequest = containersOpenRequest,
                     openRequestSignal = containersOpenRequestSignal,
-                    onOpenBoxes = {
-                        navigateTo(Destination.Boxes)
-                    }
                 )
-            }
-            composable(Destination.Inbound.route) {
-                InboundRoute(onViewInventoryItem = jumpToInventoryItem)
             }
             composable(Destination.Search.route) {
-                SearchRoute(onViewInventoryItem = jumpToInventoryItem)
-            }
-            composable(Destination.Printer.route) {
-                PrinterRoute()
-            }
-            composable(Destination.Inventory.route) {
-                InventoryRoute(
-                    openRequest = inventoryOpenRequest,
-                    openRequestSignal = inventoryOpenRequestSignal,
-                    resetToOverviewSignal = inventoryResetToOverviewSignal
-                )
+                SearchRoute()
             }
             composable(Destination.Settings.route) {
                 SettingsRoute(
@@ -235,20 +176,14 @@ private sealed class Destination(
     val icon: ImageVector
 ) {
     data object Home : Destination("home", R.string.nav_home, Icons.Outlined.Home)
-    data object Boxes : Destination("boxes", R.string.nav_boxes, Icons.Outlined.Inventory2)
     data object Containers : Destination("containers", R.string.nav_containers, Icons.Outlined.Inventory2)
-    data object Inbound : Destination("inbound", R.string.nav_inbound, Icons.Outlined.QrCodeScanner)
     data object Search : Destination("search", R.string.nav_search, Icons.Outlined.Search)
-    data object Printer : Destination("printer", R.string.nav_printer, Icons.Outlined.Print)
-    data object Inventory : Destination("inventory", R.string.nav_inventory, Icons.Outlined.Inventory2)
     data object Settings : Destination("settings", R.string.nav_settings, Icons.Outlined.Settings)
 }
 
 private val topLevelDestinations = listOf(
     Destination.Home,
     Destination.Containers,
-    Destination.Inbound,
     Destination.Search,
-    Destination.Printer,
     Destination.Settings
 )

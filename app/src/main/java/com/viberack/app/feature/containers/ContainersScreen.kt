@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LightbulbCircle
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Refresh
@@ -67,7 +66,6 @@ import com.viberack.app.domain.model.StockContainer
 fun ContainersRoute(
     openRequest: ContainersOpenRequest? = null,
     openRequestSignal: Int = 0,
-    onOpenBoxes: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -117,7 +115,6 @@ fun ContainersRoute(
         onEnableBluetooth = {
             enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
         },
-        onOpenBoxes = onOpenBoxes,
         modifier = modifier
     )
 }
@@ -141,7 +138,6 @@ fun ContainersScreen(
     hasBluetoothPermission: Boolean,
     onRequestBluetoothPermission: () -> Unit,
     onEnableBluetooth: () -> Unit,
-    onOpenBoxes: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -162,7 +158,6 @@ fun ContainersScreen(
                 hasBluetoothPermission = hasBluetoothPermission,
                 onScanSmartChassis = { onScanSmartChassis(hasBluetoothPermission) },
                 onRequestBluetoothPermission = onRequestBluetoothPermission,
-                onOpenBoxes = onOpenBoxes
             )
         }
         if (uiState.containers.isEmpty()) {
@@ -243,7 +238,6 @@ private fun ContainersHeader(
     hasBluetoothPermission: Boolean,
     onScanSmartChassis: () -> Unit,
     onRequestBluetoothPermission: () -> Unit,
-    onOpenBoxes: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -268,22 +262,6 @@ private fun ContainersHeader(
                     text = stringResource(R.string.containers_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            OutlinedButton(
-                onClick = onOpenBoxes,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Inventory2,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = stringResource(R.string.containers_open_boxes),
-                    modifier = Modifier.padding(start = 6.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

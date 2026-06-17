@@ -71,15 +71,7 @@ import com.viberack.app.R
 import com.viberack.app.core.ui.ComponentInfoDialog
 import com.viberack.app.core.ui.MaterialListCard
 import com.viberack.app.core.ui.performCopyFeedback
-import com.viberack.app.domain.model.ComponentDetail
-import com.viberack.app.domain.model.ContainerType
-import com.viberack.app.domain.model.LocationInventoryItem
 import com.viberack.app.domain.model.SearchInventoryRecord
-import com.viberack.app.domain.model.StockLocationCell
-import com.viberack.app.domain.model.StorageLocation
-import com.viberack.app.feature.inbound.ComponentDetailTable
-import com.viberack.app.feature.inbound.ExistingStockReminderCard
-import com.viberack.app.feature.inventory.InventoryItemManageDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -104,13 +96,6 @@ fun SearchRoute(
         onBomFilterChange = viewModel::updateBomFilter,
         onIgnoreBomEntry = viewModel::ignoreBomEntry,
         onBindBomEntry = viewModel::bindBomEntry,
-        onLookupBomDirectInbound = viewModel::lookupBomDirectInbound,
-        onAddBomInbound = viewModel::addBomInbound,
-        onAssignBomToLayer = viewModel::assignBomEntryToEmptyLayer,
-        onUpdateInventoryItemQuantity = viewModel::updateInventoryItemQuantity,
-        onUpdateInventoryItemSource = viewModel::updateInventoryItemSource,
-        onTransferInventoryItem = viewModel::transferInventoryItem,
-        onDeleteInventoryItem = viewModel::deleteInventoryItem,
         onFindSmartChassisRecord = viewModel::findSmartChassisRecord,
         onStartBomPickToLight = viewModel::startBomPickToLight,
         onCancelBomPickToLight = viewModel::cancelBomPickToLight,
@@ -131,13 +116,6 @@ fun SearchScreen(
     onBomFilterChange: (BomMatchFilter) -> Unit,
     onIgnoreBomEntry: (BomSearchEntry) -> Unit,
     onBindBomEntry: (BomSearchEntry, String) -> Unit,
-    onLookupBomDirectInbound: (String, (BomDirectInboundLookupResult) -> Unit) -> Unit,
-    onAddBomInbound: (ComponentDetail, Int, String, (String?) -> Unit) -> Unit,
-    onAssignBomToLayer: (BomSearchEntry, (BomLayerAssignmentResult) -> Unit) -> Unit,
-    onUpdateInventoryItemQuantity: (Long, Int, (String?) -> Unit) -> Unit,
-    onUpdateInventoryItemSource: (Long, String?, (String?) -> Unit) -> Unit,
-    onTransferInventoryItem: (Long, String, (String?) -> Unit) -> Unit,
-    onDeleteInventoryItem: (Long, (String?) -> Unit) -> Unit,
     onFindSmartChassisRecord: (SearchInventoryRecord, (String?) -> Unit) -> Unit,
     onStartBomPickToLight: () -> Unit,
     onCancelBomPickToLight: () -> Unit,
@@ -154,8 +132,6 @@ fun SearchScreen(
     var selectedSearchResult by remember { mutableStateOf<SearchResultUiModel?>(null) }
     var selectedSearchRecord by remember { mutableStateOf<SearchInventoryRecord?>(null) }
     var bindingTargetEntry by remember { mutableStateOf<BomSearchEntry?>(null) }
-    var directInboundTargetEntry by remember { mutableStateOf<BomSearchEntry?>(null) }
-    var assigningBomEntryKey by remember { mutableStateOf<String?>(null) }
     val showScrollToTop by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex > 2 ||
@@ -389,54 +365,12 @@ fun SearchScreen(
                         }
 
                         items(uiState.bomRows, key = { it.entry.rowNumber + "|" + (it.entry.supplierPart ?: it.entry.manufacturerPart ?: "") }) { row ->
-                            val rowActionKey = bomEntryActionKey(row.entry)
                             BomSearchRowCard(
                                 row = row,
-                                isAssigningToLayer = assigningBomEntryKey == rowActionKey,
                                 onIgnore = { onIgnoreBomEntry(row.entry) },
                                 onBind = { bindingTargetEntry = row.entry },
                                 onResultClick = { record -> selectedSearchRecord = record },
                                 onResultGroupClick = { result -> selectedSearchResult = result },
-                                onAssignToEmptyLayer = {
-                                    if (uiState.emptyBoxLayers.isEmpty()) {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.search_bom_assign_no_empty_layer),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        assigningBomEntryKey = rowActionKey
-                                        onAssignBomToLayer(row.entry) { result ->
-                                            assigningBomEntryKey = null
-                                            val error = result.errorMessage
-                                            if (error != null) {
-                                                Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                val assignedLayer = result.assignedLayer
-                                                val partNumber = result.partNumber
-                                                if (partNumber != null) {
-                                                    onBindBomEntry(row.entry, partNumber)
-                                                }
-                                                if (assignedLayer != null && partNumber != null) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        context.getString(
-                                                            R.string.search_bom_assign_success,
-                                                            partNumber,
-                                                            assignedLayer.positionCode
-                                                        ),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                                onDirectInbound = {
-                                    if (!row.entry.supplierPart.isNullOrBlank()) {
-                                        directInboundTargetEntry = row.entry
-                                    }
-                                }
                             )
                         }
                     }
@@ -476,24 +410,11 @@ fun SearchScreen(
     }
 
     selectedSearchRecord?.let { record ->
-        if (record.isLegacyEditable) {
-            InventoryItemManageDialog(
-                item = record.toLocationInventoryItem(),
-                currentLocation = record.toStockLocationCell(),
-                availableLocations = uiState.locations.map(StorageLocation::toStockLocationCell),
-                onUpdateQuantity = onUpdateInventoryItemQuantity,
-                onUpdateSource = onUpdateInventoryItemSource,
-                onTransfer = onTransferInventoryItem,
-                onDelete = onDeleteInventoryItem,
-                onDismiss = { selectedSearchRecord = null }
-            )
-        } else {
-            SearchContainerRecordDialog(
-                record = record,
-                onFindByLight = onFindSmartChassisRecord,
-                onDismiss = { selectedSearchRecord = null }
-            )
-        }
+        SearchContainerRecordDialog(
+            record = record,
+            onFindByLight = onFindSmartChassisRecord,
+            onDismiss = { selectedSearchRecord = null }
+        )
     }
 
     bindingTargetEntry?.let { entry ->
@@ -504,24 +425,6 @@ fun SearchScreen(
             onBind = { partNumber ->
                 onBindBomEntry(entry, partNumber)
                 bindingTargetEntry = null
-            }
-        )
-    }
-
-    directInboundTargetEntry?.let { entry ->
-        BomDirectInboundDialog(
-            entry = entry,
-            locations = uiState.locations,
-            defaultLocationCode = uiState.defaultLocationCode,
-            onLookup = onLookupBomDirectInbound,
-            onConfirmInbound = onAddBomInbound,
-            onMatchUpdated = { partNumber ->
-                onBindBomEntry(entry, partNumber)
-            },
-            onDismiss = { directInboundTargetEntry = null },
-            onViewInventoryItem = { locationCode, partNumber ->
-                directInboundTargetEntry = null
-                onViewInventoryItem(locationCode, partNumber)
             }
         )
     }
@@ -557,13 +460,10 @@ private fun SearchModeTabs(
 @Composable
 private fun BomSearchRowCard(
     row: BomSearchRowUiModel,
-    isAssigningToLayer: Boolean,
     onIgnore: () -> Unit,
     onBind: () -> Unit,
     onResultClick: (SearchInventoryRecord) -> Unit,
-    onResultGroupClick: (SearchResultUiModel) -> Unit,
-    onAssignToEmptyLayer: () -> Unit,
-    onDirectInbound: () -> Unit
+    onResultGroupClick: (SearchResultUiModel) -> Unit
 ) {
     Card {
         Column(
@@ -588,58 +488,12 @@ private fun BomSearchRowCard(
                 BomInfoLine(label = stringResource(R.string.search_bom_manufacturer_part), value = row.entry.manufacturerPart)
                 BomInfoLine(label = stringResource(R.string.search_bom_manufacturer), value = row.entry.manufacturer)
             }
-            if (!row.entry.supplierPart.isNullOrBlank() && row.assignedLayers.isEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = onAssignToEmptyLayer,
-                        enabled = !isAssigningToLayer
-                    ) {
-                        Text(
-                            text = stringResource(
-                                if (isAssigningToLayer) {
-                                    R.string.search_bom_assigning_to_layer
-                                } else {
-                                    R.string.search_bom_assign_to_box_layer
-                                }
-                            )
-                        )
-                    }
-                }
-            }
-            if (row.assignedLayers.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = stringResource(R.string.search_bom_assigned_layer_title),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    row.assignedLayers.forEach { layer ->
-                        Text(
-                            text = stringResource(
-                                R.string.search_bom_assigned_layer,
-                                layer.positionCode,
-                                layer.partNumber.orEmpty()
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-            if (row.matchedResults.isEmpty() && row.assignedLayers.isEmpty()) {
+            if (row.matchedResults.isEmpty()) {
                 MessageCard(text = stringResource(R.string.search_bom_unmatched))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    if (!row.entry.supplierPart.isNullOrBlank()) {
-                        TextButton(onClick = onDirectInbound) {
-                            Text(text = stringResource(R.string.search_bom_direct_inbound))
-                        }
-                    }
                     TextButton(onClick = onIgnore) {
                         Text(text = stringResource(R.string.search_bom_ignore))
                     }
@@ -764,62 +618,7 @@ private fun queryDisplayName(
         }
 }
 
-private fun bomEntryActionKey(entry: BomSearchEntry): String {
-    return listOf(
-        entry.rowNumber,
-        entry.supplierPart.orEmpty(),
-        entry.manufacturerPart.orEmpty(),
-        entry.designator.orEmpty()
-    ).joinToString("|")
-}
-
 @Composable
 internal fun displaySearchQuantity(quantity: Int): String {
     return quantity.toString()
-}
-
-private fun SearchInventoryRecord.toLocationInventoryItem(): LocationInventoryItem {
-    return LocationInventoryItem(
-        inventoryItemId = inventoryItemId,
-        componentId = componentId,
-        partNumber = partNumber,
-        mpn = mpn,
-        name = name,
-        brand = brand,
-        packageName = packageName,
-        category = category,
-        description = description,
-        sourceUrl = sourceUrl,
-        specifications = specifications,
-        imageLocalPath = imageLocalPath,
-        imageUrl = null,
-        quantity = quantity,
-        lastInboundAt = 0L
-    )
-}
-
-private fun SearchInventoryRecord.toStockLocationCell(): StockLocationCell {
-    return StockLocationCell(
-        id = locationId,
-        code = locationCode,
-        displayName = locationDisplayName,
-        colorHex = locationColorHex,
-        sortMode = "",
-        remark = null,
-        inventoryItemCount = 0,
-        totalQuantity = quantity
-    )
-}
-
-private fun StorageLocation.toStockLocationCell(): StockLocationCell {
-    return StockLocationCell(
-        id = id,
-        code = code,
-        displayName = displayName,
-        colorHex = colorHex,
-        sortMode = sortMode,
-        remark = remark,
-        inventoryItemCount = 0,
-        totalQuantity = 0
-    )
 }

@@ -3,7 +3,6 @@ package com.viberack.app.domain.model
 data class SearchInventoryRecord(
     val inventoryItemId: Long,
     val stockItemId: Long? = null,
-    val isLegacyEditable: Boolean = true,
     val componentId: Long,
     val partNumber: String,
     val mpn: String?,

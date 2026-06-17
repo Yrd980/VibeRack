@@ -1,0 +1,697 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 8,
+    "identityHash": "8b53a007e3f6065db40dbfdcb7673d0e",
+    "entities": [
+      {
+        "tableName": "component_master",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `part_number` TEXT NOT NULL, `protocol_part_id` TEXT, `mpn` TEXT, `name` TEXT, `brand` TEXT, `package_name` TEXT, `category` TEXT, `spec_json` TEXT, `description` TEXT, `source_url` TEXT, `image_local_path` TEXT, `updated_at` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partNumber",
+            "columnName": "part_number",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "protocolPartId",
+            "columnName": "protocol_part_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mpn",
+            "columnName": "mpn",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "brand",
+            "columnName": "brand",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "packageName",
+            "columnName": "package_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "specJson",
+            "columnName": "spec_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceUrl",
+            "columnName": "source_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageLocalPath",
+            "columnName": "image_local_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_component_master_part_number",
+            "unique": true,
+            "columnNames": [
+              "part_number"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_component_master_part_number` ON `${TABLE_NAME}` (`part_number`)"
+          },
+          {
+            "name": "index_component_master_protocol_part_id",
+            "unique": true,
+            "columnNames": [
+              "protocol_part_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_component_master_protocol_part_id` ON `${TABLE_NAME}` (`protocol_part_id`)"
+          },
+          {
+            "name": "index_component_master_mpn",
+            "unique": false,
+            "columnNames": [
+              "mpn"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_component_master_mpn` ON `${TABLE_NAME}` (`mpn`)"
+          },
+          {
+            "name": "index_component_master_brand",
+            "unique": false,
+            "columnNames": [
+              "brand"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_component_master_brand` ON `${TABLE_NAME}` (`brand`)"
+          },
+          {
+            "name": "index_component_master_package_name",
+            "unique": false,
+            "columnNames": [
+              "package_name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_component_master_package_name` ON `${TABLE_NAME}` (`package_name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "container",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `code` TEXT NOT NULL, `displayName` TEXT, `type` TEXT NOT NULL, `slotCount` INTEGER NOT NULL, `colorHex` TEXT, `sortMode` TEXT NOT NULL DEFAULT '', `remark` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `macAddress` TEXT, `batchId` INTEGER, `protoVersion` INTEGER, `firmwareVersion` TEXT, `hardwareVersion` TEXT, `batteryPct` INTEGER, `statusFlags` INTEGER, `tableSeq` INTEGER, `tableCrc16` INTEGER, `lastSeenAt` INTEGER, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "code",
+            "columnName": "code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "slotCount",
+            "columnName": "slotCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "colorHex",
+            "columnName": "colorHex",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sortMode",
+            "columnName": "sortMode",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "remark",
+            "columnName": "remark",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "macAddress",
+            "columnName": "macAddress",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "batchId",
+            "columnName": "batchId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "protoVersion",
+            "columnName": "protoVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "firmwareVersion",
+            "columnName": "firmwareVersion",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hardwareVersion",
+            "columnName": "hardwareVersion",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "batteryPct",
+            "columnName": "batteryPct",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "statusFlags",
+            "columnName": "statusFlags",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tableSeq",
+            "columnName": "tableSeq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tableCrc16",
+            "columnName": "tableCrc16",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSeenAt",
+            "columnName": "lastSeenAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_container_code",
+            "unique": true,
+            "columnNames": [
+              "code"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_container_code` ON `${TABLE_NAME}` (`code`)"
+          },
+          {
+            "name": "index_container_macAddress",
+            "unique": false,
+            "columnNames": [
+              "macAddress"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_container_macAddress` ON `${TABLE_NAME}` (`macAddress`)"
+          }
+        ]
+      },
+      {
+        "tableName": "container_slot",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `container_id` INTEGER NOT NULL, `slot_number` INTEGER NOT NULL, `slot_code` TEXT NOT NULL, `displayName` TEXT, `sortOrder` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, FOREIGN KEY(`container_id`) REFERENCES `container`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "containerId",
+            "columnName": "container_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "slotNumber",
+            "columnName": "slot_number",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "slotCode",
+            "columnName": "slot_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_container_slot_container_id",
+            "unique": false,
+            "columnNames": [
+              "container_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_container_slot_container_id` ON `${TABLE_NAME}` (`container_id`)"
+          },
+          {
+            "name": "index_container_slot_container_id_slot_number",
+            "unique": true,
+            "columnNames": [
+              "container_id",
+              "slot_number"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_container_slot_container_id_slot_number` ON `${TABLE_NAME}` (`container_id`, `slot_number`)"
+          },
+          {
+            "name": "index_container_slot_container_id_slot_code",
+            "unique": true,
+            "columnNames": [
+              "container_id",
+              "slot_code"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_container_slot_container_id_slot_code` ON `${TABLE_NAME}` (`container_id`, `slot_code`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "container",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "container_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "stock_item",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `component_id` INTEGER NOT NULL, `container_id` INTEGER NOT NULL, `container_slot_id` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, `quantity_state` TEXT NOT NULL DEFAULT 'KNOWN', `safety_stock_threshold` INTEGER, `last_inbound_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`component_id`) REFERENCES `component_master`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`container_id`) REFERENCES `container`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`container_slot_id`) REFERENCES `container_slot`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "componentId",
+            "columnName": "component_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "containerId",
+            "columnName": "container_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "containerSlotId",
+            "columnName": "container_slot_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quantity",
+            "columnName": "quantity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quantityState",
+            "columnName": "quantity_state",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'KNOWN'"
+          },
+          {
+            "fieldPath": "safetyStockThreshold",
+            "columnName": "safety_stock_threshold",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastInboundAt",
+            "columnName": "last_inbound_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_stock_item_component_id",
+            "unique": false,
+            "columnNames": [
+              "component_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stock_item_component_id` ON `${TABLE_NAME}` (`component_id`)"
+          },
+          {
+            "name": "index_stock_item_container_id",
+            "unique": false,
+            "columnNames": [
+              "container_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stock_item_container_id` ON `${TABLE_NAME}` (`container_id`)"
+          },
+          {
+            "name": "index_stock_item_container_slot_id",
+            "unique": false,
+            "columnNames": [
+              "container_slot_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stock_item_container_slot_id` ON `${TABLE_NAME}` (`container_slot_id`)"
+          },
+          {
+            "name": "index_stock_item_component_id_container_slot_id",
+            "unique": true,
+            "columnNames": [
+              "component_id",
+              "container_slot_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_stock_item_component_id_container_slot_id` ON `${TABLE_NAME}` (`component_id`, `container_slot_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "component_master",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "component_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "container",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "container_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "container_slot",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "container_slot_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "stock_operation",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` TEXT NOT NULL, `container_id` INTEGER, `container_slot_id` INTEGER, `component_id` INTEGER, `quantity_delta` INTEGER NOT NULL DEFAULT 0, `sourceType` TEXT, `sourceRef` TEXT, `rawPayload` TEXT, `bleOpcode` INTEGER, `bleStatus` INTEGER, `tableSeqBefore` INTEGER, `tableSeqAfter` INTEGER, `created_at` INTEGER NOT NULL, FOREIGN KEY(`container_id`) REFERENCES `container`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`container_slot_id`) REFERENCES `container_slot`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`component_id`) REFERENCES `component_master`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "containerId",
+            "columnName": "container_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "containerSlotId",
+            "columnName": "container_slot_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "componentId",
+            "columnName": "component_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "quantityDelta",
+            "columnName": "quantity_delta",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "sourceType",
+            "columnName": "sourceType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceRef",
+            "columnName": "sourceRef",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rawPayload",
+            "columnName": "rawPayload",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bleOpcode",
+            "columnName": "bleOpcode",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "bleStatus",
+            "columnName": "bleStatus",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tableSeqBefore",
+            "columnName": "tableSeqBefore",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tableSeqAfter",
+            "columnName": "tableSeqAfter",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_stock_operation_type",
+            "unique": false,
+            "columnNames": [
+              "type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stock_operation_type` ON `${TABLE_NAME}` (`type`)"
+          },
+          {
+            "name": "index_stock_operation_container_id",
+            "unique": false,
+            "columnNames": [
+              "container_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stock_operation_container_id` ON `${TABLE_NAME}` (`container_id`)"
+          },
+          {
+            "name": "index_stock_operation_container_slot_id",
+            "unique": false,
+            "columnNames": [
+              "container_slot_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stock_operation_container_slot_id` ON `${TABLE_NAME}` (`container_slot_id`)"
+          },
+          {
+            "name": "index_stock_operation_component_id",
+            "unique": false,
+            "columnNames": [
+              "component_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stock_operation_component_id` ON `${TABLE_NAME}` (`component_id`)"
+          },
+          {
+            "name": "index_stock_operation_created_at",
+            "unique": false,
+            "columnNames": [
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stock_operation_created_at` ON `${TABLE_NAME}` (`created_at`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "container",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "container_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "container_slot",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "container_slot_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "component_master",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "component_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8b53a007e3f6065db40dbfdcb7673d0e')"
+    ]
+  }
+}

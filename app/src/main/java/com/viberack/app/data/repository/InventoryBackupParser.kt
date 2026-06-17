@@ -1,17 +1,12 @@
 package com.viberack.app.data.repository
 
-import com.viberack.app.core.database.entity.BoxEntity
-import com.viberack.app.core.database.entity.BoxLayerEntity
 import com.viberack.app.core.database.entity.ComponentEntity
 import com.viberack.app.core.database.entity.ContainerEntity
 import com.viberack.app.core.database.entity.ContainerSlotEntity
-import com.viberack.app.core.database.entity.InventoryItemEntity
 import com.viberack.app.core.database.entity.StockItemEntity
 import com.viberack.app.core.database.entity.StockOperationEntity
-import com.viberack.app.core.database.entity.StorageLocationEntity
 import com.viberack.app.domain.model.ContainerType
 import com.viberack.app.domain.model.QuantityState
-import com.viberack.app.domain.model.StorageLocationSortMode
 import org.apache.poi.ss.usermodel.Cell
 import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.ss.usermodel.Row
@@ -25,12 +20,7 @@ internal class InventoryBackupParser(
     private val protocolPartIdStrategy: ProtocolPartIdStrategy
 ) {
     data class ParsedBackup(
-        val storageLocations: List<StorageLocationEntity>,
-        val recentLocationColors: List<String>,
         val importedComponents: List<ImportedComponentRow>,
-        val inventoryItems: List<InventoryItemEntity>,
-        val boxes: List<BoxEntity>,
-        val boxLayers: List<BoxLayerEntity>,
         val containers: List<ContainerEntity>,
         val containerSlots: List<ContainerSlotEntity>,
         val stockItems: List<StockItemEntity>,
@@ -38,16 +28,10 @@ internal class InventoryBackupParser(
     )
 
     suspend fun parse(workbook: Workbook): ParsedBackup {
-        val metaSheet = workbook.getSheet("meta")
         val componentSheet = workbook.getSheet("components")
         val importedComponents = componentSheet.toComponents(componentSheet.extractPreviewImagesByRow())
         return ParsedBackup(
-            storageLocations = workbook.getSheet("storage_locations").toStorageLocations(),
-            recentLocationColors = metaSheet.toRecentLocationColors(),
             importedComponents = importedComponents,
-            inventoryItems = workbook.getSheet("inventory_items").toInventoryItems(),
-            boxes = workbook.getSheet("boxes").toBoxes(),
-            boxLayers = workbook.getSheet("box_layers").toBoxLayers(),
             containers = workbook.getSheet("containers").toContainers(),
             containerSlots = workbook.getSheet("container_slots").toContainerSlots(),
             stockItems = workbook.getSheet("stock_items").toStockItems(),
@@ -73,50 +57,6 @@ internal class InventoryBackupParser(
         val sourceName: String?
     )
 
-    private fun org.apache.poi.ss.usermodel.Sheet?.toStorageLocations(): List<StorageLocationEntity> {
-        val sheet = this ?: return emptyList()
-        return sheet.dataRows().map { row ->
-            StorageLocationEntity(
-                id = row.long("id"),
-                code = row.string("code").orEmpty(),
-                displayName = row.stringOrNull("displayName"),
-                colorHex = row.stringOrNull("colorHex"),
-                sortMode = row.stringOrNull("sortMode") ?: StorageLocationSortMode.NONE,
-                remark = row.stringOrNull("remark"),
-                createdAt = row.long("createdAt")
-            )
-        }
-    }
-
-    private fun org.apache.poi.ss.usermodel.Sheet?.toBoxes(): List<BoxEntity> {
-        val sheet = this ?: return emptyList()
-        return sheet.dataRows().map { row ->
-            BoxEntity(
-                id = row.long("id"),
-                code = row.string("code").orEmpty(),
-                name = row.stringOrNull("name"),
-                layerCount = row.int("layerCount"),
-                createdAt = row.long("createdAt"),
-                updatedAt = row.long("updatedAt")
-            )
-        }
-    }
-
-    private fun org.apache.poi.ss.usermodel.Sheet?.toBoxLayers(): List<BoxLayerEntity> {
-        val sheet = this ?: return emptyList()
-        return sheet.dataRows().map { row ->
-            BoxLayerEntity(
-                id = row.long("id"),
-                boxId = row.long("boxId"),
-                layerCode = row.string("layerCode").orEmpty(),
-                displayName = row.stringOrNull("displayName"),
-                sortOrder = row.int("sortOrder"),
-                createdAt = row.long("createdAt"),
-                updatedAt = row.long("updatedAt")
-            )
-        }
-    }
-
     private fun org.apache.poi.ss.usermodel.Sheet?.toContainers(): List<ContainerEntity> {
         val sheet = this ?: return emptyList()
         return sheet.dataRows().map { row ->
@@ -127,7 +67,7 @@ internal class InventoryBackupParser(
                 type = row.stringOrNull("type") ?: ContainerType.LEGACY_LOCATION.name,
                 slotCount = row.int("slotCount"),
                 colorHex = row.stringOrNull("colorHex"),
-                sortMode = row.stringOrNull("sortMode") ?: StorageLocationSortMode.NONE,
+                sortMode = row.stringOrNull("sortMode").orEmpty(),
                 remark = row.stringOrNull("remark"),
                 createdAt = row.long("createdAt"),
                 updatedAt = row.long("updatedAt"),
@@ -201,26 +141,6 @@ internal class InventoryBackupParser(
         }
     }
 
-    private fun org.apache.poi.ss.usermodel.Sheet?.toRecentLocationColors(): List<String> {
-        val sheet = this ?: return emptyList()
-        val rawValue = (0..sheet.lastRowNum)
-            .asSequence()
-            .mapNotNull { rowIndex -> sheet.getRow(rowIndex) }
-            .firstOrNull { row ->
-                row.getCell(0)?.asString()?.trim() == "recentLocationColors"
-            }
-            ?.getCell(1)
-            ?.asString()
-            ?: return emptyList()
-        return rawValue
-            .split('\n')
-            .map(String::trim)
-            .filter { it.matches(Regex("^#[0-9A-Fa-f]{6}$")) }
-            .map(String::uppercase)
-            .distinct()
-            .take(5)
-    }
-
     private suspend fun org.apache.poi.ss.usermodel.Sheet?.toComponents(
         previewImagesByRow: Map<Int, ImportedSheetImage>
     ): List<ImportedComponentRow> {
@@ -282,24 +202,6 @@ internal class InventoryBackupParser(
         }
         return imagesByRow
     }
-
-
-
-
-    private fun org.apache.poi.ss.usermodel.Sheet?.toInventoryItems(): List<InventoryItemEntity> {
-        val sheet = this ?: return emptyList()
-        return sheet.dataRows().map { row ->
-            InventoryItemEntity(
-                id = row.long("id"),
-                componentId = row.long("componentId"),
-                locationId = row.long("locationId"),
-                quantity = row.int("quantity"),
-                lastInboundAt = row.long("lastInboundAt"),
-                updatedAt = row.long("updatedAt")
-            )
-        }
-    }
-
     private fun org.apache.poi.ss.usermodel.Sheet.dataRows(): List<ExcelRow> {
         if (physicalNumberOfRows <= 1) {
             return emptyList()

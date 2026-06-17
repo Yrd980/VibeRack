@@ -164,7 +164,6 @@
     <string name="search_bom_manufacturer">厂家</string>
     <string name="search_bom_unmatched">未匹配到库存账。</string>
     <string name="search_bom_match_title">匹配到 %1$d 项本地物料</string>
-    <string name="search_bom_assign_to_box_layer">分配到空层位</string>
     <string name="search_bom_assigning_to_layer">正在分配…</string>
     <string name="search_bom_assigned_layer_title">已分配盒层</string>
     <string name="search_bom_assigned_layer">%1$s · %2$s</string>
@@ -197,8 +196,8 @@
     <string name="search_container_slot">槽位</string>
     <string name="search_container_mac">底盘 MAC</string>
     <string name="search_container_read_only">该记录来自统一容器账。盒层和智能底盘的写操作需通过容器页或硬件确认后更新。</string>
-    <string name="search_container_type_location">库位</string>
-    <string name="search_container_type_box">盒层</string>
+    <string name="search_container_type_location">普通容器</string>
+    <string name="search_container_type_box">多槽容器</string>
     <string name="search_container_type_smart_chassis">智能底盘</string>
     <string name="inventory_title">库存账</string>
     <string name="inventory_subtitle">当前视图仍展示旧库位容器，后续将收束到统一容器和智能底盘数字孪生入口。</string>
@@ -209,7 +208,6 @@
     <string name="inventory_add_location_hint">例如 C0、A10，格式为 1 个字母 + 数字</string>
     <string name="inventory_cell_count">%1$d 种物料</string>
     <string name="inventory_cell_summary">%1$s:%2$d种物料</string>
-    <string name="inventory_item_quantity">库存数量：%1$s</string>
     <string name="inventory_quantity_label">库存数量</string>
     <string name="inventory_source_label">物料来源</string>
     <string name="inventory_open_source">打开来源链接</string>
@@ -288,8 +286,6 @@
     <string name="boxes_layers_empty">当前盒子暂无层位。</string>
     <string name="boxes_layer_empty">空层位</string>
     <string name="boxes_layer_occupied">%1$s</string>
-    <string name="boxes_bind_layer_material">绑定 LCSC</string>
-    <string name="boxes_replace_layer_material">替换 LCSC</string>
     <string name="boxes_bind_dialog_title">绑定盒层物料</string>
     <string name="boxes_bind_part_label">立创料号</string>
     <string name="boxes_bind_quantity_label">数量</string>

@@ -2,31 +2,22 @@ package com.viberack.app.feature.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import androidx.lifecycle.viewModelScope
 import com.viberack.app.core.AppContainer
-import com.viberack.app.core.datastore.UserPreferencesRepository
 import com.viberack.app.domain.repository.InventoryRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 class HomeViewModel(
-    inventoryRepository: InventoryRepository,
-    userPreferencesRepository: UserPreferencesRepository
+    inventoryRepository: InventoryRepository
 ) : ViewModel() {
-    val uiState: StateFlow<HomeUiState> = combine(
-        inventoryRepository.observeDashboardSummary(),
-        inventoryRepository.observeStorageLocations(),
-        userPreferencesRepository.preferences
-    ) { summary, locations, preferences ->
+    val uiState: StateFlow<HomeUiState> = inventoryRepository.observeDashboardSummary().map { summary ->
         HomeUiState(
-            summary = summary,
-            locations = locations,
-            defaultLocationCode = preferences.defaultLocationCode
+            summary = summary
         )
     }.stateIn(
         scope = viewModelScope,
@@ -34,18 +25,11 @@ class HomeViewModel(
         initialValue = HomeUiState()
     )
 
-    init {
-        viewModelScope.launch {
-            inventoryRepository.bootstrapDefaults()
-        }
-    }
-
     companion object {
         fun factory(appContainer: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 HomeViewModel(
-                    inventoryRepository = appContainer.inventoryRepository,
-                    userPreferencesRepository = appContainer.userPreferencesRepository
+                    inventoryRepository = appContainer.inventoryRepository
                 )
             }
         }

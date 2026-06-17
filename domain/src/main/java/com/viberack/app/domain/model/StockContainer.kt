@@ -7,7 +7,7 @@ data class StockContainer(
     val type: ContainerType,
     val slotCount: Int,
     val colorHex: String? = null,
-    val sortMode: String = StorageLocationSortMode.NONE,
+    val sortMode: String = "",
     val remark: String? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0,

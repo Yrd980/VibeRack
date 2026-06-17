@@ -1,17 +1,11 @@
 package com.viberack.app.feature.search
 
-import com.viberack.app.domain.model.ComponentDetail
-import com.viberack.app.domain.model.ComponentBoxLayer
 import com.viberack.app.domain.model.ContainerType
-import com.viberack.app.domain.model.ExistingStockLocation
 import com.viberack.app.domain.model.SearchInventoryRecord
-import com.viberack.app.domain.model.StorageLocation
 
 data class SearchUiState(
     val mode: SearchMode = SearchMode.Manual,
     val query: String = "",
-    val defaultLocationCode: String? = null,
-    val locations: List<StorageLocation> = emptyList(),
     val allInventoryResults: List<SearchResultUiModel> = emptyList(),
     val results: List<SearchResultUiModel> = emptyList(),
     val pagedResults: List<SearchResultUiModel> = emptyList(),
@@ -22,7 +16,6 @@ data class SearchUiState(
     val bomFilter: BomMatchFilter = BomMatchFilter.All,
     val bomRows: List<BomSearchRowUiModel> = emptyList(),
     val bomMatchedCount: Int = 0,
-    val emptyBoxLayers: List<ComponentBoxLayer> = emptyList(),
     val bomError: String? = null,
     val isParsingBom: Boolean = false,
     val bomPickSession: BomPickSessionUiModel? = null,
@@ -88,7 +81,6 @@ data class ParsedBomDocument(
 data class BomSearchRowUiModel(
     val entry: BomSearchEntry,
     val matchedResults: List<SearchResultUiModel>,
-    val assignedLayers: List<ComponentBoxLayer> = emptyList(),
     val isBound: Boolean = false,
     val isPersistentBinding: Boolean = false
 )
@@ -114,16 +106,4 @@ data class BomPickTargetUiModel(
     val partNumber: String,
     val slotNumber: Int,
     val designator: String?
-)
-
-data class BomDirectInboundLookupResult(
-    val component: ComponentDetail? = null,
-    val existingStockLocations: List<ExistingStockLocation> = emptyList(),
-    val errorMessage: String? = null
-)
-
-data class BomLayerAssignmentResult(
-    val assignedLayer: ComponentBoxLayer? = null,
-    val partNumber: String? = null,
-    val errorMessage: String? = null
 )

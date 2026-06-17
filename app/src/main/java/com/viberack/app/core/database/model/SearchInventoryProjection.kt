@@ -2,7 +2,6 @@ package com.viberack.app.core.database.model
 
 data class SearchInventoryProjection(
     val inventoryItemId: Long,
-    val legacyInventoryItemId: Long?,
     val stockItemId: Long,
     val componentId: Long,
     val partNumber: String,

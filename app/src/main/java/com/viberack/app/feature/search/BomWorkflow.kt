@@ -1,6 +1,5 @@
 package com.viberack.app.feature.search
 
-import com.viberack.app.domain.model.ComponentBoxLayer
 import com.viberack.app.domain.model.ContainerType
 import com.viberack.app.domain.model.SearchInventoryRecord
 import java.util.Locale
@@ -11,8 +10,7 @@ internal object BomWorkflow {
         document: ParsedBomDocument?,
         persistentBindings: Map<String, String>,
         temporaryBindings: Map<String, String>,
-        ignoredEntryKeys: Set<String>,
-        boxLayers: List<ComponentBoxLayer>
+        ignoredEntryKeys: Set<String>
     ): List<BomSearchRowUiModel> {
         if (document == null) {
             return emptyList()
@@ -30,11 +28,6 @@ internal object BomWorkflow {
                 ?.let(persistentBindings::get)
             val temporaryBindingPartNumber = temporaryBindings[entryKey]
             val boundPartNumber = persistentBindingPartNumber ?: temporaryBindingPartNumber
-            val resolvedPartNumber = boundPartNumber
-                ?: entry.supplierPart
-                    ?.trim()
-                    ?.uppercase(Locale.ROOT)
-                    ?.takeIf { it.isNotBlank() }
             val matchedRecords = inventoryRecords.filter { record ->
                 matchesBomEntry(
                     record = record,
@@ -42,16 +35,10 @@ internal object BomWorkflow {
                     boundPartNumber = boundPartNumber
                 )
             }
-            val assignedLayers = resolvedPartNumber?.let { partNumber ->
-                boxLayers.filter { layer ->
-                    layer.partNumber?.trim()?.uppercase(Locale.ROOT) == partNumber
-                }
-            }.orEmpty()
 
             BomSearchRowUiModel(
                 entry = entry,
                 matchedResults = SearchInventoryWorkflow.groupRecords(matchedRecords),
-                assignedLayers = assignedLayers,
                 isBound = boundPartNumber != null,
                 isPersistentBinding = persistentBindingPartNumber != null
             )

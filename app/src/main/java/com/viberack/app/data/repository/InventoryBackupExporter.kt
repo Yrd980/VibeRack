@@ -6,22 +6,17 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import com.viberack.app.R
-import com.viberack.app.core.database.dao.BoxDao
 import com.viberack.app.core.database.dao.ComponentDao
 import com.viberack.app.core.database.dao.ContainerDao
-import com.viberack.app.core.database.dao.InventoryItemDao
 import com.viberack.app.core.database.dao.StockItemDao
 import com.viberack.app.core.database.dao.StockOperationDao
-import com.viberack.app.core.database.dao.StorageLocationDao
 import com.viberack.app.core.database.entity.ComponentEntity
-import com.viberack.app.core.database.entity.InventoryItemEntity
 import com.viberack.app.core.database.entity.StockItemEntity
 import com.viberack.app.core.database.entity.StockOperationEntity
 import com.viberack.app.core.datastore.UserPreferencesRepository
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.ss.usermodel.ClientAnchor
@@ -32,10 +27,7 @@ import org.json.JSONObject
 internal class InventoryBackupExporter(
     private val context: Context,
     private val database: RoomDatabase,
-    private val boxDao: BoxDao,
-    private val storageLocationDao: StorageLocationDao,
     private val componentDao: ComponentDao,
-    private val inventoryItemDao: InventoryItemDao,
     private val containerDao: ContainerDao,
     private val stockItemDao: StockItemDao,
     private val stockOperationDao: StockOperationDao,
@@ -49,19 +41,11 @@ internal class InventoryBackupExporter(
             val appVersionName = packageInfo.versionName ?: "-"
             val appVersionCode = PackageInfoCompat.getLongVersionCode(packageInfo).toString()
 
-            val storageLocations = database.withTransaction { storageLocationDao.getAll() }
-            val boxes = database.withTransaction { boxDao.getAllBoxes() }
-            val boxLayers = database.withTransaction { boxDao.getAllLayerEntities() }
             val containers = database.withTransaction { containerDao.getAllContainers() }
             val containerSlots = database.withTransaction { containerDao.getAllSlots() }
             val stockItems = database.withTransaction { stockItemDao.getAll() }
             val stockOperations = database.withTransaction { stockOperationDao.getAll() }
-            val recentLocationColors = userPreferencesRepository.preferences
-                .first()
-                .recentLocationColors
-            val inventoryItems = database.withTransaction { inventoryItemDao.getAll() }
-            val referencedComponentIds = (inventoryItems.asSequence().map(InventoryItemEntity::componentId) +
-                stockItems.asSequence().map(StockItemEntity::componentId) +
+            val referencedComponentIds = (stockItems.asSequence().map(StockItemEntity::componentId) +
                 stockOperations.asSequence().mapNotNull(StockOperationEntity::componentId))
                 .asSequence()
                 .toSet()
@@ -81,7 +65,7 @@ internal class InventoryBackupExporter(
             workbook.createSheet("meta").apply {
                 writeRow(
                     0,
-                    listOf("schemaVersion", "2")
+                    listOf("schemaVersion", "3")
                 )
                 writeRow(
                     1,
@@ -91,28 +75,6 @@ internal class InventoryBackupExporter(
                     2,
                     listOf("appVersionCode", appVersionCode)
                 )
-                writeRow(
-                    3,
-                    listOf("recentLocationColors", recentLocationColors.joinToString("\n"))
-                )
-            }
-
-            workbook.createSheet("storage_locations").apply {
-                writeRow(0, listOf("id", "code", "displayName", "colorHex", "sortMode", "remark", "createdAt"))
-                storageLocations.forEachIndexed { index, item ->
-                    writeRow(
-                        index + 1,
-                        listOf(
-                            item.id,
-                            item.code,
-                            item.displayName,
-                            item.colorHex,
-                            item.sortMode,
-                            item.remark,
-                            item.createdAt
-                        )
-                    )
-                }
             }
 
             workbook.createSheet("components").apply {
@@ -159,58 +121,6 @@ internal class InventoryBackupExporter(
                     )
                 }
                 setColumnWidth(imageColumnIndex, 18 * 256)
-            }
-
-            workbook.createSheet("inventory_items").apply {
-                writeRow(0, listOf("id", "componentId", "locationId", "quantity", "lastInboundAt", "updatedAt"))
-                inventoryItems.forEachIndexed { index, item ->
-                    writeRow(
-                        index + 1,
-                        listOf(
-                            item.id,
-                            item.componentId,
-                            item.locationId,
-                            item.quantity,
-                            item.lastInboundAt,
-                            item.updatedAt
-                        )
-                    )
-                }
-            }
-
-            workbook.createSheet("boxes").apply {
-                writeRow(0, listOf("id", "code", "name", "layerCount", "createdAt", "updatedAt"))
-                boxes.forEachIndexed { index, item ->
-                    writeRow(
-                        index + 1,
-                        listOf(
-                            item.id,
-                            item.code,
-                            item.name,
-                            item.layerCount,
-                            item.createdAt,
-                            item.updatedAt
-                        )
-                    )
-                }
-            }
-
-            workbook.createSheet("box_layers").apply {
-                writeRow(0, listOf("id", "boxId", "layerCode", "displayName", "sortOrder", "createdAt", "updatedAt"))
-                boxLayers.forEachIndexed { index, item ->
-                    writeRow(
-                        index + 1,
-                        listOf(
-                            item.id,
-                            item.boxId,
-                            item.layerCode,
-                            item.displayName,
-                            item.sortOrder,
-                            item.createdAt,
-                            item.updatedAt
-                        )
-                    )
-                }
             }
 
             workbook.createSheet("containers").apply {
