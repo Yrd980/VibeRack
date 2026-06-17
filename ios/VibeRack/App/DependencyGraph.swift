@@ -5,9 +5,17 @@ import GRDB
 @Observable
 final class DependencyGraph {
     let chassisRepository: ChassisRepository
+    let chassisWorkflow: SmartChassisWorkflow
+    let simulatorClient: ChassisSimulatorClient?
 
-    init(chassisRepository: ChassisRepository) {
+    init(
+        chassisRepository: ChassisRepository,
+        chassisWorkflow: SmartChassisWorkflow,
+        simulatorClient: ChassisSimulatorClient? = nil
+    ) {
         self.chassisRepository = chassisRepository
+        self.chassisWorkflow = chassisWorkflow
+        self.simulatorClient = simulatorClient
     }
 
     static func simulatorPreview() -> DependencyGraph {
@@ -15,7 +23,15 @@ final class DependencyGraph {
             let database = try DatabaseFactory.makeInMemoryQueue()
             let repository = GRDBChassisRepository(database: database)
             try repository.seedSimulatorData()
-            return DependencyGraph(chassisRepository: repository)
+            let simulatorClient = ChassisSimulatorClient()
+            return DependencyGraph(
+                chassisRepository: repository,
+                chassisWorkflow: SmartChassisWorkflow(
+                    repository: repository,
+                    client: simulatorClient
+                ),
+                simulatorClient: simulatorClient
+            )
         } catch {
             preconditionFailure("Failed to create simulator dependencies: \(error)")
         }
@@ -26,7 +42,15 @@ final class DependencyGraph {
             let database = try DatabaseFactory.makeAppQueue()
             let repository = GRDBChassisRepository(database: database)
             try repository.seedSimulatorData()
-            return DependencyGraph(chassisRepository: repository)
+            let simulatorClient = ChassisSimulatorClient()
+            return DependencyGraph(
+                chassisRepository: repository,
+                chassisWorkflow: SmartChassisWorkflow(
+                    repository: repository,
+                    client: simulatorClient
+                ),
+                simulatorClient: simulatorClient
+            )
         } catch {
             preconditionFailure("Failed to create app dependencies: \(error)")
         }

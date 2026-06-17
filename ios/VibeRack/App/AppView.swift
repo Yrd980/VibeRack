@@ -15,7 +15,8 @@ struct AppView: View {
                             case .chassisDetail(let id):
                                 ChassisDetailView(
                                     chassisID: id,
-                                    repository: dependencies.chassisRepository
+                                    repository: dependencies.chassisRepository,
+                                    workflow: dependencies.chassisWorkflow
                                 )
                             }
                         }

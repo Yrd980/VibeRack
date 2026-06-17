@@ -2,6 +2,7 @@ import Foundation
 
 public protocol ChassisRepository {
     func seedSimulatorData() throws
+    func upsertComponent(_ draft: ComponentDraft) throws -> Component
     func fetchChassisList() throws -> [SmartChassisSummary]
     func fetchSlots(chassisID: String) throws -> [ChassisSlotState]
     func searchStock(query: String) throws -> [StockSearchResult]
@@ -9,6 +10,7 @@ public protocol ChassisRepository {
         chassisID: String,
         slotNumber: Int,
         protocolPartId: String,
+        componentID: String?,
         quantity: Int,
         source: StockOperationSource,
         bleOpcode: UInt8?,

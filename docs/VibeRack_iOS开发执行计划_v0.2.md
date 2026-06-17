@@ -430,6 +430,8 @@ M1 当前实机记录：
 | 2026-06-16 | Device Health | `64 02 00 00` | `battery=100`、`reset_reason=0x0002`、`health_flags=0x00` |
 | 2026-06-16 | BAS / DIS | 当前未发现 | `2A19`、`2A26`、`2A27` 读取返回 characteristic not found；iOS M1 应把 BAS/DIS 作为可选信息处理，不能阻塞自定义服务闭环 |
 | 2026-06-16 | iPhone 真机 CoreBluetooth 扫描 | 未验证 | 当前 `iPhone Air (26.3.1)` 在 `xcrun xctrace list devices` 中为 offline，在 `xcrun devicectl list devices` 中为 unavailable；Mac/Bleak 扫描证据不能替代 iOS 真机 App 扫描证据 |
+| 2026-06-17 | Mac/Bleak Device Health 只读检查 | 通过 | `.venv/bin/python tools/ble_gatt_smoke_test.py --run-device-health` 返回 `64 02 00 00`；确认 `VBRK-0000` 当前可被 Mac 侧 BLE 脚本访问 |
+| 2026-06-17 | Mac/Bleak 非破坏性 batch smoke | 通过 | `.venv/bin/python tools/ble_gatt_smoke_test.py --run-batch` 完成 Table Info、Light Status、`WRITE_ONE -> READ_ONE`、`READ_ALL` 结束帧、`SET_QTY`、FIND/OFF 状态；这是硬件侧 Mac 证据，不替代 iPhone App 证据 |
 
 ### M2：绑定表闭环
 
@@ -448,6 +450,14 @@ M1 当前实机记录：
 - SET_QTY 后重读数量一致。
 - CRC 失败时不落本地账。
 
+M2 当前状态：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | `BindingTableReadAllAggregator` 聚合 25 槽并校验 CRC16 | 通过 | XCTest 覆盖结束帧、缺记录、乱序、CRC mismatch、错误 status |
+| 2026-06-17 | `SmartChassisWorkflow` 写类操作成功后才落本地账 | 通过 | 模拟器 client 覆盖 `WRITE_ONE`、`SET_QTY`、`CLEAR_ONE` 业务路径；硬件失败不落账 |
+| 2026-06-17 | 真实 Binding Control Point Notify 顺序和 Table Info 变化 | 未验证 | 需要 iPhone 真机 + 智能底盘硬件 |
+
 ### M3：本地账本与数字孪生
 
 目标：在 iPhone Air 模拟器和真机都能看到 25 槽数字孪生。
@@ -463,6 +473,15 @@ M1 当前实机记录：
 - 模拟器用 `ChassisSimulatorClient` 展示 25 槽。
 - 真机 READ_ALL 后落本地账。
 - 重启 App 后账本恢复。
+
+M3 当前状态：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | GRDB 本地账本与操作流水 | 通过 | 覆盖 seed、stock-in、set quantity、clear、restore、migration 兼容 |
+| 2026-06-17 | iPhone Air 模拟器 25 槽数字孪生 | 通过 | XcodeBuildMCP snapshot 显示 25 个可点击槽位目标 |
+| 2026-06-17 | 槽位详情 sheet 的 `FIND` / `SET_QTY` / `CLEAR_ONE` | 通过 | 模拟器 workflow 路径通过 XCTest 和 build 验证 |
+| 2026-06-17 | 真机 READ_ALL 后落本地账并重启恢复 | 未验证 | 需要真实 BLE `READ_ALL` 验收 |
 
 ### M4：入库绑定与 Find-by-Light
 
@@ -480,6 +499,16 @@ M1 当前实机记录：
 - 扫一个 LCSC 标签，绑定到指定槽位。
 - 搜索该组件，点亮正确槽位。
 - 硬件失败时本地不出现假绑定。
+
+M4 当前状态：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | 手动协议料号入库绑定模拟闭环 | 通过 | 入库 Tab 执行 `STOCK_IN` -> `WRITE_ONE` receipt -> 本地落账 |
+| 2026-06-17 | 搜索命中后 Find-by-Light 模拟闭环 | 通过 | 搜索 Tab 调用 workflow 发送 `FIND`；Find 不改变账本 |
+| 2026-06-17 | 硬件失败时本地不出现假绑定 | 通过 | `SmartChassisWorkflowTests` 覆盖 `.errFlashBusy` 不落账 |
+| 2026-06-17 | AVFoundation 扫码和 LCSC QR parser iOS 移植 | 未完成 | 下一阶段代码任务 |
+| 2026-06-17 | 真实灯控和真实 `WRITE_ONE` | 未验证 | 需要 iPhone 真机 + 智能底盘硬件 |
 
 ### M5：硬件恢复
 
@@ -528,6 +557,313 @@ M6 当前模拟器记录：
 | 2026-06-17 | `BOMPickPlanner` 按 BOM 行匹配智能底盘库存 | 通过 | 覆盖 Supplier Part 大小写归一化、未命中行保留、同一 BOM 行跨底盘命中 |
 | 2026-06-17 | 按智能底盘分组生成 PICK 灯控 mask | 通过 | 每组从命中槽位生成 25-bit mask，并构造 `.pick` `LightCommand`，颜色使用绿色，超时使用协议默认值 |
 | 2026-06-17 | CSV/XLSX 导入、勾选完成后重发 mask、真实 BLE PICK 下发 | 未验证 | 当前切片只覆盖领域规划器和协议命令生成；UI 导入和真机下发仍待后续 M6 切片 |
+
+### M7：非真机阻塞功能推进队列
+
+目标：在 iPhone 真机暂不可用时，继续把 App 侧业务能力、账本模型和导入体验做完整。后续可用 `goal` 命令按下面任务批量推进。
+
+这些任务不依赖 iPhone BLE/NFC 真机验收，可在模拟器、XCTest、Mac 侧硬件 smoke 或静态文件输入下完成：
+
+#### M7.1 Component 账本模型
+
+输入：
+
+- 当前 GRDB schema：`container`、`container_slot`、`stock_item`、`stock_operation`。
+- 当前搜索实现只基于 `stock_item.protocol_part_id`。
+
+改动范围：
+
+- 增加 `component` 表和 migration。
+- 给 `stock_item` 增加 `component_id`，保留 `protocol_part_id` 作为协议恢复字段。
+- Repository 增加创建/更新 Component、按富字段搜索库存的 API。
+- UI 搜索从只搜 `protocol_part_id` 扩展到 LCSC 料号、MPN、名称、封装、规格摘要。
+
+验证：
+
+- 新增 `ComponentRepositoryTests`：
+  - migration 后旧 seed 数据仍可读。
+  - 创建自定义 Component 后可绑定到槽位。
+  - 搜索 MPN、名称、封装、规格摘要能命中库存。
+  - 硬件恢复仅有 `protocol_part_id` 时可创建 placeholder Component。
+- 运行：
+
+```bash
+xcodebuild test \
+  -project ios/VibeRack.xcodeproj \
+  -scheme VibeRack \
+  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1' \
+  -only-testing:VibeRackTests/ChassisRepositoryTests
+```
+
+完成证据：
+
+- 测试通过。
+- 搜索 UI 中可用非协议料号字段命中模拟库存。
+
+M7.1 当前模拟器记录：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | Component schema 与 `stock_item.component_id` migration | 通过 | `component` 表、placeholder Component、旧 seed 数据兼容均由 XCTest 覆盖 |
+| 2026-06-17 | 富字段搜索 | 通过 | `SearchRepositoryTests` 覆盖 MPN、名称、封装、规格摘要命中；搜索 UI 主标题优先显示 MPN/LCSC |
+| 2026-06-17 | 硬件恢复 placeholder Component | 通过 | `READ_ALL` 恢复仅有 `protocol_part_id` 时自动创建 hardware_restore 来源 Component |
+
+#### M7.2 LCSC QR / 扫码入库
+
+输入：
+
+- Android 参考：`feature/inbound/LcscQrParser.kt`。
+- 当前 iOS 入库页支持手动 `protocolPartId` + 数量。
+
+改动范围：
+
+- 移植 LCSC QR parser 到 Swift。
+- 增加 parser XCTest，覆盖 `pc`、数量、空值、异常二维码。
+- 增加 AVFoundation 扫码入口；模拟器提供手动粘贴 QR payload fallback。
+- 扫码解析后进入现有 `SmartChassisWorkflow.stockIn`。
+
+验证：
+
+- 新增 `LcscQrParserTests`：
+  - 解析 LCSC part number。
+  - 解析数量。
+  - 缺字段时给出可理解错误。
+  - 非 LCSC QR 不误识别。
+- 模拟器验证：
+  - 入库页手动粘贴 QR payload 后自动填入组件和数量。
+  - 点击绑定后仍走 `STOCK_IN -> WRITE_ONE -> 本地落账`。
+- 运行：
+
+```bash
+xcodebuild test \
+  -project ios/VibeRack.xcodeproj \
+  -scheme VibeRack \
+  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1' \
+  -only-testing:VibeRackTests/LcscQrParserTests \
+  -only-testing:VibeRackTests/SmartChassisWorkflowTests
+```
+
+完成证据：
+
+- Parser 测试通过。
+- 模拟器入库页能从 QR payload 填充字段并绑定到空槽。
+
+M7.2 当前模拟器记录：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | Swift `LcscQrParser` | 通过 | 覆盖 `pc`、`qty`、空数量、大小写 key、非 LCSC QR、缺 `pc` 错误 |
+| 2026-06-17 | 入库页 QR payload fallback | 通过 | 手动粘贴 LCSC payload 后填入 LCSC 料号和数量；绑定仍走 `STOCK_IN -> WRITE_ONE -> 本地落账` |
+| 2026-06-17 | AVFoundation 相机扫码 | 未完成 | 当前只做模拟器可用的粘贴 fallback；真机相机扫码入口后续补齐 |
+
+#### M7.3 BOM 导入和 Pick-to-Light UI
+
+输入：
+
+- 已确认样例文件：`assets/bom.xlsx`，来源为处理后的 `/Users/wq/Downloads/BOM_原版（已验证）_PCB1_2_2026-06-10.xlsx`。
+- 样例 workbook：
+  - sheet：`BOM_原版（已验证）_PCB1_2_2026-06-10`
+  - 行数：51，包含 1 行表头和 50 行有效 BOM 数据
+  - 列数：10
+  - 表头：`No.`、`Quantity`、`Comment`、`Footprint`、`Value`、`Manufacturer Part`、`Manufacturer`、`Supplier Part`、`Supplier`、`Designator`
+- 当前 `BOMPickPlanner` 已能按 BOM 行匹配库存并生成 `PICK` mask。
+
+改动范围：
+
+- 增加 BOM workbook/CSV 解析器。
+- 先支持上述 XLSX 表头；CSV 可作为同列名导入 fallback。
+- 增加 BOM 导入 UI、BOM 行列表、匹配/未匹配状态。
+- 按智能底盘分组展示 pick group。
+- 勾选完成项后重算剩余 mask，并通过 simulator client 发送 `PICK`。
+
+验证：
+
+- 新增 `BOMImportTests`：
+  - 从样例 XLSX 读取 50 条 BOM 数据行。
+  - 表头映射正确。
+  - `Supplier Part = C2829702` 的行能读出 `Quantity`、`Manufacturer Part`、`Manufacturer`、`Designator`。
+  - 空 Supplier Part 的被动件行仍保留 Comment/Footprint/Value，供后续规则匹配。
+- 新增/扩展 `BOMPickPlannerTests`：
+  - 从样例导入结果匹配库存。
+  - 勾选完成后剩余 mask 不再包含已完成槽位。
+- 运行：
+
+```bash
+xcodebuild test \
+  -project ios/VibeRack.xcodeproj \
+  -scheme VibeRack \
+  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1' \
+  -only-testing:VibeRackTests/BOMImportTests \
+  -only-testing:VibeRackTests/BOMPickPlannerTests
+```
+
+完成证据：
+
+- 样例 XLSX 导入测试通过。
+- 模拟器 BOM 页面显示 50 条数据行、匹配状态和按底盘分组的 PICK mask。
+
+M7.3 当前模拟器记录：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | `BOMWorkbookImporter` 导入 `assets/bom.xlsx` | 通过 | `BOMImportTests` 覆盖 sheet 名称、10 列表头、50 条数据行、`C2829702` 行和空 Supplier Part 被动件行 |
+| 2026-06-17 | BOM planner 匹配导入行并重算剩余 mask | 通过 | `BOMPickPlannerTests` 覆盖样例 `C2829702` 命中库存，以及完成项不再进入剩余 PICK mask |
+| 2026-06-17 | 搜索 Tab -> BOM Pick 模拟器页面 | 通过 | iPhone Air 模拟器显示 sheet `BOM_原版（已验证）_PCB1_2_2026-06-10`、数据行 50、已匹配 2、未匹配 48、剩余分组 1；J2/CN1 命中 `VBRK-0000` 槽位 7，mask `0x40` |
+| 2026-06-17 | 模拟器发送 `PICK` | 通过 | BOM Pick 页面点击 `发送 PICK` 走 `SmartChassisWorkflow.pickByLight`；`SmartChassisWorkflowTests` 覆盖 `.pick` 灯控命令不改变本地账本 |
+| 2026-06-17 | 全量 iOS XCTest | 通过 | `xcodebuild test -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 通过 45 个测试；xcresult `Test-VibeRack-2026.06.17_19-21-15-+0800.xcresult` |
+| 2026-06-17 | iOS simulator build | 通过 | `xcodebuild build -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 返回 `BUILD SUCCEEDED` |
+
+#### M7.4 硬件恢复 UI 打磨
+
+输入：
+
+- 当前 Repository 已支持 `restoreFromBindingTableSnapshot`。
+- 设置页已有模拟 READ_ALL 恢复入口。
+
+改动范围：
+
+- 增加恢复预览页。
+- 显示将新增、更新、清空的槽位。
+- 恢复后展示缺少富数据的 Component 列表，引导用户补全。
+
+验证：
+
+- 新增 `HardwareRestorePreviewTests`：
+  - 比较本地账本和 `BindingTableSnapshot` 后能列出新增、更新、清空。
+  - CRC 失败时不生成可应用预览。
+- 模拟器验证：
+  - 设置页运行模拟恢复前可看到预览。
+  - 应用恢复后数字孪生槽位和操作流水更新。
+- 运行：
+
+```bash
+xcodebuild test \
+  -project ios/VibeRack.xcodeproj \
+  -scheme VibeRack \
+  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1' \
+  -only-testing:VibeRackTests/HardwareRestorePreviewTests \
+  -only-testing:VibeRackTests/ChassisRepositoryTests
+```
+
+完成证据：
+
+- 预览测试通过。
+- 模拟器设置页恢复流程可从预览到应用完整走通。
+
+M7.4 当前模拟器记录：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | `HardwareRestorePreviewBuilder` 恢复预览 | 通过 | `HardwareRestorePreviewTests` 覆盖新增、更新、清空槽位分类；CRC mismatch 时抛出 `SmartChassisBindingTableError.crcMismatch`，不生成可应用预览 |
+| 2026-06-17 | Repository 应用 `READ_ALL` snapshot | 通过 | `ChassisRepositoryTests` 覆盖 table_seq/CRC 更新、槽位新增/更新/清空、restore operation 记录和 placeholder Component |
+| 2026-06-17 | 设置页模拟恢复预览 UI | 通过 | XcodeBuildMCP 模拟器验证：设置 -> 从底盘恢复 -> 生成恢复预览，显示 `table_seq 42`、CRC `0x7E7D`、新增 1、更新 1、清空 1 |
+| 2026-06-17 | 设置页应用恢复 | 通过 | 模拟器点击 `应用恢复` 后显示 `已按 READ_ALL 快照应用恢复，table_seq 42`，并清空预览状态 |
+| 2026-06-17 | 全量 iOS XCTest | 通过 | `xcodebuild test -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 通过 47 个测试；xcresult `Test-VibeRack-2026.06.17_19-33-19-+0800.xcresult` |
+| 2026-06-17 | iOS simulator build | 通过 | `xcodebuild build -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 返回 `BUILD SUCCEEDED` |
+
+#### M7.5 诊断页
+
+输入：
+
+- 当前 `SmartChassisWorkflow`、`ChassisSimulatorClient`、`stock_operation`。
+- Mac/Bleak smoke 可读 `VBRK-0000`。
+
+改动范围：
+
+- 在设置页增加诊断入口。
+- 展示最近 stock operations。
+- 展示最近模拟 client 命令日志：mode/opcode/status/table_seq/payload hex。
+- 展示 Mac/Bleak smoke 最近证据的手动记录区。
+
+验证：
+
+- 新增 `DiagnosticsTests`：
+  - workflow 操作后诊断事件包含 opcode/status/table_seq。
+  - Light Command payload hex 与协议编码一致。
+- 模拟器验证：
+  - 入库、Find、Set Qty 后诊断页能看到事件。
+- 运行：
+
+```bash
+xcodebuild test \
+  -project ios/VibeRack.xcodeproj \
+  -scheme VibeRack \
+  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1' \
+  -only-testing:VibeRackTests/DiagnosticsTests \
+  -only-testing:VibeRackTests/SmartChassisWorkflowTests
+```
+
+完成证据：
+
+- 诊断测试通过。
+- 模拟器诊断页能看到最近操作。
+
+M7.5 当前模拟器记录：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | `DiagnosticsTests` 诊断事件 | 通过 | 覆盖 Binding 命令的 opcode/status/table_seq/payload hex，以及 Light Command payload hex |
+| 2026-06-17 | 设置页诊断事件 UI | 通过 | 模拟器验证：Find by Light 后显示 `Light 0x1` 与 payload `01 01 00 00 00 00 00 00 00 00 FF 00 00 00 00 1E 00` |
+| 2026-06-17 | 入库绑定诊断链路 | 通过 | 入库 `C7654321` 到槽位 2 后诊断页显示 `stock_in`、`Binding 0x10`、seq 18、payload `10 02 43 37 36 35 34 33 32 31 00 00 01 00 00 00 F8` |
+| 2026-06-17 | M7.5 定向 XCTest | 通过 | `DiagnosticsTests` + `SmartChassisWorkflowTests` 共 8 个测试通过；xcresult `Test-VibeRack-2026.06.17_19-46-41-+0800.xcresult` |
+| 2026-06-17 | 全量 iOS XCTest | 通过 | `xcodebuild test -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 通过 50 个测试；xcresult `Test-VibeRack-2026.06.17_19-49-57-+0800.xcresult` |
+| 2026-06-17 | iOS simulator build | 通过 | `xcodebuild build -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 返回 `BUILD SUCCEEDED` |
+
+#### M7.6 协议文档同步
+
+输入：
+
+- 硬件仓库已实现 Device Health Service：
+  - service `7f4b0003-8d1a-4d45-9a4e-2b4a7c000000`
+  - characteristic `7f4b3001-8d1a-4d45-9a4e-2b4a7c000000`
+  - payload `battery_pct(1B) + reset_reason(2B LE) + health_flags(1B)`
+- iOS 代码和测试已覆盖 `64 02 00 00`。
+
+改动范围：
+
+- 更新 `docs/智能底盘BLE接口规格_v0.1.md`。
+- 明确 BAS/DIS 当前可选，不能阻塞 Binding/Light/Device Health 自定义服务闭环。
+- 确认 Android/iOS/硬件文档用词一致。
+
+验证：
+
+- 文档 grep 检查包含 Device Health UUID、payload 布局、`64 02 00 00` 样例。
+- 协议 XCTest 仍通过。
+- 运行：
+
+```bash
+rg -n "Device Health|7f4b0003|7f4b3001|64 02 00 00" docs/智能底盘BLE接口规格_v0.1.md
+xcodebuild test \
+  -project ios/VibeRack.xcodeproj \
+  -scheme VibeRack \
+  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1' \
+  -only-testing:VibeRackTests/SmartChassisProtocolVectorTests
+```
+
+完成证据：
+
+- grep 命中关键字段。
+- 协议向量测试通过。
+
+M7.6 当前文档同步记录：
+
+| 日期 | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | 主 BLE 规格纳入 Device Health | 通过 | `docs/智能底盘BLE接口规格_v0.1.md` 已加入 service `7f4b0003-8d1a-4d45-9a4e-2b4a7c000000`、characteristic `7f4b3001-8d1a-4d45-9a4e-2b4a7c000000` |
+| 2026-06-17 | Device Health payload 布局与样例 | 通过 | 文档明确 4B payload：`battery_pct(1B) + reset_reason(2B LE) + health_flags(1B)`；样例 `64 02 00 00` 表示 battery 100、reset_reason `0x0002`、health_flags `0x00` |
+| 2026-06-17 | BAS/DIS 可选语义同步 | 通过 | 主协议、iOS 技术文档、硬件仓库对接指南和产品技术文档均明确 BAS/DIS/DFU 为可选补充，不能阻塞 Binding/Light/Device Health 自定义服务闭环 |
+| 2026-06-17 | 文档 grep | 通过 | `rg -n "Device Health|7f4b0003|7f4b3001|64 02 00 00" docs/智能底盘BLE接口规格_v0.1.md` 命中关键字段 |
+| 2026-06-17 | 协议向量 XCTest | 通过 | `SmartChassisProtocolVectorTests` 10 个测试通过；xcresult `Test-VibeRack-2026.06.17_19-55-03-+0800.xcresult` |
+| 2026-06-17 | 全量 iOS XCTest | 通过 | `xcodebuild test -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 通过 50 个测试；xcresult `Test-VibeRack-2026.06.17_19-56-29-+0800.xcresult` |
+| 2026-06-17 | iOS simulator build | 通过 | `xcodebuild build -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` 返回 `BUILD SUCCEEDED` |
+
+准备状态：
+
+| 项 | 当前状态 | 下个 session 入口 |
+|---|---|---|
+| BLE 外设 `VBRK-0000` | Mac/Bleak 可访问，Device Health 和 batch smoke 通过 | 可先做真实 `SmartChassisClient` adapter 的 Mac 对照验证；iPhone App 证据仍待真机 online |
+| BOM 样例 | 已处理原文件尾部空行，并同步到仓库 `assets/bom.xlsx`；当前为 1 行表头 + 50 行有效 BOM 数据 | 下个 session 直接使用 `assets/bom.xlsx` 作为测试 fixture |
+| App 侧模拟器闭环 | 4 Tab、25 槽数字孪生、入库/搜索/槽位操作模拟闭环通过 | 可直接推进 Component、扫码、BOM UI、诊断页 |
 
 ---
 
@@ -581,6 +917,30 @@ xcodebuild build \
 ```text
 25514abd08d93a7154a704e4b9a151acb4f7823dca6617c8cb043741ea972689
 ```
+
+### 9.1 2026-06-17 执行补充记录
+
+本轮已补齐模拟器可验证的核心工作流闭环：
+
+- 新增 `SmartChassisWorkflow` 应用层用例和 `SmartChassisClient` 抽象。
+- 新增 `ChassisSimulatorClient`，模拟器路径会编码真实协议帧并返回成功 receipt，但不伪装成真机 BLE 证据。
+- 入库 Tab 从直接写本地账改为 `STOCK_IN` 灯控 -> `WRITE_ONE` 成功 receipt -> 本地 `stock_item` / `stock_operation` 落账。
+- 搜索 Tab 的 Find-by-Light 从只生成文案改为调用 workflow 发送 `FIND` 灯控命令。
+- 数字孪生槽位可点击打开详情 sheet，支持 `FIND`、`SET_QTY`、`CLEAR_ONE`，数量/清槽都坚持硬件操作成功后再更新本地账本。
+- 新增 `SmartChassisWorkflowTests` 覆盖：
+  - stock-in 先发送 `STOCK_IN` 和 `WRITE_ONE`，再落本地账。
+  - 硬件写失败时本地不出现假绑定。
+  - Find-by-Light 只发灯控，不改账本。
+  - `SET_QTY` 成功后再更新本地数量和操作流水。
+
+验证命令 / 证据：
+
+| 日期 | 命令 / 证据 | 结果 | 备注 |
+|---|---|---|---|
+| 2026-06-17 | `xcodebuild test -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` | 通过 | 覆盖协议向量、BLE UUID/广播、READ_ALL 聚合、GRDB 账本、搜索、BOM、Router、SmartChassisWorkflow；xcresult `Test-VibeRack-2026.06.17_00-54-36-+0800.xcresult` |
+| 2026-06-17 | `xcodebuild build -project ios/VibeRack.xcodeproj -scheme VibeRack -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'` | 通过 | Debug simulator build 成功 |
+| 2026-06-17 | XcodeBuildMCP `build_run_sim` + `snapshot_ui` | 通过 | iPhone Air 模拟器启动 `com.viberack.ios`，底盘、入库、搜索、设置 4 Tab 可见；25 槽数字孪生可见且槽位为可点击目标 |
+| 2026-06-17 | `xcrun devicectl list devices` + `xcrun xctrace list devices` | iPhone Air unavailable/offline | 真机 BLE/NFC 仍未验证；模拟器证据不能替代 M1/M2/M5 的真实 CoreBluetooth/CoreNFC 验收 |
 
 ---
 

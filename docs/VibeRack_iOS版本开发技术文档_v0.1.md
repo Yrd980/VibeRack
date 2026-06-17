@@ -1,8 +1,8 @@
 # VibeRack iOS 版本开发技术文档 v0.1
 
-> 状态：iOS 立项开发稿  
-> 当前日期：2026-06-16  
-> 上游基线：`智能物料管理系统_项目技术文档_v1.0.md`、`智能底盘BLE接口规格_v0.1.md`、`CONTEXT.md`  
+> 状态：iOS 开发中技术文档
+> 当前日期：2026-06-17
+> 上游基线：`智能物料管理系统_项目技术文档_v1.0.md`、`智能底盘BLE接口规格_v0.1.md`、`CONTEXT.md`
 > 目标：在 iPhone 上实现 VibeRack 智能底盘 MVP，并与 Android、固件、未来云端共享同一套领域模型和硬件协议。
 
 ---
@@ -150,7 +150,7 @@ MVP 原则：
 | UI | SwiftUI | 适合从零实现数字孪生、列表、表单、状态驱动 UI |
 | 架构 | MVVM + Use Case / Service | 保持 UI -> ViewModel -> Repository/Service -> BLE/DB |
 | 并发 | Swift Concurrency + AsyncStream | 将 BLE/NFC delegate 事件桥接为异步流 |
-| 本地数据库 | SwiftData（P0）或 SQLite/GRDB（风险备选） | SwiftData 开发速度快；若复杂迁移/查询受限，再切 GRDB |
+| 本地数据库 | GRDB / SQLite | 当前 iOS 工程已采用 GRDB，便于明确 schema、事务、迁移和跨端账本对齐 |
 | 偏好设置 | UserDefaults / AppStorage | 保存轻量用户设置 |
 | BLE | Core Bluetooth | CBCentralManager、CBPeripheral、CBCharacteristic |
 | NFC | Core NFC | NFCNDEFReaderSession |
@@ -158,22 +158,18 @@ MVP 原则：
 | 文件导入 | UniformTypeIdentifiers + FileImporter | BOM CSV/XLSX 后续引入 |
 | 测试 | XCTest | 协议编解码、CRC、仓储逻辑、BOM 匹配优先做单测 |
 
-### 5.2 SwiftData 使用边界
+### 5.2 GRDB 使用边界
 
-SwiftData 用于本地对象图和台账持久化。协议帧、CRC、BLE 连接状态不应直接绑在 SwiftData Model 上。
+GRDB 用于本地统一容器账本。协议帧、CRC、BLE 连接状态不直接进入数据库模型。
 
 建议：
 
-- `@Model` 只放持久化实体。
 - 协议层使用纯 Swift `struct`。
 - Repository 负责在协议模型和持久化模型之间转换。
-- 所有硬件写操作先等 BLE 成功，再提交 SwiftData 事务。
+- 所有硬件写操作先等 BLE 成功，再提交数据库事务。
+- `READ_ALL` 恢复先通过 25 条记录、`slot_count` 和 CRC16 校验，再更新本地账本。
 
-如果后续出现以下问题，应评估切换或局部引入 SQLite/GRDB：
-
-- 复杂查询性能不稳定。
-- 数据迁移需求超出 SwiftData 当前能力。
-- 需要与 Android Room schema 生成一致的跨平台数据库迁移资产。
+当前 P0 schema 已落地为 `container`、`container_slot`、`stock_item`、`stock_operation`。后续如加入 Component 富数据、BOM 导入和 Android 备份导入，应继续用显式 migration 推进。
 
 ## 6. iOS 工程结构建议
 
@@ -190,24 +186,23 @@ ios/
       Persistence/
       Protocol/
       Scanner/
-      Sync/
       UI/
     Domain/
       Models/
       Repositories/
       UseCases/
     Features/
-      Home/
       Chassis/
-      Inbound/
+      StockIn/
       Search/
       BOM/
       Settings/
     Resources/
   VibeRackTests/
     ProtocolTests/
-    RepositoryTests/
-    BOMTests/
+    BluetoothTests/
+    PersistenceTests/
+    UseCaseTests/
 ```
 
 模块职责：
@@ -215,10 +210,10 @@ ios/
 - `Core/Protocol`：智能底盘 BLE 协议编解码、CRC、opcode、light command。
 - `Core/Bluetooth`：扫描、连接、服务发现、特征读写、Notify 订阅、重连策略。
 - `Core/NFC`：NDEF URI 读取、解析、路由。
-- `Core/Persistence`：SwiftData container、schema、migration、repository 实现。
+- `Core/Persistence`：GRDB schema、migration、repository 实现。
 - `Domain`：Component、Container、Slot、StockItem、StockOperation 等领域模型。
 - `Features/Chassis`：智能底盘列表、数字孪生、槽位详情。
-- `Features/Inbound`：扫码/手动入库与槽位绑定。
+- `Features/StockIn`：扫码/手动入库与槽位绑定。
 - `Features/Search`：组件搜索与 Find-by-Light。
 - `Features/BOM`：BOM 导入、匹配和 Pick-to-Light。
 
@@ -390,14 +385,15 @@ enum BindingOpcode: UInt8 {
 
 连接成功后：
 
-1. Discover Binding Table Service、Light Service、BAS、DIS。
+1. Discover Binding Table Service、Light Service、Device Health Service；BAS、DIS 作为可选标准服务发现。
 2. 订阅 Binding Control Point Notify。
 3. 订阅 Table Info Notify。
 4. 订阅 Light Status Notify。
-5. 读取 Table Info。
-6. 读取 Battery Level。
-7. 读取 Firmware Revision / Hardware Revision。
-8. 将设备状态发布给 ViewModel。
+5. 订阅 Device Health Notify。
+6. 读取 Table Info。
+7. 读取 Device Health。
+8. 若存在 BAS/DIS，读取 Battery Level、Firmware Revision、Hardware Revision。
+9. 将设备状态发布给 ViewModel。
 
 ### 9.4 写操作事务
 
@@ -590,14 +586,14 @@ iOS Simulator 无法完整验证 BLE/NFC 真机行为。需要同时准备：
 
 - BLE 扫描并解析广播。
 - NFC URI 读取和路由。
-- 连接目标底盘并读取 Table Info / Battery / DIS。
+- 连接目标底盘并读取 Table Info / Device Health；Battery / DIS 为可选增强。
 - 首页显示智能底盘列表。
 
 ### M2：绑定表闭环
 
 - `READ_ALL` 完成。
 - `WRITE_ONE`、`CLEAR_ONE`、`SET_QTY` 完成。
-- 本地 SwiftData 模型可保存 Container、SmartChassis、Component、StockItem。
+- 本地 GRDB 账本可保存 Container、SmartChassis cache、Component、StockItem。
 - 数字孪生只读版完成。
 
 ### M3：核心工作流 Demo
@@ -619,19 +615,78 @@ iOS Simulator 无法完整验证 BLE/NFC 真机行为。需要同时准备：
 - 真机兼容性测试。
 - App Store capability 与隐私说明检查。
 
-## 14. 风险与对策
+## 14. 当前实现状态（2026-06-17 收尾）
+
+当前 iOS 工程位于：
+
+```text
+ios/VibeRack.xcodeproj
+```
+
+已经落地：
+
+- SwiftUI 4 Tab：底盘、入库、搜索、设置。
+- `Core/Protocol`：协议常量、广告、Slot Record、Table Info、Light Command、Device Health、CRC-8/MAXIM、CRC16/CCITT-FALSE。
+- `Core/Bluetooth`：BLE UUID、广播解析、`SmartChassisCentral`、基础连接/读写/Notify 聚合骨架。
+- `Core/Persistence`：GRDB schema 和 `GRDBChassisRepository`。
+- `Domain/UseCases`：`BOMPickPlanner`、`SmartChassisWorkflow`。
+- `ChassisSimulatorClient`：模拟器开发路径会编码真实协议帧并返回成功 receipt，但不作为真机 BLE 证据。
+- 数字孪生：25 槽 5x5 网格，槽位详情 sheet 支持 `FIND`、`SET_QTY`、`CLEAR_ONE`。
+- 入库绑定：当前模拟器路径执行 `STOCK_IN` -> `WRITE_ONE` receipt -> 本地落账。
+- 搜索 Find-by-Light：当前模拟器路径发送 `FIND`，不改变账本。
+- 硬件恢复：Repository 支持从已校验 `BindingTableSnapshot` 恢复本地账本；设置页有模拟恢复入口。
+- BOM：领域层可按 BOM 行匹配库存，并按智能底盘生成 `PICK` mask。
+
+最近验证：
+
+```bash
+xcodebuild test \
+  -project ios/VibeRack.xcodeproj \
+  -scheme VibeRack \
+  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'
+
+xcodebuild build \
+  -project ios/VibeRack.xcodeproj \
+  -scheme VibeRack \
+  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.1'
+```
+
+2026-06-17 两条命令均通过。XcodeBuildMCP `build_run_sim` + `snapshot_ui` 已确认 iPhone Air 模拟器中 4 Tab 和 25 槽数字孪生可见。
+
+当前明确未完成：
+
+- 真机 CoreBluetooth 扫描、连接、服务发现、读写和 Notify 验收。
+- 真机 CoreNFC NDEF 读取和路由验收。
+- 真实底盘 `READ_ALL` / `WRITE_ONE` / `SET_QTY` / `CLEAR_ONE` 闭环。
+- 真实灯控 `FIND` / `PICK` / `STOCK_IN` / `OFF` 下发。
+- AVFoundation 扫码入口和 LCSC QR parser iOS 移植。
+- BOM CSV 导入 UI、勾选完成后重发剩余 `PICK` mask。
+
+当前设备状态：
+
+- `iPhone Air (26.3.1)` 在 `xcrun devicectl list devices` 中为 `unavailable`。
+- 同一设备在 `xcrun xctrace list devices` 中为 offline。
+- 因此 BLE/NFC 验收不能在模拟器结果上打勾。
+- 但智能底盘 `VBRK-0000` 当前可被 Mac/Bleak 脚本访问：
+  - `tools/ble_gatt_smoke_test.py --run-device-health` 返回 `64 02 00 00`。
+  - `tools/ble_gatt_smoke_test.py --run-batch` 已通过 Table Info、Light Status、`WRITE_ONE -> READ_ONE`、`READ_ALL`、`SET_QTY`、FIND/OFF 状态检查。
+- 当前 BOM 样例使用仓库文件：`assets/bom.xlsx`。
+- 该文件来源于处理后的 `/Users/wq/Downloads/BOM_原版（已验证）_PCB1_2_2026-06-10.xlsx`，已删除尾部空行。
+- 该 workbook 有 1 个 sheet、51 行、10 列：1 行表头 + 50 行有效 BOM 数据。表头为 `No.`、`Quantity`、`Comment`、`Footprint`、`Value`、`Manufacturer Part`、`Manufacturer`、`Supplier Part`、`Supplier`、`Designator`。
+
+## 15. 风险与对策
 
 | 风险 | 等级 | 对策 |
 |---|---|---|
 | iOS 不暴露 BLE MAC，NFC URI 中 MAC 不能直接连接 | 高 | 用 `batch_id` + 广播 + 连接后校验；若不够唯一，升级协议增加稳定硬件 ID |
-| SwiftData 迁移或复杂查询后期受限 | 中 | P0 先用 SwiftData 提速；协议层和领域层保持纯 Swift，必要时替换 Persistence 实现 |
+| 本地 schema 后续迁移变复杂 | 中 | 继续使用 GRDB 显式 migration；协议层和领域层保持纯 Swift，避免数据库模型泄漏进业务流程 |
 | NFC 能力配置和真机限制导致开发受阻 | 中 | 早期就配置 capability，用真实 iPhone 验证；不要把 NFC 作为唯一入口 |
 | 后台 BLE 体验不稳定 | 中 | MVP 前台操作优先，固件负责点灯超时；后台只做增强 |
 | 多手机同时修改导致 Binding Drift | 中 | P0 单机为主；所有写前后读取 `table_seq`，发现变更则要求刷新 |
 | 本地台账与硬件绑定不一致 | 高 | 硬件写成功后才落账；`READ_ALL` + CRC 作为修复入口 |
 | BOM 拣料误扣库存 | 中 | Pick-to-Light 与扣减分离，扣减需用户确认或后续 Smart Dock 数据 |
 
-## 15. 与 Android 版本的协作边界
+## 16. 与 Android 版本的协作边界
 
 必须共享：
 
@@ -656,7 +711,7 @@ iOS Simulator 无法完整验证 BLE/NFC 真机行为。需要同时准备：
 - `table_seq` / CRC 校验规则。
 - 智能底盘硬件作为绑定事实源的原则。
 
-## 16. 官方资料核对
+## 17. 官方资料核对
 
 本稿涉及 Apple 平台能力时参考了以下官方资料：
 
@@ -664,14 +719,15 @@ iOS Simulator 无法完整验证 BLE/NFC 真机行为。需要同时准备：
 - Core Bluetooth：<https://developer.apple.com/documentation/corebluetooth/>
 - Core NFC：<https://developer.apple.com/documentation/corenfc>
 - NFC NDEF Reader Session：<https://developer.apple.com/documentation/corenfc/nfcndefreadersession>
-- SwiftData：<https://developer.apple.com/documentation/swiftdata>
-- SwiftData 持久化模型：<https://developer.apple.com/documentation/swiftdata/preserving-your-apps-model-data-across-launches>
 
-## 17. 下一步建议
+## 18. 下一步建议
 
-1. 先创建 `ios/` SwiftUI 工程，完成 `Core/Protocol` 和单元测试。
-2. 与固件确认 `batch_id` 是否能作为用户仓库内唯一智能底盘识别字段。
-3. 准备一套协议测试向量，Android、iOS、固件三端共用。
-4. 在 iPhone 真机上尽早验证 NFC URI 读取与 BLE 广播解析。
-5. M1 完成后再进入数字孪生 UI 和入库绑定，避免 UI 先行但硬件链路不可用。
+后续如果用 `goal` 命令推进，建议按下面顺序拆：
 
+1. Component 账本模型：补 `component` 表、repository、stock item 关联和富字段搜索。
+2. LCSC QR / 扫码入库：移植 parser，补 XCTest，再做 AVFoundation 扫码页和手动 fallback。
+3. BOM 导入和 Pick-to-Light UI：使用 `assets/bom.xlsx`；补 XLSX/CSV parser、BOM 行列表、匹配状态、勾选完成后重发剩余 mask。
+4. 诊断页：展示最近 opcode/status/table_seq/payload hex、模拟 client 命令日志和 Mac/Bleak smoke 证据。
+5. 协议文档同步：确认 Device Health Service 已纳入 `docs/智能底盘BLE接口规格_v0.1.md`。
+6. 真实 `SmartChassisClient` adapter：把 `SmartChassisCentral` 接到 `SmartChassisWorkflow`，用 Mac/Bleak smoke 输出作对照。
+7. iPhone Air online 后再跑 M1/M2/M5 真机验收：扫描、连接、Table Info、Light Status、Device Health、`READ_ALL`、`WRITE_ONE`、`SET_QTY`、`CLEAR_ONE`、NFC restore。

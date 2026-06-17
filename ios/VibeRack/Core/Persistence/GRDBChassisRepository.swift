@@ -41,17 +41,101 @@ public final class GRDBChassisRepository: ChassisRepository {
 
             try db.execute(sql: """
                 INSERT OR REPLACE INTO stock_item (
-                    id, container_id, container_slot_id, protocol_part_id,
+                    id, container_id, container_slot_id, protocol_part_id, component_id,
                     quantity, flags
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, arguments: [
                     "simulator-stock-1",
                     "simulator",
                     "simulator-slot-1",
                     "C1234567",
+                    try ensurePlaceholderComponent(db, protocolPartId: "C1234567"),
                     12,
                     0
                 ])
+
+            let now = Date()
+            try db.execute(sql: """
+                INSERT INTO component (
+                    id, protocol_part_id, source, lcsc_part_number,
+                    manufacturer_part_number, name, package_name, brand,
+                    spec_summary, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    protocol_part_id = excluded.protocol_part_id,
+                    source = excluded.source,
+                    lcsc_part_number = excluded.lcsc_part_number,
+                    manufacturer_part_number = excluded.manufacturer_part_number,
+                    name = excluded.name,
+                    package_name = excluded.package_name,
+                    brand = excluded.brand,
+                    spec_summary = excluded.spec_summary,
+                    updated_at = excluded.updated_at
+                """, arguments: [
+                    "component-C2829702",
+                    "C2829702",
+                    "seed",
+                    "C2829702",
+                    "1.25-2A",
+                    "1.25-2A connector",
+                    "CONN-TH_1.25-2A",
+                    "FG",
+                    "BOM sample J2",
+                    now,
+                    now
+                ])
+            try db.execute(sql: """
+                INSERT OR REPLACE INTO stock_item (
+                    id, container_id, container_slot_id, protocol_part_id, component_id,
+                    quantity, flags
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, arguments: [
+                    "simulator-stock-bom-sample",
+                    "simulator",
+                    "simulator-slot-7",
+                    "C2829702",
+                    "component-C2829702",
+                    8,
+                    0
+                ])
+        }
+    }
+
+    public func upsertComponent(_ draft: ComponentDraft) throws -> Component {
+        try database.write { db in
+            let id = draft.protocolPartId.flatMap(normalizeOptionalIdentifier)
+                .map { "component-\($0)" } ?? UUID().uuidString
+            let now = Date()
+            try db.execute(sql: """
+                INSERT INTO component (
+                    id, protocol_part_id, source, lcsc_part_number,
+                    manufacturer_part_number, name, package_name, brand,
+                    spec_summary, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    protocol_part_id = excluded.protocol_part_id,
+                    source = excluded.source,
+                    lcsc_part_number = excluded.lcsc_part_number,
+                    manufacturer_part_number = excluded.manufacturer_part_number,
+                    name = excluded.name,
+                    package_name = excluded.package_name,
+                    brand = excluded.brand,
+                    spec_summary = excluded.spec_summary,
+                    updated_at = excluded.updated_at
+                """, arguments: [
+                    id,
+                    normalizeOptionalIdentifier(draft.protocolPartId),
+                    draft.source,
+                    normalizeOptionalIdentifier(draft.lcscPartNumber),
+                    draft.manufacturerPartNumber?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    draft.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    draft.packageName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    draft.brand?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    draft.specSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    now,
+                    now
+                ])
+            return try fetchComponent(db, id: id)
         }
     }
 
@@ -112,13 +196,30 @@ public final class GRDBChassisRepository: ChassisRepository {
                        container.code AS chassis_code,
                        container.display_name AS chassis_display_name,
                        slot.id AS slot_id, slot.slot_number,
-                       stock.protocol_part_id, stock.quantity, stock.flags
+                       stock.protocol_part_id, stock.quantity, stock.flags,
+                       component.id AS component_id,
+                       component.protocol_part_id AS component_protocol_part_id,
+                       component.source AS component_source,
+                       component.lcsc_part_number,
+                       component.manufacturer_part_number,
+                       component.name AS component_name,
+                       component.package_name,
+                       component.brand,
+                       component.spec_summary
                 FROM stock_item stock
                 JOIN container ON container.id = stock.container_id
                 JOIN container_slot slot ON slot.id = stock.container_slot_id
+                LEFT JOIN component ON component.id = stock.component_id
                 WHERE UPPER(stock.protocol_part_id) LIKE ?
-                ORDER BY stock.protocol_part_id, container.code, slot.slot_number
-                """, arguments: ["%\(normalizedQuery)%"]).map { row in
+                   OR UPPER(COALESCE(component.protocol_part_id, '')) LIKE ?
+                   OR UPPER(COALESCE(component.lcsc_part_number, '')) LIKE ?
+                   OR UPPER(COALESCE(component.manufacturer_part_number, '')) LIKE ?
+                   OR UPPER(COALESCE(component.name, '')) LIKE ?
+                   OR UPPER(COALESCE(component.package_name, '')) LIKE ?
+                   OR UPPER(COALESCE(component.spec_summary, '')) LIKE ?
+                ORDER BY COALESCE(component.manufacturer_part_number, stock.protocol_part_id),
+                         container.code, slot.slot_number
+                """, arguments: StatementArguments(Array(repeating: "%\(normalizedQuery)%", count: 7))).map { row in
                 StockSearchResult(
                     id: row["id"],
                     chassisID: row["chassis_id"],
@@ -128,7 +229,8 @@ public final class GRDBChassisRepository: ChassisRepository {
                     slotNumber: row["slot_number"],
                     protocolPartId: row["protocol_part_id"],
                     quantity: row["quantity"],
-                    flags: row["flags"] ?? 0
+                    flags: row["flags"] ?? 0,
+                    component: component(from: row)
                 )
             }
         }
@@ -138,6 +240,7 @@ public final class GRDBChassisRepository: ChassisRepository {
         chassisID: String,
         slotNumber: Int,
         protocolPartId: String,
+        componentID: String?,
         quantity: Int,
         source: StockOperationSource,
         bleOpcode: UInt8?,
@@ -146,16 +249,18 @@ public final class GRDBChassisRepository: ChassisRepository {
         try database.write { db in
             let slot = try fetchSlotRow(db, chassisID: chassisID, slotNumber: slotNumber)
             let quantityBefore = slot.quantity
+            let resolvedComponentID = try componentID ?? ensurePlaceholderComponent(db, protocolPartId: protocolPartId)
             try db.execute(sql: """
                 INSERT OR REPLACE INTO stock_item (
-                    id, container_id, container_slot_id, protocol_part_id,
+                    id, container_id, container_slot_id, protocol_part_id, component_id,
                     quantity, flags
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, arguments: [
                     slot.stockID ?? "stock-\(slot.id)",
                     chassisID,
                     slot.id,
                     protocolPartId,
+                    resolvedComponentID,
                     quantity,
                     slot.flags
                 ])
@@ -361,14 +466,15 @@ public final class GRDBChassisRepository: ChassisRepository {
 
         try db.execute(sql: """
             INSERT OR REPLACE INTO stock_item (
-                id, container_id, container_slot_id, protocol_part_id,
+                id, container_id, container_slot_id, protocol_part_id, component_id,
                 quantity, flags
-            ) VALUES (?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """, arguments: [
                 slot.stockID ?? "stock-\(slot.id)",
                 chassisID,
                 slot.id,
                 record.partId,
+                try ensurePlaceholderComponent(db, protocolPartId: record.partId),
                 record.quantity,
                 Int(record.flags)
             ])
@@ -444,11 +550,84 @@ public final class GRDBChassisRepository: ChassisRepository {
                 Date()
             ])
     }
+
+    private func fetchComponent(_ db: Database, id: String) throws -> Component {
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT id, protocol_part_id, source, lcsc_part_number,
+                   manufacturer_part_number, name, package_name, brand,
+                   spec_summary
+            FROM component
+            WHERE id = ?
+            """, arguments: [id]) else {
+            throw ChassisRepositoryError.componentNotFound(id: id)
+        }
+        return component(from: row, idColumn: "id")
+    }
+
+    private func ensurePlaceholderComponent(_ db: Database, protocolPartId: String) throws -> String {
+        let normalizedPartId = normalizeOptionalIdentifier(protocolPartId) ?? protocolPartId
+        let id = "component-\(normalizedPartId)"
+        let now = Date()
+        try db.execute(sql: """
+            INSERT INTO component (
+                id, protocol_part_id, source, lcsc_part_number,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                protocol_part_id = excluded.protocol_part_id,
+                updated_at = excluded.updated_at
+            """, arguments: [
+                id,
+                normalizedPartId,
+                "hardware_restore",
+                normalizedPartId,
+                now,
+                now
+            ])
+        return id
+    }
+
+    private func component(from row: Row) -> Component? {
+        guard let id: String = row["component_id"] else {
+            return nil
+        }
+        return Component(
+            id: id,
+            protocolPartId: row["component_protocol_part_id"],
+            source: row["component_source"],
+            lcscPartNumber: row["lcsc_part_number"],
+            manufacturerPartNumber: row["manufacturer_part_number"],
+            name: row["component_name"],
+            packageName: row["package_name"],
+            brand: row["brand"],
+            specSummary: row["spec_summary"]
+        )
+    }
+
+    private func component(from row: Row, idColumn: String) -> Component {
+        Component(
+            id: row[idColumn],
+            protocolPartId: row["protocol_part_id"],
+            source: row["source"],
+            lcscPartNumber: row["lcsc_part_number"],
+            manufacturerPartNumber: row["manufacturer_part_number"],
+            name: row["name"],
+            packageName: row["package_name"],
+            brand: row["brand"],
+            specSummary: row["spec_summary"]
+        )
+    }
+
+    private func normalizeOptionalIdentifier(_ value: String?) -> String? {
+        let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return normalized?.isEmpty == false ? normalized : nil
+    }
 }
 
 public enum ChassisRepositoryError: Error, Equatable {
     case slotNotFound(chassisID: String, slotNumber: Int)
     case slotIsEmpty(chassisID: String, slotNumber: Int)
+    case componentNotFound(id: String)
 }
 
 private struct SlotRow {

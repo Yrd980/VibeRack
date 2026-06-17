@@ -16,13 +16,22 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
         case .chassis:
             ChassisListView(repository: dependencies.chassisRepository)
         case .stockIn:
-            StockInFlowView(repository: dependencies.chassisRepository)
+            StockInFlowView(
+                repository: dependencies.chassisRepository,
+                workflow: dependencies.chassisWorkflow
+            )
         case .search:
-            SearchView(repository: dependencies.chassisRepository)
+            SearchView(
+                repository: dependencies.chassisRepository,
+                workflow: dependencies.chassisWorkflow
+            )
         case .printer:
             PrinterView()
         case .settings:
-            SettingsView(repository: dependencies.chassisRepository)
+            SettingsView(
+                repository: dependencies.chassisRepository,
+                simulatorClient: dependencies.simulatorClient
+            )
         }
     }
 

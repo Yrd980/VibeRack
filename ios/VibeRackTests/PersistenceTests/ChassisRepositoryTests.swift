@@ -25,6 +25,17 @@ final class ChassisRepositoryTests: XCTestCase {
         XCTAssertEqual(firstSlot.quantity, 12)
         XCTAssertFalse(firstSlot.isEmpty)
 
+        let seedSearchResult = try XCTUnwrap(try repository.searchStock(query: "C123").first)
+        XCTAssertEqual(seedSearchResult.component?.lcscPartNumber, "C1234567")
+
+        let bomSampleSlot = try XCTUnwrap(slots.first { $0.slotNumber == 7 })
+        XCTAssertEqual(bomSampleSlot.protocolPartId, "C2829702")
+        XCTAssertEqual(bomSampleSlot.quantity, 8)
+
+        let bomSampleResult = try XCTUnwrap(try repository.searchStock(query: "C2829702").first)
+        XCTAssertEqual(bomSampleResult.slotNumber, 7)
+        XCTAssertEqual(bomSampleResult.component?.manufacturerPartNumber, "1.25-2A")
+
         let secondSlot = try XCTUnwrap(slots.dropFirst().first)
         XCTAssertNil(secondSlot.protocolPartId)
         XCTAssertNil(secondSlot.quantity)
@@ -40,6 +51,7 @@ final class ChassisRepositoryTests: XCTestCase {
             chassisID: "simulator",
             slotNumber: 2,
             protocolPartId: "R7654321",
+            componentID: nil,
             quantity: 30,
             source: .stockIn,
             bleOpcode: BindingOp.writeOne.code,
@@ -85,6 +97,7 @@ final class ChassisRepositoryTests: XCTestCase {
             chassisID: "simulator",
             slotNumber: 2,
             protocolPartId: "R2222222",
+            componentID: nil,
             quantity: 4,
             source: .stockIn,
             bleOpcode: BindingOp.writeOne.code,
@@ -117,16 +130,26 @@ final class ChassisRepositoryTests: XCTestCase {
         XCTAssertEqual(slots.first { $0.slotNumber == 3 }?.protocolPartId, "C3333333")
         XCTAssertEqual(slots.first { $0.slotNumber == 3 }?.quantity, 9)
         XCTAssertEqual(slots.first { $0.slotNumber == 3 }?.flags, 1)
+        XCTAssertTrue(try XCTUnwrap(slots.first { $0.slotNumber == 7 }).isEmpty)
+
+        let restoredComponent = try XCTUnwrap(try repository.searchStock(query: "C333").first?.component)
+        XCTAssertEqual(restoredComponent.protocolPartId, "C3333333")
+        XCTAssertEqual(restoredComponent.source, "hardware_restore")
 
         let restoreOperations = try repository.fetchStockOperations(chassisID: "simulator")
             .filter { $0.type == .restore }
-        XCTAssertEqual(restoreOperations.map(\.slotNumber), [1, 2, 3])
-        XCTAssertEqual(restoreOperations.map(\.protocolPartId), ["C1111111", "R2222222", "C3333333"])
-        XCTAssertEqual(restoreOperations.map(\.quantityBefore), [12, 4, nil])
-        XCTAssertEqual(restoreOperations.map(\.quantityAfter), [5, nil, 9])
-        XCTAssertEqual(restoreOperations.map(\.quantityDelta), [-7, -4, 9])
-        XCTAssertEqual(restoreOperations.map(\.source), [.restore, .restore, .restore])
-        XCTAssertEqual(restoreOperations.map(\.bleOpcode), [BindingOp.readAll.code, BindingOp.readAll.code, BindingOp.readAll.code])
+        XCTAssertEqual(restoreOperations.map(\.slotNumber), [1, 2, 3, 7])
+        XCTAssertEqual(restoreOperations.map(\.protocolPartId), ["C1111111", "R2222222", "C3333333", "C2829702"])
+        XCTAssertEqual(restoreOperations.map(\.quantityBefore), [12, 4, nil, 8])
+        XCTAssertEqual(restoreOperations.map(\.quantityAfter), [5, nil, 9, nil])
+        XCTAssertEqual(restoreOperations.map(\.quantityDelta), [-7, -4, 9, -8])
+        XCTAssertEqual(restoreOperations.map(\.source), [.restore, .restore, .restore, .restore])
+        XCTAssertEqual(restoreOperations.map(\.bleOpcode), [
+            BindingOp.readAll.code,
+            BindingOp.readAll.code,
+            BindingOp.readAll.code,
+            BindingOp.readAll.code
+        ])
     }
 
     func testMigrationToleratesDevelopmentDatabaseWhereOperationTableWasCreatedByM1() throws {
@@ -197,6 +220,8 @@ final class ChassisRepositoryTests: XCTestCase {
         try repository.seedSimulatorData()
 
         XCTAssertEqual(try repository.fetchChassisList().first?.code, "VBRK-0000")
+        let result = try XCTUnwrap(try repository.searchStock(query: "C123").first)
+        XCTAssertEqual(result.component?.protocolPartId, "C1234567")
     }
 }
 

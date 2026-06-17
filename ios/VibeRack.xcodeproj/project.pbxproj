@@ -39,12 +39,24 @@
 		AA0000000000000000000121 /* DependencyGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000026 /* DependencyGraph.swift */; };
 		AA0000000000000000000122 /* BOMModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000029 /* BOMModels.swift */; };
 		AA0000000000000000000123 /* BOMPickPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000030 /* BOMPickPlanner.swift */; };
-AA0000000000000000000130 /* PrinterModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000043 /* PrinterModels.swift */; };
-AA0000000000000000000131 /* BoxLayerLabelRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */; };
-AA0000000000000000000132 /* PrinterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000045 /* PrinterView.swift */; };
-AA0000000000000000000217 /* PrinterLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000046 /* PrinterLabelTests.swift */; };
-AA0000000000000000000133 /* P0BitmapProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000047 /* P0BitmapProtocol.swift */; };
-AA0000000000000000000134 /* P0BlePrinterClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000048 /* P0BlePrinterClient.swift */; };
+		AA0000000000000000000124 /* SmartChassisWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000031 /* SmartChassisWorkflow.swift */; };
+		AA0000000000000000000210 /* SmartChassisWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000032 /* SmartChassisWorkflowTests.swift */; };
+		AA0000000000000000000211 /* LcscQrParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000034 /* LcscQrParserTests.swift */; };
+		AA0000000000000000000212 /* BOMImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000036 /* BOMImportTests.swift */; };
+		AA0000000000000000000125 /* LcscQrParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000033 /* LcscQrParser.swift */; };
+		AA0000000000000000000126 /* BOMWorkbookImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000037 /* BOMWorkbookImporter.swift */; };
+		AA0000000000000000000127 /* BOMPickView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000038 /* BOMPickView.swift */; };
+		AA0000000000000000000128 /* bom.xlsx in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000039 /* bom.xlsx */; };
+		AA0000000000000000000214 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000005003 /* ZIPFoundation */; };
+		AA0000000000000000000215 /* HardwareRestorePreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000040 /* HardwareRestorePreviewTests.swift */; };
+		AA0000000000000000000129 /* HardwareRestorePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000041 /* HardwareRestorePreview.swift */; };
+		AA0000000000000000000216 /* DiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000042 /* DiagnosticsTests.swift */; };
+		AA0000000000000000000130 /* PrinterModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000043 /* PrinterModels.swift */; };
+		AA0000000000000000000131 /* BoxLayerLabelRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */; };
+		AA0000000000000000000132 /* PrinterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000045 /* PrinterView.swift */; };
+		AA0000000000000000000217 /* PrinterLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000046 /* PrinterLabelTests.swift */; };
+		AA0000000000000000000133 /* P0BitmapProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000047 /* P0BitmapProtocol.swift */; };
+		AA0000000000000000000134 /* P0BlePrinterClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000048 /* P0BlePrinterClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,12 +100,23 @@ AA0000000000000000000134 /* P0BlePrinterClient.swift in Sources */ = {isa = PBXB
 		AA0000000000000000000028 /* BOMPickPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMPickPlannerTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000029 /* BOMModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMModels.swift; sourceTree = "<group>"; };
 		AA0000000000000000000030 /* BOMPickPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMPickPlanner.swift; sourceTree = "<group>"; };
-AA0000000000000000000043 /* PrinterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterModels.swift; sourceTree = "<group>"; };
-AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxLayerLabelRenderer.swift; sourceTree = "<group>"; };
-AA0000000000000000000045 /* PrinterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterView.swift; sourceTree = "<group>"; };
-AA0000000000000000000046 /* PrinterLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterLabelTests.swift; sourceTree = "<group>"; };
-AA0000000000000000000047 /* P0BitmapProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P0BitmapProtocol.swift; sourceTree = "<group>"; };
-AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P0BlePrinterClient.swift; sourceTree = "<group>"; };
+		AA0000000000000000000031 /* SmartChassisWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisWorkflow.swift; sourceTree = "<group>"; };
+		AA0000000000000000000032 /* SmartChassisWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartChassisWorkflowTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000033 /* LcscQrParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LcscQrParser.swift; sourceTree = "<group>"; };
+		AA0000000000000000000034 /* LcscQrParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LcscQrParserTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000036 /* BOMImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMImportTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000037 /* BOMWorkbookImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMWorkbookImporter.swift; sourceTree = "<group>"; };
+		AA0000000000000000000038 /* BOMPickView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BOMPickView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000039 /* bom.xlsx */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../assets/bom.xlsx; sourceTree = SOURCE_ROOT; };
+		AA0000000000000000000040 /* HardwareRestorePreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareRestorePreviewTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000041 /* HardwareRestorePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareRestorePreview.swift; sourceTree = "<group>"; };
+		AA0000000000000000000042 /* DiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000043 /* PrinterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterModels.swift; sourceTree = "<group>"; };
+		AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxLayerLabelRenderer.swift; sourceTree = "<group>"; };
+		AA0000000000000000000045 /* PrinterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000046 /* PrinterLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterLabelTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000047 /* P0BitmapProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P0BitmapProtocol.swift; sourceTree = "<group>"; };
+		AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P0BlePrinterClient.swift; sourceTree = "<group>"; };
 		AA0000000000000000000615 /* ProtocolFixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ProtocolFixtures; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* VibeRack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeRack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000402 /* VibeRackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeRackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -105,6 +128,7 @@ AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReferenc
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000204 /* GRDB in Frameworks */,
+				AA0000000000000000000214 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -123,6 +147,7 @@ AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReferenc
 			children = (
 				AA0000000000000000000602 /* VibeRack */,
 				AA0000000000000000000607 /* VibeRackTests */,
+				AA0000000000000000000039 /* bom.xlsx */,
 				AA0000000000000000000609 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -177,10 +202,12 @@ AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReferenc
 				AA0000000000000000000608 /* ProtocolTests */,
 				AA0000000000000000000616 /* BluetoothTests */,
 				AA0000000000000000000618 /* PersistenceTests */,
+				AA0000000000000000000626 /* ImportTests */,
 				AA0000000000000000000628 /* PrinterTests */,
 				AA0000000000000000000623 /* UseCaseTests */,
 				AA0000000000000000000615 /* ProtocolFixtures */,
 				AA0000000000000000000012 /* RouterTests.swift */,
+				AA0000000000000000000034 /* LcscQrParserTests.swift */,
 			);
 			path = VibeRackTests;
 			sourceTree = "<group>";
@@ -215,6 +242,7 @@ AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReferenc
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000007 /* SearchView.swift */,
+				AA0000000000000000000038 /* BOMPickView.swift */,
 			);
 			path = Search;
 			sourceTree = "<group>";
@@ -316,6 +344,9 @@ AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReferenc
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000028 /* BOMPickPlannerTests.swift */,
+				AA0000000000000000000042 /* DiagnosticsTests.swift */,
+				AA0000000000000000000040 /* HardwareRestorePreviewTests.swift */,
+				AA0000000000000000000032 /* SmartChassisWorkflowTests.swift */,
 			);
 			path = UseCaseTests;
 			sourceTree = "<group>";
@@ -324,37 +355,49 @@ AA0000000000000000000048 /* P0BlePrinterClient.swift */ = {isa = PBXFileReferenc
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000030 /* BOMPickPlanner.swift */,
+				AA0000000000000000000037 /* BOMWorkbookImporter.swift */,
+				AA0000000000000000000041 /* HardwareRestorePreview.swift */,
+				AA0000000000000000000031 /* SmartChassisWorkflow.swift */,
 			);
 			path = UseCases;
 			sourceTree = "<group>";
 		};
-AA0000000000000000000625 /* FeatureSupport */ = {
-	isa = PBXGroup;
-	children = (
-		AA0000000000000000000043 /* PrinterModels.swift */,
-		AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */,
-		AA0000000000000000000047 /* P0BitmapProtocol.swift */,
-		AA0000000000000000000048 /* P0BlePrinterClient.swift */,
-	);
-	path = FeatureSupport;
-	sourceTree = "<group>";
-};
-AA0000000000000000000627 /* Printer */ = {
-	isa = PBXGroup;
-	children = (
-		AA0000000000000000000045 /* PrinterView.swift */,
-	);
-	path = Printer;
-	sourceTree = "<group>";
-};
-AA0000000000000000000628 /* PrinterTests */ = {
-	isa = PBXGroup;
-	children = (
-		AA0000000000000000000046 /* PrinterLabelTests.swift */,
-	);
-	path = PrinterTests;
-	sourceTree = "<group>";
-};
+		AA0000000000000000000625 /* FeatureSupport */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000033 /* LcscQrParser.swift */,
+				AA0000000000000000000043 /* PrinterModels.swift */,
+				AA0000000000000000000044 /* BoxLayerLabelRenderer.swift */,
+				AA0000000000000000000047 /* P0BitmapProtocol.swift */,
+				AA0000000000000000000048 /* P0BlePrinterClient.swift */,
+			);
+			path = FeatureSupport;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000626 /* ImportTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000036 /* BOMImportTests.swift */,
+			);
+			path = ImportTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000627 /* Printer */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000045 /* PrinterView.swift */,
+			);
+			path = Printer;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000628 /* PrinterTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000046 /* PrinterLabelTests.swift */,
+			);
+			path = PrinterTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -373,6 +416,7 @@ AA0000000000000000000628 /* PrinterTests */ = {
 			name = VibeRack;
 			packageProductDependencies = (
 				AA0000000000000000005001 /* GRDB */,
+				AA0000000000000000005003 /* ZIPFoundation */,
 			);
 			productName = VibeRack;
 			productReference = AA0000000000000000000401 /* VibeRack.app */;
@@ -426,6 +470,7 @@ AA0000000000000000000628 /* PrinterTests */ = {
 			mainGroup = AA0000000000000000000601;
 			packageReferences = (
 				AA0000000000000000005000 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				AA0000000000000000005002 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			productRefGroup = AA0000000000000000000609 /* Products */;
 			projectDirPath = "";
@@ -442,6 +487,7 @@ AA0000000000000000000628 /* PrinterTests */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000000128 /* bom.xlsx in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -467,6 +513,7 @@ AA0000000000000000000628 /* PrinterTests */ = {
 				AA0000000000000000000105 /* ChassisListView.swift in Sources */,
 				AA0000000000000000000106 /* StockInFlowView.swift in Sources */,
 				AA0000000000000000000107 /* SearchView.swift in Sources */,
+				AA0000000000000000000127 /* BOMPickView.swift in Sources */,
 				AA0000000000000000000108 /* SettingsView.swift in Sources */,
 				AA0000000000000000000109 /* SmartChassisProtocol.swift in Sources */,
 				AA0000000000000000000110 /* SmartChassisCodec.swift in Sources */,
@@ -483,11 +530,15 @@ AA0000000000000000000628 /* PrinterTests */ = {
 				AA0000000000000000000121 /* DependencyGraph.swift in Sources */,
 				AA0000000000000000000122 /* BOMModels.swift in Sources */,
 				AA0000000000000000000123 /* BOMPickPlanner.swift in Sources */,
-AA0000000000000000000130 /* PrinterModels.swift in Sources */,
-AA0000000000000000000131 /* BoxLayerLabelRenderer.swift in Sources */,
-AA0000000000000000000133 /* P0BitmapProtocol.swift in Sources */,
-AA0000000000000000000134 /* P0BlePrinterClient.swift in Sources */,
-AA0000000000000000000132 /* PrinterView.swift in Sources */,
+				AA0000000000000000000126 /* BOMWorkbookImporter.swift in Sources */,
+				AA0000000000000000000129 /* HardwareRestorePreview.swift in Sources */,
+				AA0000000000000000000124 /* SmartChassisWorkflow.swift in Sources */,
+				AA0000000000000000000125 /* LcscQrParser.swift in Sources */,
+				AA0000000000000000000130 /* PrinterModels.swift in Sources */,
+				AA0000000000000000000131 /* BoxLayerLabelRenderer.swift in Sources */,
+				AA0000000000000000000133 /* P0BitmapProtocol.swift in Sources */,
+				AA0000000000000000000134 /* P0BlePrinterClient.swift in Sources */,
+				AA0000000000000000000132 /* PrinterView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -502,6 +553,11 @@ AA0000000000000000000132 /* PrinterView.swift in Sources */,
 				AA0000000000000000000207 /* ChassisRepositoryTests.swift in Sources */,
 				AA0000000000000000000208 /* SearchRepositoryTests.swift in Sources */,
 				AA0000000000000000000209 /* BOMPickPlannerTests.swift in Sources */,
+				AA0000000000000000000216 /* DiagnosticsTests.swift in Sources */,
+				AA0000000000000000000215 /* HardwareRestorePreviewTests.swift in Sources */,
+				AA0000000000000000000210 /* SmartChassisWorkflowTests.swift in Sources */,
+				AA0000000000000000000211 /* LcscQrParserTests.swift in Sources */,
+				AA0000000000000000000212 /* BOMImportTests.swift in Sources */,
 				AA0000000000000000000217 /* PrinterLabelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -525,6 +581,14 @@ AA0000000000000000000132 /* PrinterView.swift in Sources */,
 				minimumVersion = 7.11.0;
 			};
 		};
+		AA0000000000000000005002 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.20;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -532,6 +596,11 @@ AA0000000000000000000132 /* PrinterView.swift in Sources */,
 			isa = XCSwiftPackageProductDependency;
 			package = AA0000000000000000005000 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
+		};
+		AA0000000000000000005003 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000005002 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
 

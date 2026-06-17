@@ -5,12 +5,17 @@ public struct BOMPickPlanner {
 
     public func buildPickPlan(
         lines: [BOMLine],
-        stock: [StockSearchResult]
+        stock: [StockSearchResult],
+        completedLineIDs: Set<String> = []
     ) -> BOMPickPlan {
         var unmatchedLines: [BOMLine] = []
         var targetsByChassis: [String: [BOMPickTargetWithChassis]] = [:]
 
         for line in lines {
+            guard !completedLineIDs.contains(line.id) else {
+                continue
+            }
+
             let matchingStock = stock.filter { stockItem in
                 stockMatches(line: line, stockItem: stockItem)
             }

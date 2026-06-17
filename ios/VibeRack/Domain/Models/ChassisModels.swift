@@ -60,6 +60,71 @@ public struct ChassisSlotState: Identifiable, Equatable {
     }
 }
 
+public struct Component: Identifiable, Equatable {
+    public let id: String
+    public let protocolPartId: String?
+    public let source: String?
+    public let lcscPartNumber: String?
+    public let manufacturerPartNumber: String?
+    public let name: String?
+    public let packageName: String?
+    public let brand: String?
+    public let specSummary: String?
+
+    public init(
+        id: String,
+        protocolPartId: String?,
+        source: String?,
+        lcscPartNumber: String?,
+        manufacturerPartNumber: String?,
+        name: String?,
+        packageName: String?,
+        brand: String?,
+        specSummary: String?
+    ) {
+        self.id = id
+        self.protocolPartId = protocolPartId
+        self.source = source
+        self.lcscPartNumber = lcscPartNumber
+        self.manufacturerPartNumber = manufacturerPartNumber
+        self.name = name
+        self.packageName = packageName
+        self.brand = brand
+        self.specSummary = specSummary
+    }
+}
+
+public struct ComponentDraft: Equatable {
+    public let protocolPartId: String?
+    public let source: String?
+    public let lcscPartNumber: String?
+    public let manufacturerPartNumber: String?
+    public let name: String?
+    public let packageName: String?
+    public let brand: String?
+    public let specSummary: String?
+
+    public init(
+        protocolPartId: String?,
+        source: String?,
+        lcscPartNumber: String?,
+        manufacturerPartNumber: String?,
+        name: String?,
+        packageName: String?,
+        brand: String?,
+        specSummary: String?
+    ) {
+        self.protocolPartId = protocolPartId
+        self.source = source
+        self.lcscPartNumber = lcscPartNumber
+        self.manufacturerPartNumber = manufacturerPartNumber
+        self.name = name
+        self.packageName = packageName
+        self.brand = brand
+        self.specSummary = specSummary
+    }
+}
+
 public struct StockSearchResult: Identifiable, Equatable {
     public let id: String
     public let chassisID: String
@@ -70,6 +135,7 @@ public struct StockSearchResult: Identifiable, Equatable {
     public let protocolPartId: String
     public let quantity: Int
     public let flags: Int
+    public let component: Component?
 
     public init(
         id: String,
@@ -80,7 +146,8 @@ public struct StockSearchResult: Identifiable, Equatable {
         slotNumber: Int,
         protocolPartId: String,
         quantity: Int,
-        flags: Int
+        flags: Int,
+        component: Component? = nil
     ) {
         self.id = id
         self.chassisID = chassisID
@@ -91,6 +158,14 @@ public struct StockSearchResult: Identifiable, Equatable {
         self.protocolPartId = protocolPartId
         self.quantity = quantity
         self.flags = flags
+        self.component = component
+    }
+
+    public var displayPartNumber: String {
+        component?.manufacturerPartNumber?.nilIfBlank ??
+            component?.lcscPartNumber?.nilIfBlank ??
+            component?.protocolPartId?.nilIfBlank ??
+            protocolPartId
     }
 
     public func makeFindLightCommand() -> LightCommand {
@@ -100,6 +175,13 @@ public struct StockSearchResult: Identifiable, Equatable {
             colorA: RGBColor(0, 255, 0),
             timeoutSeconds: SmartChassisProtocol.defaultLightTimeoutSeconds
         )
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 }
 

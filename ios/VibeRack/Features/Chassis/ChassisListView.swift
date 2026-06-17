@@ -75,9 +75,12 @@ struct ChassisListView: View {
 struct ChassisDetailView: View {
     let chassisID: String
     let repository: ChassisRepository
+    let workflow: SmartChassisWorkflow
 
     @State private var chassis: SmartChassisSummary?
     @State private var slots: [ChassisSlotState] = []
+    @State private var selectedSlot: ChassisSlotState?
+    @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var isLoading = true
 
@@ -96,12 +99,45 @@ struct ChassisDetailView: View {
                 }
 
                 Section("槽位") {
-                    SlotGridView(slots: slots)
+                    SlotGridView(slots: slots) { slot in
+                        selectedSlot = slot
+                    }
                         .padding(.vertical, 8)
+                }
+
+                if let statusMessage {
+                    Section {
+                        Text(statusMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .navigationTitle(chassis?.displayName ?? "智能底盘")
+        .sheet(item: $selectedSlot) { slot in
+            SlotDetailSheet(
+                slot: slot,
+                onFind: { result in
+                    try await workflow.findByLight(result)
+                    statusMessage = "已发送 FIND：槽位 \(slot.slotNumber)"
+                },
+                onSetQuantity: { quantity in
+                    try await workflow.setQuantity(
+                        chassisID: chassisID,
+                        slotNumber: slot.slotNumber,
+                        quantity: quantity
+                    )
+                    statusMessage = "已通过 SET_QTY 更新槽位 \(slot.slotNumber) 数量"
+                    await load()
+                },
+                onClear: {
+                    try await workflow.clearSlot(chassisID: chassisID, slotNumber: slot.slotNumber)
+                    statusMessage = "已通过 CLEAR_ONE 清空槽位 \(slot.slotNumber)"
+                    await load()
+                }
+            )
+        }
         .task(id: chassisID) {
             await load()
         }
@@ -158,15 +194,121 @@ private struct ChassisSummaryRow: View {
 
 private struct SlotGridView: View {
     let slots: [ChassisSlotState]
+    var onSelectSlot: ((ChassisSlotState) -> Void)?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 5)
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(slots) { slot in
-                SlotCell(slot: slot)
+                Button {
+                    onSelectSlot?(slot)
+                } label: {
+                    SlotCell(slot: slot)
+                }
+                .buttonStyle(.plain)
             }
         }
+    }
+}
+
+private struct SlotDetailSheet: View {
+    let slot: ChassisSlotState
+    let onFind: (StockSearchResult) async throws -> Void
+    let onSetQuantity: (Int) async throws -> Void
+    let onClear: () async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var quantity: Int
+    @State private var errorMessage: String?
+
+    init(
+        slot: ChassisSlotState,
+        onFind: @escaping (StockSearchResult) async throws -> Void,
+        onSetQuantity: @escaping (Int) async throws -> Void,
+        onClear: @escaping () async throws -> Void
+    ) {
+        self.slot = slot
+        self.onFind = onFind
+        self.onSetQuantity = onSetQuantity
+        self.onClear = onClear
+        _quantity = State(initialValue: slot.quantity ?? 1)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("槽位") {
+                    LabeledContent("编号", value: "\(slot.slotNumber)")
+                    LabeledContent("组件", value: slot.protocolPartId ?? "空")
+                    LabeledContent("数量", value: slot.quantity.map(String.init) ?? "未知")
+                }
+
+                if !slot.isEmpty {
+                    Section("操作") {
+                        Stepper(value: $quantity, in: 0...65_535) {
+                            LabeledContent("新数量", value: "\(quantity)")
+                        }
+
+                        Button {
+                            Task { await run { try await onFind(makeSearchResult()) } }
+                        } label: {
+                            Label("Find-by-Light", systemImage: "lightbulb")
+                        }
+
+                        Button {
+                            Task { await run { try await onSetQuantity(quantity) } }
+                        } label: {
+                            Label("更新数量", systemImage: "number")
+                        }
+
+                        Button(role: .destructive) {
+                            Task { await run { try await onClear() } }
+                        } label: {
+                            Label("清空槽位", systemImage: "trash")
+                        }
+                    }
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("槽位 \(slot.slotNumber)")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func run(_ action: () async throws -> Void) async {
+        do {
+            try await action()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func makeSearchResult() -> StockSearchResult {
+        StockSearchResult(
+            id: slot.id,
+            chassisID: slot.chassisID,
+            chassisCode: slot.chassisID,
+            chassisDisplayName: slot.chassisID,
+            slotID: slot.id,
+            slotNumber: slot.slotNumber,
+            protocolPartId: slot.protocolPartId ?? "",
+            quantity: slot.quantity ?? 0,
+            flags: slot.flags
+        )
     }
 }
 
@@ -203,7 +345,8 @@ private struct SlotCell: View {
                 case .chassisDetail(let id):
                     ChassisDetailView(
                         chassisID: id,
-                        repository: DependencyGraph.simulatorPreview().chassisRepository
+                        repository: DependencyGraph.simulatorPreview().chassisRepository,
+                        workflow: DependencyGraph.simulatorPreview().chassisWorkflow
                     )
                 }
             }
@@ -215,7 +358,8 @@ private struct SlotCell: View {
     NavigationStack {
         ChassisDetailView(
             chassisID: "simulator",
-            repository: DependencyGraph.simulatorPreview().chassisRepository
+            repository: DependencyGraph.simulatorPreview().chassisRepository,
+            workflow: DependencyGraph.simulatorPreview().chassisWorkflow
         )
     }
 }

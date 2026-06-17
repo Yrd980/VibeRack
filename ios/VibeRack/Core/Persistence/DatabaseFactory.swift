@@ -80,6 +80,50 @@ public enum DatabaseFactory {
                 table.column("created_at", .datetime).notNull()
             }
         }
+        migrator.registerMigration("m3_component_schema") { db in
+            try db.create(table: "component", ifNotExists: true) { table in
+                table.column("id", .text).primaryKey()
+                table.column("protocol_part_id", .text)
+                table.column("source", .text)
+                table.column("lcsc_part_number", .text)
+                table.column("manufacturer_part_number", .text)
+                table.column("name", .text)
+                table.column("package_name", .text)
+                table.column("brand", .text)
+                table.column("spec_summary", .text)
+                table.column("created_at", .datetime).notNull()
+                table.column("updated_at", .datetime).notNull()
+            }
+
+            let stockColumns = try db.columns(in: "stock_item").map(\.name)
+            if stockColumns.contains("component_id") == false {
+                try db.alter(table: "stock_item") { table in
+                    table.add(column: "component_id", .text)
+                        .references("component", onDelete: .setNull)
+                }
+            }
+
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO component (
+                    id, protocol_part_id, source, lcsc_part_number,
+                    created_at, updated_at
+                )
+                SELECT 'component-' || protocol_part_id,
+                       protocol_part_id,
+                       'hardware_restore',
+                       protocol_part_id,
+                       CURRENT_TIMESTAMP,
+                       CURRENT_TIMESTAMP
+                FROM stock_item
+                WHERE protocol_part_id IS NOT NULL
+                """)
+            try db.execute(sql: """
+                UPDATE stock_item
+                SET component_id = 'component-' || protocol_part_id
+                WHERE component_id IS NULL
+                  AND protocol_part_id IS NOT NULL
+                """)
+        }
         return migrator
     }
 }

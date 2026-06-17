@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StockInFlowView: View {
     let repository: ChassisRepository
+    let workflow: SmartChassisWorkflow
 
     @State private var chassisList: [SmartChassisSummary] = []
     @State private var slots: [ChassisSlotState] = []
@@ -9,6 +10,8 @@ struct StockInFlowView: View {
     @State private var selectedSlotNumber = 1
     @State private var protocolPartId = "C7654321"
     @State private var quantity = 1
+    @State private var qrPayloadText = ""
+    @State private var parsedQrPayload: InboundQrPayload?
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var isLoading = true
@@ -19,8 +22,21 @@ struct StockInFlowView: View {
                 TextField("协议料号", text: $protocolPartId)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
+                    .onChange(of: protocolPartId) { _, _ in
+                        if parsedQrPayload?.partNumber != normalizedPartId.uppercased() {
+                            parsedQrPayload = nil
+                        }
+                    }
                 Stepper(value: $quantity, in: 1...65_535) {
                     LabeledContent("数量", value: "\(quantity)")
+                }
+                TextField("粘贴 LCSC QR payload", text: $qrPayloadText, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Button {
+                    applyQrPayload()
+                } label: {
+                    Label("解析 QR payload", systemImage: "qrcode.viewfinder")
                 }
             }
 
@@ -136,6 +152,21 @@ struct StockInFlowView: View {
         }
     }
 
+    private func applyQrPayload() {
+        errorMessage = nil
+        statusMessage = nil
+        do {
+            let payload = try LcscQrParser.parse(qrPayloadText)
+            protocolPartId = payload.partNumber
+            quantity = max(payload.quantity, 1)
+            parsedQrPayload = payload
+            statusMessage = "已解析 LCSC payload：\(payload.partNumber)"
+        } catch {
+            parsedQrPayload = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
     @MainActor
     private func bindSelectedSlot() async {
         guard let selectedChassisID else { return }
@@ -143,25 +174,48 @@ struct StockInFlowView: View {
         errorMessage = nil
         statusMessage = nil
         do {
-            try repository.bindSlot(
+            let componentID = try componentForCurrentEntry()?.id
+            try await workflow.stockIn(
                 chassisID: selectedChassisID,
                 slotNumber: selectedSlotNumber,
                 protocolPartId: normalizedPartId,
                 quantity: quantity,
-                source: .stockIn,
-                bleOpcode: BindingOp.writeOne.code,
-                bleStatus: BindingStatus.ok.code
+                componentID: componentID
             )
-            statusMessage = "已绑定 \(normalizedPartId) 到槽位 \(selectedSlotNumber)"
+            statusMessage = "已执行 STOCK_IN + WRITE_ONE，并绑定 \(normalizedPartId) 到槽位 \(selectedSlotNumber)"
             try loadSlots()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
+
+    private func componentForCurrentEntry() throws -> Component? {
+        guard let parsedQrPayload,
+              parsedQrPayload.partNumber == normalizedPartId.uppercased()
+        else {
+            return nil
+        }
+        return try repository.upsertComponent(
+            ComponentDraft(
+                protocolPartId: parsedQrPayload.partNumber,
+                source: "lcsc_qr",
+                lcscPartNumber: parsedQrPayload.partNumber,
+                manufacturerPartNumber: parsedQrPayload.manufacturerPartNo,
+                name: nil,
+                packageName: nil,
+                brand: nil,
+                specSummary: nil
+            )
+        )
+    }
 }
 
 #Preview {
+    let dependencies = DependencyGraph.simulatorPreview()
     NavigationStack {
-        StockInFlowView(repository: DependencyGraph.simulatorPreview().chassisRepository)
+        StockInFlowView(
+            repository: dependencies.chassisRepository,
+            workflow: dependencies.chassisWorkflow
+        )
     }
 }
