@@ -73,27 +73,48 @@ enum BoxLayerLabelRenderer {
 
             drawFittedLine(
                 label.positionCode,
-                baseline: 36,
-                maxWidth: p0PrintSizePoints.height - 18,
-                font: .systemFont(ofSize: 36, weight: .bold),
-                minFontSize: 26
+                baseline: 68,
+                maxWidth: p0PrintSizePoints.height - 12,
+                font: .systemFont(ofSize: 58, weight: .black),
+                minFontSize: 34
             )
             drawFittedLine(
                 label.partNumber,
-                baseline: 72,
-                maxWidth: p0PrintSizePoints.height - 18,
-                font: .monospacedSystemFont(ofSize: 32, weight: .bold),
-                minFontSize: 24
-            )
-            drawFittedLine(
-                "VibeRack",
-                baseline: 104,
-                maxWidth: p0PrintSizePoints.height - 18,
-                font: .systemFont(ofSize: 24, weight: .regular),
-                minFontSize: 18
+                baseline: 130,
+                maxWidth: p0PrintSizePoints.height - 12,
+                font: .monospacedSystemFont(ofSize: 54, weight: .black),
+                minFontSize: 32
             )
 
             cgContext.restoreGState()
+        }
+    }
+
+    static func renderPrinterPreview(label: BoxLayerLabel) throws -> UIImage {
+        guard !label.positionCode.isEmpty else {
+            throw BoxLayerLabelRenderError.emptyPositionCode
+        }
+        guard !label.partNumber.isEmpty else {
+            throw BoxLayerLabelRenderError.emptyPartNumber
+        }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+
+        return UIGraphicsImageRenderer(size: p0PrintSizePoints, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: p0PrintSizePoints))
+
+            drawCentered(
+                label.positionCode,
+                in: CGRect(x: 4, y: 0, width: p0PrintSizePoints.width - 8, height: 112),
+                font: .systemFont(ofSize: 96, weight: .black)
+            )
+            drawCentered(
+                label.partNumber,
+                in: CGRect(x: 4, y: 104, width: p0PrintSizePoints.width - 8, height: 124),
+                font: .monospacedSystemFont(ofSize: 94, weight: .black)
+            )
         }
     }
 

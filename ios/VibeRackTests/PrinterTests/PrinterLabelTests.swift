@@ -28,11 +28,19 @@ final class PrinterLabelTests: XCTestCase {
         XCTAssertGreaterThan(image.pngData()?.count ?? 0, 1_000)
     }
 
-    func testP0DirectBluetoothTransportDocumentsVerifiedBlePath() {
-        XCTAssertEqual(
-            P0DirectBluetoothSupport.current.userMessage,
-            "已验证佟 P0 / 印立方可通过 BLE GATT 位图通道打印；iOS 使用 CoreBluetooth 写入 P0 位图协议，不走 Android 经典蓝牙 SPP/RFCOMM。"
-        )
+    func testPrinterPreviewUsesReadableHorizontalCanvas() throws {
+        let label = BoxLayerLabel(positionCode: "BOX01-L01", partNumber: "C17710")
+
+        let preview = try BoxLayerLabelRenderer.renderPrinterPreview(label: label)
+        let p0PrintImage = try BoxLayerLabelRenderer.renderP0PrintImage(label: label)
+
+        XCTAssertEqual(preview.size, p0PrintImage.size)
+        XCTAssertNotEqual(preview.pngData(), p0PrintImage.pngData())
+        XCTAssertGreaterThan(blackPixelCount(in: preview, rect: CGRect(x: 20, y: 30, width: 344, height: 170)), 1_000)
+    }
+
+    func testP0DirectBluetoothTransportIsAvailable() {
+        XCTAssertTrue(P0DirectBluetoothSupport.current.isAvailable)
     }
 
     func testP0BleUUIDsMatchDiscoveredPrinterServices() {
@@ -51,5 +59,42 @@ final class PrinterLabelTests: XCTestCase {
         XCTAssertEqual(chunks.first?.bytes.prefix(4), Data([0x1F, 0x20, 0x02, 0x00]))
         XCTAssertEqual(chunks.last?.bytes, Data([0x0C]))
         XCTAssertTrue(chunks.contains { $0.bytes.starts(with: Data([0x1F, 0x2B])) })
+    }
+
+    private func blackPixelCount(in image: UIImage, rect: CGRect) -> Int {
+        guard let cgImage = image.cgImage else { return 0 }
+
+        let width = cgImage.width
+        let height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return 0
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        let minX = max(0, Int(rect.minX))
+        let maxX = min(width, Int(rect.maxX))
+        let minY = max(0, Int(rect.minY))
+        let maxY = min(height, Int(rect.maxY))
+        var count = 0
+        for y in minY..<maxY {
+            for x in minX..<maxX {
+                let offset = (y * width + x) * 4
+                let luminance = (Int(pixels[offset]) * 299 + Int(pixels[offset + 1]) * 587 + Int(pixels[offset + 2]) * 114) / 1000
+                if luminance < 150 {
+                    count += 1
+                }
+            }
+        }
+        return count
     }
 }

@@ -6,6 +6,7 @@ struct PrinterView: View {
     @State private var positionCode = "A-01"
     @State private var partNumber = "C2040"
     @State private var renderedImage: UIImage?
+    @State private var p0PrintImage: UIImage?
     @State private var errorMessage: String?
     @State private var shareItem: LabelShareItem?
 
@@ -27,8 +28,8 @@ struct PrinterView: View {
                         .interpolation(.none)
                         .scaledToFit()
                         .frame(maxWidth: .infinity)
-                        .frame(height: 280)
-                        .padding(.vertical, 8)
+                        .frame(height: 112)
+                        .padding(.vertical, 4)
                 } else {
                     ContentUnavailableView("暂无标签预览", systemImage: "tag")
                 }
@@ -83,10 +84,6 @@ struct PrinterView: View {
                         Label("断开 P0", systemImage: "xmark.circle")
                     }
                 }
-
-                Text(P0DirectBluetoothSupport.current.userMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section("备用出口") {
@@ -131,16 +128,20 @@ struct PrinterView: View {
 
     private func renderPreview() {
         do {
-            renderedImage = try BoxLayerLabelRenderer.render(label: currentLabel)
+            p0PrintImage = try BoxLayerLabelRenderer.renderP0PrintImage(label: currentLabel)
+            renderedImage = try BoxLayerLabelRenderer.renderPrinterPreview(label: currentLabel)
             errorMessage = nil
         } catch BoxLayerLabelRenderError.emptyPositionCode {
             renderedImage = nil
+            p0PrintImage = nil
             errorMessage = "请填写位置"
         } catch BoxLayerLabelRenderError.emptyPartNumber {
             renderedImage = nil
+            p0PrintImage = nil
             errorMessage = "请填写料号"
         } catch {
             renderedImage = nil
+            p0PrintImage = nil
             errorMessage = error.localizedDescription
         }
     }
@@ -153,16 +154,8 @@ struct PrinterView: View {
 
     private func renderAndPrintP0() {
         renderPreview()
-        do {
-            let printImage = try BoxLayerLabelRenderer.renderP0PrintImage(label: currentLabel)
-            p0Client.print(image: printImage)
-        } catch BoxLayerLabelRenderError.emptyPositionCode {
-            errorMessage = "请填写位置"
-        } catch BoxLayerLabelRenderError.emptyPartNumber {
-            errorMessage = "请填写料号"
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        guard let p0PrintImage else { return }
+        p0Client.print(image: p0PrintImage)
     }
 
     private func renderAndPrint() {
