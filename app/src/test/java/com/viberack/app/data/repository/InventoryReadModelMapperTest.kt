@@ -4,7 +4,6 @@ import com.viberack.app.core.database.model.SearchInventoryProjection
 import com.viberack.app.domain.model.ContainerType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InventoryReadModelMapperTest {
@@ -12,7 +11,6 @@ class InventoryReadModelMapperTest {
     fun mapsSearchProjectionFieldsAndDefaultsMalformedSpecsToEmptyMap() {
         val record = InventoryReadModelMapper.toSearchInventoryRecord(
             searchProjection(
-                legacyInventoryItemId = 77,
                 containerType = ContainerType.LEGACY_LOCATION.name
             )
         )
@@ -29,30 +27,40 @@ class InventoryReadModelMapperTest {
     }
 
     @Test
-    fun mapsLegacySearchProjectionAsEditableAndUnknownTypeAsReadOnlyLegacyContainer() {
-        val legacy = searchProjection(
-            legacyInventoryItemId = 77,
-            containerType = ContainerType.LEGACY_LOCATION.name
+    fun mapsSmartChassisSearchProjectionAsFindByLightCapable() {
+        val smartChassis = searchProjection(
+            containerType = ContainerType.SMART_CHASSIS.name,
+            containerMacAddress = "AA:BB:CC:DD:EE:FF",
+            slotNumber = 7
         )
+
+        with(InventoryReadModelMapper.toSearchInventoryRecord(smartChassis)) {
+            assertEquals(ContainerType.SMART_CHASSIS, containerType)
+            assertEquals("AA:BB:CC:DD:EE:FF", containerMacAddress)
+            assertEquals(7, slotNumber)
+            assertEquals(true, canFindByLight)
+        }
+    }
+
+    @Test
+    fun mapsUnknownTypeAsLegacyContainerWithoutFindByLight() {
         val unknown = searchProjection(
-            legacyInventoryItemId = 77,
             containerType = "UNKNOWN"
         )
 
-        assertTrue(InventoryReadModelMapper.toSearchInventoryRecord(legacy).isLegacyEditable)
         with(InventoryReadModelMapper.toSearchInventoryRecord(unknown)) {
             assertEquals(ContainerType.LEGACY_LOCATION, containerType)
-            assertFalse(isLegacyEditable)
+            assertFalse(canFindByLight)
         }
     }
 
     private fun searchProjection(
-        legacyInventoryItemId: Long?,
-        containerType: String
+        containerType: String,
+        containerMacAddress: String? = null,
+        slotNumber: Int = 1
     ): SearchInventoryProjection {
         return SearchInventoryProjection(
             inventoryItemId = 1,
-            legacyInventoryItemId = legacyInventoryItemId,
             stockItemId = 2,
             componentId = 3,
             partNumber = "C123",
@@ -71,9 +79,9 @@ class InventoryReadModelMapperTest {
             locationDisplayName = "A1",
             locationColorHex = null,
             containerType = containerType,
-            containerMacAddress = null,
+            containerMacAddress = containerMacAddress,
             slotId = 7,
-            slotNumber = 1,
+            slotNumber = slotNumber,
             slotCode = "A1",
             slotDisplayName = "A1"
         )

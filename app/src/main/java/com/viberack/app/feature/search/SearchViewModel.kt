@@ -10,21 +10,30 @@ import com.viberack.app.R
 import com.viberack.app.core.AppContainer
 import com.viberack.app.core.ble.smart.SmartChassisOperations
 import com.viberack.app.core.datastore.UserPreferencesRepository
+import com.viberack.app.domain.model.ComponentDetail
 import com.viberack.app.domain.model.ContainerType
 import com.viberack.app.domain.model.SearchInventoryRecord
+import com.viberack.app.domain.repository.ContainerRepository
 import com.viberack.app.domain.repository.InventoryRepository
+import com.viberack.app.domain.repository.SlotOperationRepository
+import com.viberack.app.domain.repository.SlotOperationWrite
 import java.util.Locale
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SearchViewModel(
     private val inventoryRepository: InventoryRepository,
+    private val containerRepository: ContainerRepository,
+    private val slotOperationRepository: SlotOperationRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val smartChassisOperations: SmartChassisOperations,
     private val appContext: Context
@@ -47,6 +56,12 @@ class SearchViewModel(
         val isParsing: Boolean
     )
 
+    private data class SmartSlotInboundState(
+        val targets: List<SmartSlotInboundTargetUiModel>,
+        val message: String?,
+        val isBusy: Boolean
+    )
+
     private val inventoryRecords = inventoryRepository.observeSearchInventoryRecords()
     private val persistentBomBindings = userPreferencesRepository.preferences.map { it.bomPartBindings }
     private val mode = MutableStateFlow(SearchMode.Manual)
@@ -61,6 +76,69 @@ class SearchViewModel(
     private val bomPickSession = MutableStateFlow<BomPickSessionUiModel?>(null)
     private val bomPickMessage = MutableStateFlow<String?>(null)
     private val isBomPickBusy = MutableStateFlow(false)
+    private val smartSlotInboundMessage = MutableStateFlow<String?>(null)
+    private val isSmartSlotInboundBusy = MutableStateFlow(false)
+
+    private val smartSlotInboundTargets = containerRepository.observeContainers()
+        .map { containers ->
+            containers
+                .filter { container ->
+                    container.type == ContainerType.SMART_CHASSIS &&
+                        !container.macAddress.isNullOrBlank() &&
+                        container.slotCount >= 1
+                }
+        }
+        .flatMapLatest { smartContainers ->
+            if (smartContainers.isEmpty()) {
+                kotlinx.coroutines.flow.flowOf(emptyList())
+            } else {
+                combine(
+                    smartContainers.map { container ->
+                        containerRepository.observeContainerSlotStock(container.id).map { slots ->
+                            container to slots
+                        }
+                    }
+                ) { pairs ->
+                    pairs.flatMap { (container, slots) ->
+                        slots
+                            .asSequence()
+                            .filter { slot -> slot.stockItem == null }
+                            .filter { slot -> slot.slot.slotNumber in 1..25 }
+                            .map { slot ->
+                                SmartSlotInboundTargetUiModel(
+                                    containerId = container.id,
+                                    containerCode = container.code,
+                                    containerName = container.displayName,
+                                    macAddress = container.macAddress.orEmpty(),
+                                    slotNumber = slot.slot.slotNumber,
+                                    slotCode = slot.slot.slotCode
+                                )
+                            }
+                            .toList()
+                    }.sortedWith(
+                        compareBy<SmartSlotInboundTargetUiModel> { it.containerCode }
+                            .thenBy { it.slotNumber }
+                    )
+                }
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
+
+    private val smartSlotInboundState = combine(
+        smartSlotInboundTargets,
+        smartSlotInboundMessage,
+        isSmartSlotInboundBusy
+    ) { targets, inboundMessage, inboundBusy ->
+        SmartSlotInboundState(
+            targets = targets,
+            message = inboundMessage,
+            isBusy = inboundBusy
+        )
+    }
 
     private val bomPickState = combine(
         bomPickSession,
@@ -151,14 +229,18 @@ class SearchViewModel(
     val uiState: StateFlow<SearchUiState> = combine(
         baseUiState,
         bomScreenStatus,
-        bomPickState
-    ) { baseState, bomStatus, pickState ->
+        bomPickState,
+        smartSlotInboundState
+    ) { baseState, bomStatus, pickState, inboundState ->
         baseState.copy(
             bomError = bomStatus.errorMessage,
             isParsingBom = bomStatus.isParsing,
             bomPickSession = pickState.session,
             bomPickMessage = pickState.message,
-            isBomPickBusy = pickState.isBusy
+            isBomPickBusy = pickState.isBusy,
+            smartSlotInboundTargets = inboundState.targets,
+            smartSlotInboundMessage = inboundState.message,
+            isSmartSlotInboundBusy = inboundState.isBusy
         )
     }.stateIn(
         scope = viewModelScope,
@@ -270,6 +352,57 @@ class SearchViewModel(
         }
     }
 
+    fun bindRecordToSmartSlot(
+        record: SearchInventoryRecord,
+        target: SmartSlotInboundTargetUiModel,
+        quantity: Int,
+        onCompleted: (String?) -> Unit
+    ) {
+        if (quantity < 0 || target.slotNumber !in 1..25 || target.macAddress.isBlank()) {
+            onCompleted(appContext.getString(R.string.search_smart_slot_inbound_invalid))
+            return
+        }
+        viewModelScope.launch {
+            isSmartSlotInboundBusy.value = true
+            smartSlotInboundMessage.value = null
+            val lit = smartChassisOperations.guideStockInSlot(target.macAddress, target.slotNumber)
+            if (!lit) {
+                val message = smartChassisOperations.lastOperationError.value?.message
+                    ?: appContext.getString(R.string.search_smart_slot_inbound_light_failed)
+                smartSlotInboundMessage.value = message
+                isSmartSlotInboundBusy.value = false
+                onCompleted(message)
+                return@launch
+            }
+            val result = slotOperationRepository.writeOne(
+                SlotOperationWrite(
+                    containerId = target.containerId,
+                    slotNumber = target.slotNumber,
+                    component = record.toComponentDetail(),
+                    quantity = quantity,
+                    sourceType = SOURCE_SEARCH_SMART_SLOT_INBOUND,
+                    rawPayload = "slot=${target.slotNumber};part=${record.partNumber};source=search"
+                )
+            )
+            isSmartSlotInboundBusy.value = false
+            if (result.success) {
+                val message = appContext.getString(
+                    R.string.search_smart_slot_inbound_success,
+                    record.partNumber,
+                    target.containerCode,
+                    target.slotCode
+                )
+                smartSlotInboundMessage.value = message
+                onCompleted(null)
+            } else {
+                val message = result.message
+                    ?: appContext.getString(R.string.search_smart_slot_inbound_failed)
+                smartSlotInboundMessage.value = message
+                onCompleted(message)
+            }
+        }
+    }
+
     fun findSmartChassisRecord(
         record: SearchInventoryRecord,
         onCompleted: (String?) -> Unit
@@ -307,6 +440,8 @@ class SearchViewModel(
             initializer {
                 SearchViewModel(
                     inventoryRepository = appContainer.inventoryRepository,
+                    containerRepository = appContainer.containerRepository,
+                    slotOperationRepository = appContainer.slotOperationRepository,
                     userPreferencesRepository = appContainer.userPreferencesRepository,
                     smartChassisOperations = appContainer.smartChassisOperations,
                     appContext = appContainer.appContext
@@ -315,3 +450,24 @@ class SearchViewModel(
         }
     }
 }
+
+private fun SearchInventoryRecord.toComponentDetail(): ComponentDetail {
+    return ComponentDetail(
+        partNumber = partNumber,
+        mpn = mpn,
+        name = name,
+        brand = brand,
+        packageName = packageName,
+        category = category,
+        description = description,
+        stockQuantity = null,
+        price = null,
+        productUrl = sourceUrl,
+        datasheetUrl = null,
+        imageLocalPath = imageLocalPath,
+        imageUrl = null,
+        specifications = specifications
+    )
+}
+
+private const val SOURCE_SEARCH_SMART_SLOT_INBOUND = "SEARCH_SMART_SLOT_INBOUND"

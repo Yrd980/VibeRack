@@ -97,6 +97,7 @@ fun SearchRoute(
         onIgnoreBomEntry = viewModel::ignoreBomEntry,
         onBindBomEntry = viewModel::bindBomEntry,
         onFindSmartChassisRecord = viewModel::findSmartChassisRecord,
+        onBindRecordToSmartSlot = viewModel::bindRecordToSmartSlot,
         onStartBomPickToLight = viewModel::startBomPickToLight,
         onCancelBomPickToLight = viewModel::cancelBomPickToLight,
         onBomImportStarted = viewModel::startBomImport,
@@ -117,6 +118,7 @@ fun SearchScreen(
     onIgnoreBomEntry: (BomSearchEntry) -> Unit,
     onBindBomEntry: (BomSearchEntry, String) -> Unit,
     onFindSmartChassisRecord: (SearchInventoryRecord, (String?) -> Unit) -> Unit,
+    onBindRecordToSmartSlot: (SearchInventoryRecord, SmartSlotInboundTargetUiModel, Int, (String?) -> Unit) -> Unit,
     onStartBomPickToLight: () -> Unit,
     onCancelBomPickToLight: () -> Unit,
     onBomImportStarted: () -> Unit,
@@ -412,7 +414,11 @@ fun SearchScreen(
     selectedSearchRecord?.let { record ->
         SearchContainerRecordDialog(
             record = record,
+            smartSlotInboundTargets = uiState.smartSlotInboundTargets,
+            smartSlotInboundMessage = uiState.smartSlotInboundMessage,
+            isSmartSlotInboundBusy = uiState.isSmartSlotInboundBusy,
             onFindByLight = onFindSmartChassisRecord,
+            onBindToSmartSlot = onBindRecordToSmartSlot,
             onDismiss = { selectedSearchRecord = null }
         )
     }

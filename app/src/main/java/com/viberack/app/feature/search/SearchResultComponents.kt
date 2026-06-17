@@ -16,8 +16,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -154,7 +156,11 @@ internal fun SearchRecordPickerDialog(
 @Composable
 internal fun SearchContainerRecordDialog(
     record: SearchInventoryRecord,
+    smartSlotInboundTargets: List<SmartSlotInboundTargetUiModel>,
+    smartSlotInboundMessage: String?,
+    isSmartSlotInboundBusy: Boolean,
     onFindByLight: (SearchInventoryRecord, (String?) -> Unit) -> Unit,
+    onBindToSmartSlot: (SearchInventoryRecord, SmartSlotInboundTargetUiModel, Int, (String?) -> Unit) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -164,6 +170,7 @@ internal fun SearchContainerRecordDialog(
         ?.takeIf { it.exists() && it.length() > 0L }
     var actionError by remember(record.stockItemId, record.inventoryItemId) { mutableStateOf<String?>(null) }
     var isSubmitting by remember(record.stockItemId, record.inventoryItemId) { mutableStateOf(false) }
+    var showSmartSlotInbound by remember(record.stockItemId, record.inventoryItemId) { mutableStateOf(false) }
     val containerTypeLabel = record.containerType.searchLabel()
     val locationLabel = formatSearchRecordLocationLabel(record)
     val quantityText = displaySearchQuantity(record.quantity)
@@ -232,6 +239,15 @@ internal fun SearchContainerRecordDialog(
                     }
                 }
                 TextButton(
+                    onClick = {
+                        actionError = null
+                        showSmartSlotInbound = true
+                    },
+                    enabled = !isSubmitting && !isSmartSlotInboundBusy
+                ) {
+                    Text(text = stringResource(R.string.search_smart_slot_inbound))
+                }
+                TextButton(
                     onClick = onDismiss,
                     enabled = !isSubmitting
                 ) {
@@ -252,8 +268,179 @@ internal fun SearchContainerRecordDialog(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+            smartSlotInboundMessage?.takeIf { it.isNotBlank() }?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     )
+    if (showSmartSlotInbound) {
+        SmartSlotInboundDialog(
+            record = record,
+            targets = smartSlotInboundTargets,
+            isSubmitting = isSmartSlotInboundBusy,
+            onConfirm = { target, quantity ->
+                actionError = null
+                onBindToSmartSlot(record, target, quantity) { error ->
+                    actionError = error
+                    if (error == null) {
+                        showSmartSlotInbound = false
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                R.string.search_smart_slot_inbound_started,
+                                target.slotNumber
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            },
+            onDismiss = { showSmartSlotInbound = false }
+        )
+    }
+}
+
+@Composable
+private fun SmartSlotInboundDialog(
+    record: SearchInventoryRecord,
+    targets: List<SmartSlotInboundTargetUiModel>,
+    isSubmitting: Boolean,
+    onConfirm: (SmartSlotInboundTargetUiModel, Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedTarget by remember(targets) { mutableStateOf(targets.firstOrNull()) }
+    var quantityText by remember(record.stockItemId, record.inventoryItemId) {
+        mutableStateOf(record.quantity.coerceAtLeast(1).toString())
+    }
+    val quantity = quantityText.toIntOrNull()
+    AlertDialog(
+        onDismissRequest = {
+            if (!isSubmitting) {
+                onDismiss()
+            }
+        },
+        title = { Text(text = stringResource(R.string.search_smart_slot_inbound_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = record.name ?: record.mpn ?: record.partNumber,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                OutlinedTextField(
+                    value = quantityText,
+                    onValueChange = { quantityText = it.filter(Char::isDigit) },
+                    label = { Text(text = stringResource(R.string.inbound_quantity_label)) },
+                    singleLine = true,
+                    enabled = !isSubmitting,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (targets.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.search_smart_slot_inbound_no_targets),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.search_smart_slot_inbound_target_label),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(
+                            targets,
+                            key = { target -> "${target.containerId}-${target.slotNumber}" }
+                        ) { target ->
+                            SmartSlotInboundTargetCard(
+                                target = target,
+                                selected = selectedTarget == target,
+                                enabled = !isSubmitting,
+                                onClick = { selectedTarget = target }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !isSubmitting &&
+                    selectedTarget != null &&
+                    quantity != null &&
+                    quantity >= 0,
+                onClick = {
+                    val target = selectedTarget ?: return@Button
+                    onConfirm(target, quantity ?: 0)
+                }
+            ) {
+                Text(text = stringResource(R.string.search_smart_slot_inbound_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSubmitting
+            ) {
+                Text(text = stringResource(R.string.common_cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun SmartSlotInboundTargetCard(
+    target: SmartSlotInboundTargetUiModel,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        border = if (selected) {
+            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            null
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    enabled = enabled,
+                    onClick = onClick,
+                    onLongClick = onClick
+                )
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = target.containerName?.takeIf { it.isNotBlank() } ?: target.containerCode,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = target.macAddress,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = stringResource(R.string.search_smart_slot_inbound_slot, target.slotNumber),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
 }
 
 @Composable

@@ -191,6 +191,17 @@
     <string name="search_find_light_started">已点亮智能底盘槽位 %1$d</string>
     <string name="search_find_light_failed">点灯失败，请检查蓝牙连接。</string>
     <string name="search_find_light_unavailable">该库存账记录不支持点灯。</string>
+    <string name="search_smart_slot_inbound">入库到底盘</string>
+    <string name="search_smart_slot_inbound_title">绑定到智能底盘槽位</string>
+    <string name="search_smart_slot_inbound_target_label">选择空槽位</string>
+    <string name="search_smart_slot_inbound_no_targets">当前没有可用的智能底盘空槽。请先扫描或 NFC 唤醒底盘，并读表刷新缓存。</string>
+    <string name="search_smart_slot_inbound_slot">槽位 %1$d</string>
+    <string name="search_smart_slot_inbound_confirm">点灯并绑定</string>
+    <string name="search_smart_slot_inbound_started">已点亮入库槽位 %1$d</string>
+    <string name="search_smart_slot_inbound_success">%1$s 已绑定到 %2$s / %3$s</string>
+    <string name="search_smart_slot_inbound_failed">智能底盘槽位绑定失败。</string>
+    <string name="search_smart_slot_inbound_light_failed">STOCK_IN 点灯失败，请检查蓝牙连接。</string>
+    <string name="search_smart_slot_inbound_invalid">请选择有效智能底盘槽位和数量。</string>
     <string name="search_container_type">容器类型</string>
     <string name="search_container_location">容器位置</string>
     <string name="search_container_slot">槽位</string>

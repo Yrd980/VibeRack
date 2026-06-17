@@ -20,7 +20,10 @@ data class SearchUiState(
     val isParsingBom: Boolean = false,
     val bomPickSession: BomPickSessionUiModel? = null,
     val bomPickMessage: String? = null,
-    val isBomPickBusy: Boolean = false
+    val isBomPickBusy: Boolean = false,
+    val smartSlotInboundTargets: List<SmartSlotInboundTargetUiModel> = emptyList(),
+    val smartSlotInboundMessage: String? = null,
+    val isSmartSlotInboundBusy: Boolean = false
 )
 
 enum class SearchMode {
@@ -58,6 +61,15 @@ data class SearchResultLocationUiModel(
     val containerType: ContainerType = ContainerType.LEGACY_LOCATION,
     val slotNumber: Int? = null,
     val canFindByLight: Boolean = false
+)
+
+data class SmartSlotInboundTargetUiModel(
+    val containerId: Long,
+    val containerCode: String,
+    val containerName: String?,
+    val macAddress: String,
+    val slotNumber: Int,
+    val slotCode: String
 )
 
 data class BomSearchEntry(
