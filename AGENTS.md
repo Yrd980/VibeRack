@@ -2,15 +2,19 @@
 
 ## Project Structure & Module Organization
 
-This repository is a single-module Android app in `app/`. Kotlin source lives under `app/src/main/java/com/viberack/app`, organized by layer and feature:
+This repository is the canonical VibeRack monorepo. It contains the Android app, the Android shared domain module, the iOS app, shared product docs, and smart chassis protocol docs.
 
-- `feature/`: Compose screens and view models for `home`, `inbound`, `inventory`, `search`, and `settings`
-- `core/`: app container, Room database, DataStore, network, and shared UI helpers
-- `data/`: repository implementations, backup/export, image persistence, and remote data sources
-- `domain/`: repository interfaces and app models
-- `ui/`: app shell and theme
+Android source lives in:
 
-Resources are in `app/src/main/res`. Room schemas are exported to `app/schemas`. Design and planning notes live in `docs/`. Crash logs are stored in `log/`.
+- `app/src/main/java/com/viberack/app/feature/`: Compose screens and view models for `home`, `containers`, `search`, and `settings`
+- `app/src/main/java/com/viberack/app/core/`: app container, Room database, DataStore, BLE/NFC, network, and shared UI helpers
+- `app/src/main/java/com/viberack/app/data/`: repository implementations, backup/export, image persistence, and remote data sources
+- `app/src/main/java/com/viberack/app/ui/`: app shell and theme
+- `domain/src/main/java/com/viberack/app/domain/`: Android shared domain models and repository interfaces
+
+iOS source lives under `ios/`, with the Xcode project at `ios/VibeRack.xcodeproj`.
+
+Android resources are in `app/src/main/res`. Room schemas are exported to `app/schemas`. Product, protocol, iOS, hardware, and planning notes live in `docs/`.
 
 ## Current Product Baseline
 
@@ -21,7 +25,7 @@ Treat these two documents as the current source of truth for product and protoco
 
 When the remaining implementation record under `docs/superpowers/` disagrees with these two documents, follow the two current design documents unless the user explicitly says otherwise.
 
-The active product direction is no longer only a generic offline warehouse ERP. It is the Android app for a smart component management system: scanned inbound, NFC wake-up, digital twin container/slot view, find-by-light, BOM pick-to-light, local/cloud stock ledger, label printing, and hardware restore from smart chassis binding tables.
+The active product direction is no longer a generic offline warehouse ERP. VibeRack is a smart component management system across Android, iOS, and smart chassis hardware: scanned stock-in, NFC wake-up, digital twin container/slot view, find-by-light, BOM pick-to-light, local/cloud stock ledger, and hardware restore from smart chassis binding tables.
 
 ## Build, Test, and Development Commands
 
@@ -34,10 +38,15 @@ Use the Gradle wrapper from the repo root:
 
 For local Android Studio work, open the root project and run the `app` configuration.
 
+Android uses JDK 17. Do not document or assume JDK 11.
+
+For iOS work, open `ios/VibeRack.xcodeproj` in Xcode on macOS.
+
 ## Coding Style & Naming Conventions
 
 - Follow Kotlin defaults: 4-space indentation, no tabs, concise functions, and expression-style code when readable
-- Keep feature UI in `feature/<name>/`, business/data code in `data/` or `domain/`
+- Keep Android feature UI in `app/src/main/java/com/viberack/app/feature/<name>/`, data code in `app/src/main/java/com/viberack/app/data/`, and shared domain contracts in `domain/`
+- Keep iOS feature UI in `ios/VibeRack/Features/`, protocol code in `ios/VibeRack/Core/Protocol/`, Bluetooth code in `ios/VibeRack/Core/Bluetooth/`, and tests in `ios/VibeRackTests/`
 - Name screens and dialogs with `...Screen`, `...Dialog`, `...Route`
 - Name view models `...ViewModel`, UI state models `...UiState`, and shared Compose cards `...Card`
 - Reuse existing shared components such as `MaterialInboundDialog` and `core/ui/MaterialListCard` before adding new UI variants
@@ -71,7 +80,9 @@ PRs should include:
 
 ## Architecture Notes
 
-This app uses Jetpack Compose + Room + DataStore + Retrofit/Jsoup. Preserve the existing flow: UI -> ViewModel -> Repository -> Room/network. Keep persisted schema changes compatible and update `app/schemas` when Room entities change.
+Android uses Jetpack Compose + Room + DataStore + Retrofit/Jsoup. Preserve the existing flow: UI -> ViewModel -> Repository -> Room/network. Keep persisted schema changes compatible and update `app/schemas` when Room entities change.
+
+iOS uses SwiftUI + CoreBluetooth + GRDB/SQLite. Keep protocol byte layouts aligned with `docs/智能底盘BLE接口规格_v0.1.md`.
 
 Prefer protocol-first vertical slices that keep the smart chassis, container/slot model, and hardware-backed workflows coherent. Legacy inbound, search, inventory, printer, NFC, backup, location, and box flows may be migrated, replaced, or deleted when they slow down the VibeRack hardware-protocol direction. For smart chassis work, implement the app-side BLE layer against mocks or simulators when hardware is unavailable, but keep packet formats and state transitions aligned with the BLE spec.
 
