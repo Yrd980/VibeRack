@@ -1,12 +1,14 @@
 package com.viberack.app.feature.printer
 
 import android.graphics.Bitmap
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewModelScope
 import com.viberack.app.core.AppContainer
+import com.viberack.app.R
 import com.viberack.app.core.ble.printer.BoxLayerLabel
 import com.viberack.app.core.ble.printer.BoxLayerLabelRenderer
 import com.viberack.app.core.ble.printer.P0BlePrinter
@@ -30,7 +32,8 @@ data class PrinterUiState(
 )
 
 class PrinterViewModel(
-    private val printerClient: P0BlePrinterClient
+    private val printerClient: P0BlePrinterClient,
+    private val appContext: Context
 ) : ViewModel() {
     private val labelState = MutableStateFlow(PrinterUiState())
 
@@ -86,8 +89,8 @@ class PrinterViewModel(
     private fun renderPrintImage(): Bitmap? {
         val label = BoxLayerLabel(labelState.value.positionCode, labelState.value.partNumber)
         val error = when {
-            label.positionCode.isEmpty() -> "请填写位置。"
-            label.partNumber.isEmpty() -> "请填写立创料号。"
+            label.positionCode.isEmpty() -> appContext.getString(R.string.printer_box_label_position_required)
+            label.partNumber.isEmpty() -> appContext.getString(R.string.printer_box_label_part_required)
             else -> null
         }
         if (error != null) {
@@ -100,7 +103,10 @@ class PrinterViewModel(
     companion object {
         fun factory(appContainer: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                PrinterViewModel(appContainer.p0BlePrinterClient)
+                PrinterViewModel(
+                    printerClient = appContainer.p0BlePrinterClient,
+                    appContext = appContainer.appContext
+                )
             }
         }
     }

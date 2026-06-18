@@ -49,9 +49,32 @@ data class P0BlePrinterState(
     val isScanning: Boolean = false,
     val isConnected: Boolean = false,
     val isPrinting: Boolean = false,
-    val statusMessage: String = "未连接",
+    val status: P0PrinterStatus = P0PrinterStatus.Idle,
     val connectedName: String? = null
 )
+
+sealed interface P0PrinterStatus {
+    data object Idle : P0PrinterStatus
+    data object Disconnected : P0PrinterStatus
+    data object BluetoothUnsupported : P0PrinterStatus
+    data object PermissionRequired : P0PrinterStatus
+    data object BluetoothDisabled : P0PrinterStatus
+    data object Scanning : P0PrinterStatus
+    data object NoMatchingDevices : P0PrinterStatus
+    data object DiscoverServicesFailed : P0PrinterStatus
+    data object ServiceMissing : P0PrinterStatus
+    data object SendFailed : P0PrinterStatus
+    data object PrintInProgress : P0PrinterStatus
+    data object PrintSuccess : P0PrinterStatus
+    data class FoundDevice(val name: String) : P0PrinterStatus
+    data class FoundCount(val count: Int) : P0PrinterStatus
+    data class ScanFailed(val code: Int) : P0PrinterStatus
+    data class ConnectFailed(val code: Int) : P0PrinterStatus
+    data class Connected(val name: String) : P0PrinterStatus
+    data class Connecting(val name: String) : P0PrinterStatus
+    data class SendFailedCode(val code: Int) : P0PrinterStatus
+    data class SendProgress(val current: Int, val total: Int) : P0PrinterStatus
+}
 
 @SuppressLint("MissingPermission")
 class P0BlePrinterClient(
@@ -74,8 +97,12 @@ class P0BlePrinterClient(
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val name = result.scanRecord?.deviceName ?: result.device.name ?: "未知 P0"
-            if (!isP0Printer(name)) return
+            val advertisedName = result.scanRecord?.deviceName ?: result.device.name
+            val hasP0Service = result.scanRecord?.serviceUuids?.any {
+                it.uuid == P0BlePrinterUuids.advertisedService
+            } == true
+            if (advertisedName?.let(::isP0Printer) != true && !hasP0Service) return
+            val name = advertisedName ?: "P0"
             val printer = P0BlePrinter(
                 address = result.device.address.uppercase(Locale.ROOT),
                 name = name,
@@ -85,50 +112,64 @@ class P0BlePrinterClient(
                 current.copy(
                     printers = (current.printers.filterNot { it.address == printer.address } + printer)
                         .sortedByDescending { it.rssi },
-                    statusMessage = "发现 ${printer.name}"
+                    status = P0PrinterStatus.FoundDevice(printer.name)
                 )
             }
         }
 
         override fun onScanFailed(errorCode: Int) {
-            _state.update { it.copy(isScanning = false, statusMessage = "扫描失败：$errorCode") }
+            _state.update {
+                it.copy(
+                    isScanning = false,
+                    status = P0PrinterStatus.ScanFailed(errorCode)
+                )
+            }
         }
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                pendingConnect?.complete(Result.failure(IllegalStateException("连接失败：$status")))
+                pendingConnect?.complete(
+                    Result.failure(IllegalStateException("connect failed: $status"))
+                )
                 close()
                 return
             }
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     if (!gatt.requestMtu(64) && !gatt.discoverServices()) {
-                        pendingConnect?.complete(Result.failure(IllegalStateException("发现服务启动失败")))
+                        pendingConnect?.complete(
+                            Result.failure(IllegalStateException("service discovery failed"))
+                        )
                     }
                 }
 
-                BluetoothProfile.STATE_DISCONNECTED -> close("已断开")
+                BluetoothProfile.STATE_DISCONNECTED -> close(P0PrinterStatus.Disconnected)
             }
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
             if (!gatt.discoverServices()) {
-                pendingConnect?.complete(Result.failure(IllegalStateException("发现服务启动失败")))
+                pendingConnect?.complete(
+                    Result.failure(IllegalStateException("service discovery failed"))
+                )
             }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS || !resolveCharacteristics(gatt.services)) {
-                pendingConnect?.complete(Result.failure(IllegalStateException("未找到 P0 打印服务")))
+                pendingConnect?.complete(
+                    Result.failure(IllegalStateException("P0 service missing"))
+                )
                 return
             }
             _state.update {
+                val name = gatt.device.name ?: gatt.device.address
                 it.copy(
                     isConnected = true,
-                    statusMessage = "已连接 ${gatt.device.name ?: gatt.device.address}",
-                    connectedName = gatt.device.name ?: gatt.device.address
+                    status = P0PrinterStatus.Connected(name),
+                    connectedName = name
                 )
             }
             pendingConnect?.complete(Result.success(Unit))
@@ -144,7 +185,7 @@ class P0BlePrinterClient(
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     Result.success(Unit)
                 } else {
-                    Result.failure(IllegalStateException("发送失败：$status"))
+                    Result.failure(IllegalStateException("send failed: $status"))
                 }
             )
             pendingWrite = null
@@ -154,20 +195,26 @@ class P0BlePrinterClient(
     fun scan(durationMs: Long = 8_000L) {
         val adapter = bluetoothAdapter
         if (adapter == null) {
-            _state.value = P0BlePrinterState(statusMessage = "当前设备不支持蓝牙")
+            _state.value = P0BlePrinterState(status = P0PrinterStatus.BluetoothUnsupported)
             return
         }
         if (!hasBluetoothPermission()) {
-            _state.update { it.copy(statusMessage = "需要蓝牙权限") }
+            _state.update { it.copy(status = P0PrinterStatus.PermissionRequired) }
             return
         }
         if (!adapter.isEnabled) {
-            _state.update { it.copy(statusMessage = "蓝牙未开启") }
+            _state.update { it.copy(status = P0PrinterStatus.BluetoothDisabled) }
             return
         }
         val scanner = adapter.bluetoothLeScanner ?: return
         scanner.stopScan(scanCallback)
-        _state.update { it.copy(printers = emptyList(), isScanning = true, statusMessage = "正在扫描 P0 打印机...") }
+        _state.update {
+            it.copy(
+                printers = emptyList(),
+                isScanning = true,
+                status = P0PrinterStatus.Scanning
+            )
+        }
         scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback)
         scope.launch {
             delay(durationMs)
@@ -175,50 +222,63 @@ class P0BlePrinterClient(
             _state.update {
                 it.copy(
                     isScanning = false,
-                    statusMessage = if (it.printers.isEmpty()) "未发现 P0 打印机" else "发现 ${it.printers.size} 台 P0 打印机"
+                    status = if (it.printers.isEmpty()) {
+                        P0PrinterStatus.NoMatchingDevices
+                    } else {
+                        P0PrinterStatus.FoundCount(it.printers.size)
+                    }
                 )
             }
         }
     }
 
     suspend fun connect(printer: P0BlePrinter): Result<Unit> = mutex.withLock {
-        if (!hasBluetoothPermission()) return@withLock Result.failure(IllegalStateException("需要蓝牙权限"))
-        val adapter = bluetoothAdapter ?: return@withLock Result.failure(IllegalStateException("当前设备不支持蓝牙"))
+        if (!hasBluetoothPermission()) {
+            _state.update { it.copy(status = P0PrinterStatus.PermissionRequired) }
+            return@withLock Result.failure(IllegalStateException("permission required"))
+        }
+        val adapter = bluetoothAdapter
+            ?: return@withLock Result.failure(IllegalStateException("bluetooth unsupported"))
         val device = runCatching { adapter.getRemoteDevice(printer.address) }
-            .getOrElse { return@withLock Result.failure(IllegalStateException("无效蓝牙地址")) }
+            .getOrElse {
+                return@withLock Result.failure(IllegalStateException("invalid Bluetooth address"))
+            }
         close(null)
         val deferred = CompletableDeferred<Result<Unit>>()
         pendingConnect = deferred
-        _state.update { it.copy(statusMessage = "正在连接 ${printer.name}...") }
+        _state.update { it.copy(status = P0PrinterStatus.Connecting(printer.name)) }
         gatt = connectGatt(device)
         withTimeoutOrNull(15_000) { deferred.await() }
-            ?: Result.failure(IllegalStateException("连接超时"))
+            ?: Result.failure(IllegalStateException("connect timed out"))
     }
 
     suspend fun print(chunks: List<P0PrintChunk>): Result<Unit> = mutex.withLock {
-        val gattClient = gatt ?: return@withLock Result.failure(IllegalStateException("请先连接 P0 打印机"))
-        val characteristic = writeCharacteristic ?: return@withLock Result.failure(IllegalStateException("未找到 P0 写入特征"))
-        _state.update { it.copy(isPrinting = true, statusMessage = "正在发送标签...") }
+        val gattClient = gatt ?: return@withLock Result.failure(IllegalStateException("not connected"))
+        val characteristic = writeCharacteristic
+            ?: return@withLock Result.failure(IllegalStateException("write characteristic missing"))
+        _state.update { it.copy(isPrinting = true, status = P0PrinterStatus.PrintInProgress) }
         for ((index, chunk) in chunks.withIndex()) {
             pendingWrite = CompletableDeferred()
             if (!write(gattClient, characteristic, chunk.bytes)) {
-                _state.update { it.copy(isPrinting = false, statusMessage = "发送失败") }
-                return@withLock Result.failure(IllegalStateException("发送失败"))
+                _state.update { it.copy(isPrinting = false, status = P0PrinterStatus.SendFailed) }
+                return@withLock Result.failure(IllegalStateException("send failed"))
             }
             val result = withTimeoutOrNull(5_000) { pendingWrite?.await() }
-                ?: Result.failure(IllegalStateException("发送超时"))
+                ?: Result.failure(IllegalStateException("send timed out"))
             if (result.isFailure) {
-                _state.update { it.copy(isPrinting = false, statusMessage = result.exceptionOrNull()?.message ?: "发送失败") }
+                _state.update { it.copy(isPrinting = false, status = P0PrinterStatus.SendFailed) }
                 return@withLock result
             }
-            _state.update { it.copy(statusMessage = "正在发送标签 ${index + 1}/${chunks.size}") }
+            _state.update {
+                it.copy(status = P0PrinterStatus.SendProgress(index + 1, chunks.size))
+            }
             if (chunk.delayAfterMilliseconds > 0) delay(chunk.delayAfterMilliseconds)
         }
-        _state.update { it.copy(isPrinting = false, statusMessage = "标签已发送") }
+        _state.update { it.copy(isPrinting = false, status = P0PrinterStatus.PrintSuccess) }
         Result.success(Unit)
     }
 
-    fun disconnect() = close("已断开")
+    fun disconnect() = close(P0PrinterStatus.Disconnected)
 
     private fun connectGatt(device: BluetoothDevice): BluetoothGatt {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -251,15 +311,15 @@ class P0BlePrinterClient(
         }
     }
 
-    private fun close(message: String? = null) {
+    private fun close(status: P0PrinterStatus? = null) {
         runCatching { gatt?.close() }
         gatt = null
         writeCharacteristic = null
         pendingConnect = null
         pendingWrite = null
-        if (message != null) {
+        if (status != null) {
             _state.update {
-                it.copy(isConnected = false, isPrinting = false, connectedName = null, statusMessage = message)
+                it.copy(isConnected = false, isPrinting = false, connectedName = null, status = status)
             }
         }
     }

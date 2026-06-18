@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -136,7 +138,14 @@ fun VibeRackApp() {
                                 contentDescription = stringResource(destination.labelRes)
                             )
                         },
-                        label = { Text(text = stringResource(destination.labelRes)) }
+                        label = {
+                            Text(
+                                text = stringResource(destination.labelRes),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 11.sp
+                            )
+                        }
                     )
                 }
             }

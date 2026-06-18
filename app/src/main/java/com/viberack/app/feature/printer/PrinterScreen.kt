@@ -13,6 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -50,6 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.viberack.app.R
 import com.viberack.app.VibeRackApplication
 import com.viberack.app.core.ble.printer.P0BlePrinter
+import com.viberack.app.core.ble.printer.P0PrinterStatus
 
 @Composable
 fun PrinterRoute(modifier: Modifier = Modifier) {
@@ -82,6 +85,7 @@ fun PrinterRoute(modifier: Modifier = Modifier) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun PrinterScreen(
     uiState: PrinterUiState,
     hasBluetoothPermission: Boolean,
@@ -109,7 +113,10 @@ private fun PrinterScreen(
         }
 
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -138,7 +145,7 @@ private fun PrinterScreen(
         }
 
         item {
-            Card {
+            Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -174,7 +181,7 @@ private fun PrinterScreen(
         }
 
         item {
-            Card {
+            Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -184,8 +191,11 @@ private fun PrinterScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text(uiState.printerState.statusMessage)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(printerStatusText(uiState.printerState.status))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         if (!hasBluetoothPermission) {
                             Button(onClick = onRequestBluetoothPermission) {
                                 Text(stringResource(R.string.printer_request_permission))
@@ -248,8 +258,41 @@ private fun PrinterDeviceRow(
                 Text(printer.name, fontWeight = FontWeight.SemiBold)
                 Text(printer.address, style = MaterialTheme.typography.bodySmall)
             }
-            Text("${printer.rssi} dBm", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = stringResource(R.string.printer_device_rssi, printer.rssi),
+                style = MaterialTheme.typography.bodySmall
+            )
         }
+    }
+}
+
+@Composable
+private fun printerStatusText(status: P0PrinterStatus): String {
+    return when (status) {
+        P0PrinterStatus.Idle -> stringResource(R.string.printer_status_idle)
+        P0PrinterStatus.Disconnected -> stringResource(R.string.printer_status_disconnected)
+        P0PrinterStatus.BluetoothUnsupported -> stringResource(R.string.printer_bluetooth_not_supported)
+        P0PrinterStatus.PermissionRequired -> stringResource(R.string.printer_permission_required)
+        P0PrinterStatus.BluetoothDisabled -> stringResource(R.string.printer_bluetooth_disabled)
+        P0PrinterStatus.Scanning -> stringResource(R.string.printer_scan_in_progress)
+        P0PrinterStatus.NoMatchingDevices -> stringResource(R.string.printer_no_matching_devices)
+        P0PrinterStatus.DiscoverServicesFailed -> stringResource(R.string.printer_discover_services_failed)
+        P0PrinterStatus.ServiceMissing -> stringResource(R.string.printer_p0_service_missing)
+        P0PrinterStatus.SendFailed -> stringResource(R.string.printer_send_failed)
+        P0PrinterStatus.PrintInProgress -> stringResource(R.string.printer_print_in_progress)
+        P0PrinterStatus.PrintSuccess -> stringResource(R.string.printer_print_success)
+        is P0PrinterStatus.FoundDevice -> stringResource(R.string.printer_status_found_device, status.name)
+        is P0PrinterStatus.FoundCount -> stringResource(R.string.printer_status_found_count, status.count)
+        is P0PrinterStatus.ScanFailed -> stringResource(R.string.printer_scan_failed_with_code, status.code)
+        is P0PrinterStatus.ConnectFailed -> stringResource(R.string.printer_connect_failed_with_code, status.code)
+        is P0PrinterStatus.Connected -> stringResource(R.string.printer_status_connected, status.name)
+        is P0PrinterStatus.Connecting -> stringResource(R.string.printer_status_connecting, status.name)
+        is P0PrinterStatus.SendFailedCode -> stringResource(R.string.printer_send_failed_with_code, status.code)
+        is P0PrinterStatus.SendProgress -> stringResource(
+            R.string.printer_send_progress,
+            status.current,
+            status.total
+        )
     }
 }
 
