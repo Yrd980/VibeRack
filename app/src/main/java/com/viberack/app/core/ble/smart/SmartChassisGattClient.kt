@@ -42,6 +42,7 @@ class SmartChassisGattClient(
     private var tableInfoCharacteristic: BluetoothGattCharacteristic? = null
     private var lightCommand: BluetoothGattCharacteristic? = null
     private var lightStatus: BluetoothGattCharacteristic? = null
+    private var deviceHealth: BluetoothGattCharacteristic? = null
     private var connectedDevice: SmartChassisDevice? = null
     private var pendingIdentity: SmartChassisDevice? = null
 
@@ -50,6 +51,7 @@ class SmartChassisGattClient(
     private var pendingReadAll: PendingReadAll? = null
     private var pendingTableInfoRead: CompletableDeferred<SmartChassisClientResult<SmartChassisTableInfo>>? = null
     private var pendingLightStatusRead: CompletableDeferred<SmartChassisClientResult<SmartChassisLightStatus>>? = null
+    private var pendingDeviceHealthRead: CompletableDeferred<SmartChassisClientResult<SmartChassisDeviceHealth>>? = null
     private val pendingDescriptors = ArrayDeque<BluetoothGattDescriptor>()
     private var pendingDescriptorSetup: CompletableDeferred<Boolean>? = null
     private var bondReceiver: BroadcastReceiver? = null
@@ -459,14 +461,17 @@ class SmartChassisGattClient(
     private fun resolveCharacteristics(services: List<BluetoothGattService>): Boolean {
         val bindingService = services.firstOrNull { it.uuid == SmartChassisUuids.bindingService }
         val lightService = services.firstOrNull { it.uuid == SmartChassisUuids.lightService }
+        val deviceHealthService = services.firstOrNull { it.uuid == SmartChassisUuids.deviceHealthService }
         bindingControlPoint = bindingService?.getCharacteristic(SmartChassisUuids.bindingControlPoint)
         tableInfoCharacteristic = bindingService?.getCharacteristic(SmartChassisUuids.tableInfo)
         lightCommand = lightService?.getCharacteristic(SmartChassisUuids.lightCommand)
         lightStatus = lightService?.getCharacteristic(SmartChassisUuids.lightStatus)
+        deviceHealth = deviceHealthService?.getCharacteristic(SmartChassisUuids.deviceHealth)
         return bindingControlPoint != null &&
             tableInfoCharacteristic != null &&
             lightCommand != null &&
-            lightStatus != null
+            lightStatus != null &&
+            deviceHealth != null
     }
 
     private fun queueNotificationDescriptor(characteristic: BluetoothGattCharacteristic?) {
@@ -543,6 +548,21 @@ class SmartChassisGattClient(
                     SmartChassisClientResult.Failure("Invalid Light Status payload")
                 }
             )
+        } else if (uuid == SmartChassisUuids.deviceHealth) {
+            val deferred = pendingDeviceHealthRead ?: return
+            pendingDeviceHealthRead = null
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                deferred.complete(SmartChassisClientResult.Failure("Device Health read failed: $status"))
+                return
+            }
+            val parsed = SmartChassisCodec.parseDeviceHealth(value)
+            deferred.complete(
+                if (parsed != null) {
+                    SmartChassisClientResult.Success(parsed)
+                } else {
+                    SmartChassisClientResult.Failure("Invalid Device Health payload")
+                }
+            )
         }
     }
 
@@ -572,6 +592,21 @@ class SmartChassisGattClient(
             return SmartChassisClientResult.Failure("Light Status read failed to start")
         }
         return withBleTimeout("Light Status read timed out") { deferred.await() }
+    }
+
+    override suspend fun readDeviceHealth(): SmartChassisClientResult<SmartChassisDeviceHealth> {
+        return operationMutex.withLock {
+            val characteristic = deviceHealth
+                ?: return@withLock SmartChassisClientResult.Failure("Device Health characteristic is unavailable")
+            val gattClient = gatt ?: return@withLock SmartChassisClientResult.Failure("smart chassis is not connected")
+            val deferred = CompletableDeferred<SmartChassisClientResult<SmartChassisDeviceHealth>>()
+            pendingDeviceHealthRead = deferred
+            if (!gattClient.readCharacteristic(characteristic)) {
+                pendingDeviceHealthRead = null
+                return@withLock SmartChassisClientResult.Failure("Device Health read failed to start")
+            }
+            withBleTimeout("Device Health read timed out") { deferred.await() }
+        }
     }
 
     private fun completeConnectWhenBonded() {
@@ -681,6 +716,8 @@ class SmartChassisGattClient(
         pendingTableInfoRead = null
         pendingLightStatusRead?.complete(SmartChassisClientResult.Failure(message))
         pendingLightStatusRead = null
+        pendingDeviceHealthRead?.complete(SmartChassisClientResult.Failure(message))
+        pendingDeviceHealthRead = null
     }
 
     private fun closeGatt() {
@@ -692,6 +729,7 @@ class SmartChassisGattClient(
         tableInfoCharacteristic = null
         lightCommand = null
         lightStatus = null
+        deviceHealth = null
         connectedDevice = null
         pendingIdentity = null
         _tableInfoUpdates.value = null

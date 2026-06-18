@@ -122,6 +122,16 @@ class FakeSmartChassisClient(
         }
     }
 
+    override suspend fun readDeviceHealth(): SmartChassisClientResult<SmartChassisDeviceHealth> {
+        return connectedResult {
+            SmartChassisDeviceHealth(
+                batteryPct = 100,
+                resetReason = 0x0002,
+                healthFlags = 0
+            )
+        }
+    }
+
     override suspend fun writeOne(record: SmartChassisSlotRecord): SmartChassisClientResult<SmartChassisTableInfo> {
         return connectedBindingResult(SmartChassisBindingOp.WRITE_ONE) {
             if (!isValidWritableRecord(record)) {

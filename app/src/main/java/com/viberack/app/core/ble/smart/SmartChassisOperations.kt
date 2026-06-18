@@ -98,7 +98,10 @@ class SmartChassisOperations(
             return null
         }
         val normalizedPartId = protocolPartIdStrategy.normalize(protocolPartId)
-        if (normalizedPartId == null || !connectIfNeeded(macAddress)) {
+        if (normalizedPartId == null ||
+            !connectIfNeeded(macAddress) ||
+            !ensureFreshTableInfo(container)
+        ) {
             return null
         }
         return manager.writeOne(
@@ -118,7 +121,7 @@ class SmartChassisOperations(
 
     suspend fun clearSlot(container: StockContainer, slotNumber: Int): SmartChassisTableInfo? {
         val macAddress = container.validSmartChassisMacAddress() ?: return null
-        if (!isValidSlot(slotNumber) || !connectIfNeeded(macAddress)) {
+        if (!isValidSlot(slotNumber) || !connectIfNeeded(macAddress) || !ensureFreshTableInfo(container)) {
             return null
         }
         return manager.clearOne(slotNumber)
@@ -126,7 +129,11 @@ class SmartChassisOperations(
 
     suspend fun setSlotQuantity(container: StockContainer, slotNumber: Int, quantity: Int): SmartChassisTableInfo? {
         val macAddress = container.validSmartChassisMacAddress() ?: return null
-        if (!isValidSlot(slotNumber) || quantity !in 0..0xFFFF || !connectIfNeeded(macAddress)) {
+        if (!isValidSlot(slotNumber) ||
+            quantity !in 0..0xFFFF ||
+            !connectIfNeeded(macAddress) ||
+            !ensureFreshTableInfo(container)
+        ) {
             return null
         }
         return manager.setQuantity(slotNumber, quantity)
@@ -143,7 +150,8 @@ class SmartChassisOperations(
         if (!isValidSlot(slotNumber) ||
             quantity !in 0..0xFFFF ||
             normalizedPartId == null ||
-            !connectIfNeeded(macAddress)
+            !connectIfNeeded(macAddress) ||
+            !ensureFreshTableInfo(container)
         ) {
             return null
         }
@@ -165,7 +173,7 @@ class SmartChassisOperations(
 
     suspend fun removeSlot(container: StockContainer, slotNumber: Int): SmartChassisTableInfo? {
         val macAddress = container.validSmartChassisMacAddress() ?: return null
-        if (!isValidSlot(slotNumber) || !connectIfNeeded(macAddress)) {
+        if (!isValidSlot(slotNumber) || !connectIfNeeded(macAddress) || !ensureFreshTableInfo(container)) {
             return null
         }
         return manager.removeAt(slotNumber)
@@ -178,15 +186,23 @@ class SmartChassisOperations(
         length: Int
     ): SmartChassisTableInfo? {
         val macAddress = container.validSmartChassisMacAddress() ?: return null
-        if (!isValidBlock(fromSlotNumber, toSlotNumber, length) || !connectIfNeeded(macAddress)) {
+        if (!isValidBlock(fromSlotNumber, toSlotNumber, length) ||
+            !connectIfNeeded(macAddress) ||
+            !ensureFreshTableInfo(container)
+        ) {
             return null
         }
         return manager.moveBlock(fromSlotNumber, toSlotNumber, length)
     }
 
     suspend fun findSlot(macAddress: String, slotNumber: Int): Boolean {
+        val normalizedMac = macAddress.normalizeMacAddress()
+        val container = containerRepository.findContainerByMacAddress(normalizedMac) ?: return false
+        if (!connectIfNeeded(normalizedMac) || !ensureFreshTableInfo(container)) {
+            return false
+        }
         return lightSingleSlot(
-            macAddress = macAddress,
+            macAddress = normalizedMac,
             slotNumber = slotNumber,
             mode = SmartChassisLightMode.FIND,
             color = RgbColor(red = 40, green = 180, blue = 255),
@@ -195,8 +211,13 @@ class SmartChassisOperations(
     }
 
     suspend fun guideStockInSlot(macAddress: String, slotNumber: Int): Boolean {
+        val normalizedMac = macAddress.normalizeMacAddress()
+        val container = containerRepository.findContainerByMacAddress(normalizedMac) ?: return false
+        if (!connectIfNeeded(normalizedMac) || !ensureFreshTableInfo(container)) {
+            return false
+        }
         return lightSingleSlot(
-            macAddress = macAddress,
+            macAddress = normalizedMac,
             slotNumber = slotNumber,
             mode = SmartChassisLightMode.STOCK_IN,
             color = RgbColor(red = 30, green = 220, blue = 100),
@@ -206,13 +227,17 @@ class SmartChassisOperations(
 
     suspend fun pickSlots(macAddress: String, slotNumbers: List<Int>): Boolean {
         val normalizedMac = macAddress.normalizeMacAddress()
+        val container = containerRepository.findContainerByMacAddress(normalizedMac) ?: return false
+        if (!connectIfNeeded(normalizedMac) || !ensureFreshTableInfo(container)) {
+            return false
+        }
         val mask = slotNumbers
             .distinct()
             .filter(::isValidSlot)
             .fold(0) { currentMask, slotNumber ->
                 currentMask or SmartChassisCodec.slotMask(slotNumber)
             }
-        if (mask == 0 || !connectIfNeeded(normalizedMac)) {
+        if (mask == 0) {
             return false
         }
         return manager.sendLightCommand(
@@ -269,6 +294,20 @@ class SmartChassisOperations(
             return true
         }
         return manager.connect(normalizedMac) != null
+    }
+
+    private suspend fun ensureFreshTableInfo(container: StockContainer): Boolean {
+        val expectedSeq = container.tableSeq
+        val expectedCrc = container.tableCrc16
+        if (expectedSeq == null || expectedCrc == null) {
+            return true
+        }
+        val actual = manager.refreshTableInfo() ?: return false
+        if (actual.tableSeq == expectedSeq && actual.crc16 == expectedCrc) {
+            return true
+        }
+        manager.reportLocalError("绑定表已变化，请先读取硬件绑定表刷新缓存")
+        return false
     }
 
     private fun StockContainer.validSmartChassisMacAddress(): String? {

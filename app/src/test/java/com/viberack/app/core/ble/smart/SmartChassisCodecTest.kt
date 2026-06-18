@@ -98,6 +98,17 @@ class SmartChassisCodecTest {
     }
 
     @Test
+    fun parsesDeviceHealth() {
+        val health = SmartChassisCodec.parseDeviceHealth(byteArrayOf(100, 0x02, 0x00, 0x00))
+
+        assertNotNull(health)
+        assertEquals(100, health!!.batteryPct)
+        assertEquals(0x0002, health.resetReason)
+        assertEquals(0x00, health.healthFlags)
+        assertNull(SmartChassisCodec.parseDeviceHealth(byteArrayOf(1, 2, 3)))
+    }
+
+    @Test
     fun encodesSeventeenByteLightCommand() {
         val command = SmartChassisLightCommand(
             mode = SmartChassisLightMode.SORT,

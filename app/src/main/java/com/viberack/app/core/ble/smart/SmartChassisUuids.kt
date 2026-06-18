@@ -9,4 +9,6 @@ object SmartChassisUuids {
     val lightService: UUID = UUID.fromString("7f4b0002-8d1a-4d45-9a4e-2b4a7c000000")
     val lightCommand: UUID = UUID.fromString("7f4b2001-8d1a-4d45-9a4e-2b4a7c000000")
     val lightStatus: UUID = UUID.fromString("7f4b2002-8d1a-4d45-9a4e-2b4a7c000000")
+    val deviceHealthService: UUID = UUID.fromString("7f4b0003-8d1a-4d45-9a4e-2b4a7c000000")
+    val deviceHealth: UUID = UUID.fromString("7f4b3001-8d1a-4d45-9a4e-2b4a7c000000")
 }

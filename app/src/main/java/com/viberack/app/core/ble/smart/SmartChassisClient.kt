@@ -14,6 +14,7 @@ interface SmartChassisClient {
     suspend fun readTableInfo(): SmartChassisClientResult<SmartChassisTableInfo>
     suspend fun readOne(slot: Int): SmartChassisClientResult<SmartChassisSlotRecord>
     suspend fun readAll(): SmartChassisClientResult<SmartChassisTableSnapshot>
+    suspend fun readDeviceHealth(): SmartChassisClientResult<SmartChassisDeviceHealth>
     suspend fun writeOne(record: SmartChassisSlotRecord): SmartChassisClientResult<SmartChassisTableInfo>
     suspend fun clearOne(slot: Int): SmartChassisClientResult<SmartChassisTableInfo>
     suspend fun insertAt(slot: Int, record: SmartChassisSlotRecord): SmartChassisClientResult<SmartChassisTableInfo>

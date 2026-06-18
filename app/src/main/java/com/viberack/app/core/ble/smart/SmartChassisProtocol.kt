@@ -6,6 +6,7 @@ object SmartChassisProtocol {
     const val SLOT_RECORD_SIZE: Int = 16
     const val LIGHT_COMMAND_SIZE: Int = 17
     const val TABLE_INFO_SIZE: Int = 7
+    const val DEVICE_HEALTH_SIZE: Int = 4
     const val READ_ALL_END_MARKER: Int = 0xFF
     const val DEV_COMPANY_ID: Int = 0xFFFF
     const val FACTORY_RESET_MAGIC: Long = 0x5A5AA5A5L

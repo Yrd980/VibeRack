@@ -55,6 +55,12 @@ data class SmartChassisLightStatus(
     val remainingSeconds: Int
 )
 
+data class SmartChassisDeviceHealth(
+    val batteryPct: Int,
+    val resetReason: Int,
+    val healthFlags: Int
+)
+
 data class RgbColor(
     val red: Int,
     val green: Int,

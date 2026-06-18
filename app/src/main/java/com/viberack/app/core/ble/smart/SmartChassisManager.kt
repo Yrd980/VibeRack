@@ -95,6 +95,19 @@ class SmartChassisManager(
         }
     }
 
+    suspend fun readDeviceHealth(): SmartChassisDeviceHealth? {
+        return when (val result = client.readDeviceHealth()) {
+            is SmartChassisClientResult.Success -> {
+                clearError()
+                result.value
+            }
+            is SmartChassisClientResult.Failure -> {
+                recordError(result)
+                null
+            }
+        }
+    }
+
     suspend fun writeOne(record: SmartChassisSlotRecord): SmartChassisTableInfo? {
         return updateTableInfo(client.writeOne(record))
     }
@@ -130,6 +143,14 @@ class SmartChassisManager(
                 null
             }
         }
+    }
+
+    fun reportLocalError(message: String) {
+        _lastOperationError.value = SmartChassisOperationError(
+            op = null,
+            status = null,
+            message = message
+        )
     }
 
     private fun updateTableInfo(

@@ -235,6 +235,17 @@ object SmartChassisCodec {
         )
     }
 
+    fun parseDeviceHealth(bytes: ByteArray): SmartChassisDeviceHealth? {
+        if (bytes.size != SmartChassisProtocol.DEVICE_HEALTH_SIZE) {
+            return null
+        }
+        return SmartChassisDeviceHealth(
+            batteryPct = bytes.u8(0),
+            resetReason = bytes.u16Le(1),
+            healthFlags = bytes.u8(3)
+        )
+    }
+
     fun slotMask(slot: Int): Int {
         return if (slot in 1..SmartChassisProtocol.SLOT_COUNT) {
             1 shl (slot - 1)

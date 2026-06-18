@@ -74,6 +74,18 @@ class FakeSmartChassisClientTest {
         assertEquals(SmartChassisProtocol.DEFAULT_LIGHT_TIMEOUT_SECONDS, lightStatus.remainingSeconds)
     }
 
+    @Test
+    fun readsDeviceHealth() = runBlocking {
+        val client = FakeSmartChassisClient()
+        client.connect("FA:KE:00:00:00:01")
+
+        val health = (client.readDeviceHealth() as SmartChassisClientResult.Success).value
+
+        assertEquals(100, health.batteryPct)
+        assertEquals(0x0002, health.resetReason)
+        assertEquals(0, health.healthFlags)
+    }
+
     private suspend fun occupiedPartIds(client: FakeSmartChassisClient): List<String> {
         val snapshot = (client.readAll() as SmartChassisClientResult.Success).value
         return snapshot.records.filterNot { it.isEmpty }.map { it.partId }
