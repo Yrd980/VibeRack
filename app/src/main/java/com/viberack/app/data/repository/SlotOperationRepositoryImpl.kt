@@ -39,18 +39,14 @@ class SlotOperationRepositoryImpl(
         val preflight = resolveSmartChassisPreflight(write.containerId, write.slotNumber)
         val hardwareResult = if (preflight != null) {
             val component = upsertComponent(write.component, write.sourceType)
-            val tableInfo = smartChassisOperations?.writeSlot(
-                container = preflight.context.container,
-                slotNumber = write.slotNumber,
-                protocolPartId = component.protocolPartId ?: component.partNumber,
-                quantity = write.quantity
-            ) ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
-            HardwareCommit(
-                tableSeqBefore = preflight.context.container.tableSeq,
-                tableInfo = tableInfo,
-                bleOpcode = SmartChassisBindingOp.WRITE_ONE.code,
-                bleStatus = SmartChassisBindingStatus.OK.code
-            )
+            commitHardware(preflight, SmartChassisBindingOp.WRITE_ONE) {
+                writeSlot(
+                    container = preflight.context.container,
+                    slotNumber = write.slotNumber,
+                    protocolPartId = component.protocolPartId ?: component.partNumber,
+                    quantity = write.quantity
+                )
+            } ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
         } else {
             null
         }
@@ -84,14 +80,9 @@ class SlotOperationRepositoryImpl(
             if (!preflight.context.supportsSingleSlotWrite()) {
                 return SlotOperationResult(false, ERROR_UNSUPPORTED_OPERATION)
             }
-            val tableInfo = smartChassisOperations?.clearSlot(preflight.context.container, slotNumber)
-                ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
-            HardwareCommit(
-                tableSeqBefore = preflight.context.container.tableSeq,
-                tableInfo = tableInfo,
-                bleOpcode = SmartChassisBindingOp.CLEAR_ONE.code,
-                bleStatus = SmartChassisBindingStatus.OK.code
-            )
+            commitHardware(preflight, SmartChassisBindingOp.CLEAR_ONE) {
+                clearSlot(preflight.context.container, slotNumber)
+            } ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
         } else {
             null
         }
@@ -135,18 +126,14 @@ class SlotOperationRepositoryImpl(
                     return SlotOperationResult(false, ERROR_CONTAINER_FULL)
                 }
                 val component = upsertComponent(write.component, write.sourceType)
-                val tableInfo = smartChassisOperations?.insertSlot(
-                    container = preflight.context.container,
-                    slotNumber = write.slotNumber,
-                    protocolPartId = component.protocolPartId ?: component.partNumber,
-                    quantity = write.quantity
-                ) ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
-                HardwareCommit(
-                    tableSeqBefore = preflight.context.container.tableSeq,
-                    tableInfo = tableInfo,
-                    bleOpcode = SmartChassisBindingOp.INSERT_AT.code,
-                    bleStatus = SmartChassisBindingStatus.OK.code
-                )
+                commitHardware(preflight, SmartChassisBindingOp.INSERT_AT) {
+                    insertSlot(
+                        container = preflight.context.container,
+                        slotNumber = write.slotNumber,
+                        protocolPartId = component.protocolPartId ?: component.partNumber,
+                        quantity = write.quantity
+                    )
+                } ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
             }
         } else {
             null
@@ -189,14 +176,9 @@ class SlotOperationRepositoryImpl(
     override suspend fun removeAt(containerId: Long, slotNumber: Int): SlotOperationResult {
         val preflight = resolveSmartChassisPreflight(containerId, slotNumber)
         val hardwareResult = if (preflight != null) {
-            val tableInfo = smartChassisOperations?.removeSlot(preflight.context.container, slotNumber)
-                ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
-            HardwareCommit(
-                tableSeqBefore = preflight.context.container.tableSeq,
-                tableInfo = tableInfo,
-                bleOpcode = SmartChassisBindingOp.REMOVE_AT.code,
-                bleStatus = SmartChassisBindingStatus.OK.code
-            )
+            commitHardware(preflight, SmartChassisBindingOp.REMOVE_AT) {
+                removeSlot(preflight.context.container, slotNumber)
+            } ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
         } else {
             null
         }
@@ -243,18 +225,14 @@ class SlotOperationRepositoryImpl(
             if (fromSlotNumber == toSlotNumber) {
                 return SlotOperationResult(true)
             }
-            val tableInfo = smartChassisOperations?.moveBlock(
-                container = preflight.context.container,
-                fromSlotNumber = fromSlotNumber,
-                toSlotNumber = toSlotNumber,
-                length = length
-            ) ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
-            HardwareCommit(
-                tableSeqBefore = preflight.context.container.tableSeq,
-                tableInfo = tableInfo,
-                bleOpcode = SmartChassisBindingOp.MOVE_BLOCK.code,
-                bleStatus = SmartChassisBindingStatus.OK.code
-            )
+            commitHardware(preflight, SmartChassisBindingOp.MOVE_BLOCK) {
+                moveBlock(
+                    container = preflight.context.container,
+                    fromSlotNumber = fromSlotNumber,
+                    toSlotNumber = toSlotNumber,
+                    length = length
+                )
+            } ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
         } else {
             null
         }
@@ -298,15 +276,9 @@ class SlotOperationRepositoryImpl(
         val hardwareResult = if (preflight != null) {
             val stock = stockPlacementRepository.findSlotStock(preflight.context.slot.slot.id)?.stockItem
                 ?: return SlotOperationResult(false, ERROR_EMPTY_SLOT)
-            val tableInfo = smartChassisOperations?.setSlotQuantity(preflight.context.container, slotNumber, quantity)
-                ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
-            HardwareCommit(
-                tableSeqBefore = preflight.context.container.tableSeq,
-                tableInfo = tableInfo,
-                bleOpcode = SmartChassisBindingOp.SET_QTY.code,
-                bleStatus = SmartChassisBindingStatus.OK.code,
-                quantityBefore = stock.quantity
-            )
+            commitHardware(preflight, SmartChassisBindingOp.SET_QTY, quantityBefore = stock.quantity) {
+                setSlotQuantity(preflight.context.container, slotNumber, quantity)
+            } ?: return SlotOperationResult(false, ERROR_SMART_CHASSIS_WRITE_FAILED)
         } else {
             null
         }
@@ -393,6 +365,22 @@ class SlotOperationRepositoryImpl(
             return null
         }
         return SmartChassisPreflight(context)
+    }
+
+    private suspend fun commitHardware(
+        preflight: SmartChassisPreflight,
+        op: SmartChassisBindingOp,
+        quantityBefore: Int? = null,
+        block: suspend SmartChassisOperations.() -> SmartChassisTableInfo?
+    ): HardwareCommit? {
+        val tableInfo = smartChassisOperations?.block() ?: return null
+        return HardwareCommit(
+            tableSeqBefore = preflight.context.container.tableSeq,
+            tableInfo = tableInfo,
+            bleOpcode = op.code,
+            bleStatus = SmartChassisBindingStatus.OK.code,
+            quantityBefore = quantityBefore
+        )
     }
 
     private suspend fun replaceSlotStock(
@@ -623,67 +611,11 @@ class SlotOperationRepositoryImpl(
     }
 
     private fun com.viberack.app.core.database.entity.ContainerEntity.toStockContainer(): StockContainer {
-        return StockContainer(
-            id = id,
-            code = code,
-            displayName = displayName,
-            type = type.toContainerType(),
-            slotCount = slotCount,
-            colorHex = colorHex,
-            sortMode = sortMode,
-            remark = remark,
-            createdAt = createdAt,
-            updatedAt = updatedAt,
-            macAddress = macAddress,
-            batchId = batchId,
-            protoVersion = protoVersion,
-            firmwareVersion = firmwareVersion,
-            hardwareVersion = hardwareVersion,
-            batteryPct = batteryPct,
-            statusFlags = statusFlags,
-            tableSeq = tableSeq,
-            tableCrc16 = tableCrc16,
-            lastSeenAt = lastSeenAt,
-            lastSyncedAt = lastSyncedAt
-        )
-    }
-
-    private fun String.toContainerType(): ContainerType {
-        return runCatching { ContainerType.valueOf(this) }
-            .getOrDefault(ContainerType.LEGACY_LOCATION)
+        return ContainerReadModels.stockContainer(this)
     }
 
     private fun ComponentEntity.toComponentDetail(): ComponentDetail {
-        return ComponentDetail(
-            partNumber = partNumber,
-            mpn = mpn,
-            name = name,
-            brand = brand,
-            packageName = packageName,
-            category = category,
-            description = description,
-            stockQuantity = null,
-            price = null,
-            productUrl = sourceUrl,
-            datasheetUrl = null,
-            imageLocalPath = imageLocalPath,
-            imageUrl = null,
-            specifications = parseSpecifications(specJson)
-        )
-    }
-
-    private fun parseSpecifications(specJson: String?): Map<String, String> {
-        if (specJson.isNullOrBlank()) {
-            return emptyMap()
-        }
-        return runCatching {
-            val json = JSONObject(specJson)
-            json.keys().asSequence().associateWith { key ->
-                json.optString(key)
-            }.filterValues { value ->
-                value.isNotBlank() && value != "null"
-            }
-        }.getOrDefault(emptyMap())
+        return ContainerReadModels.componentDetail(this)
     }
 
     private data class OperationContext(

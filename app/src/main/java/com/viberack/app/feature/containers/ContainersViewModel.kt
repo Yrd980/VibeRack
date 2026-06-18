@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.viberack.app.core.AppContainer
+import com.viberack.app.core.ble.smart.PhysicalGuidance
 import com.viberack.app.core.ble.smart.SmartChassisConnectionState
 import com.viberack.app.core.ble.smart.SmartChassisOperations
 import com.viberack.app.core.ble.smart.SmartChassisProtocol
@@ -36,6 +37,7 @@ class ContainersViewModel(
     private val containerRepository: ContainerRepository,
     private val slotOperationRepository: SlotOperationRepository,
     private val smartChassisOperations: SmartChassisOperations,
+    private val physicalGuidance: PhysicalGuidance,
     private val smartChassisScanner: SmartChassisScanner
 ) : ViewModel() {
     private val selectedContainerId = MutableStateFlow<Long?>(null)
@@ -206,13 +208,9 @@ class ContainersViewModel(
     }
 
     fun findSlot(container: StockContainer, slotNumber: Int) {
-        if (container.type != ContainerType.SMART_CHASSIS || slotNumber !in 1..25) {
-            return
-        }
-        val macAddress = container.macAddress ?: return
         viewModelScope.launch {
             message.value = null
-            if (smartChassisOperations.findSlot(macAddress, slotNumber)) {
+            if (physicalGuidance.findSlot(container, slotNumber)) {
                 activeLightSlot.value = slotNumber
                 message.value = "正在点亮槽位 $slotNumber"
             }
@@ -220,13 +218,9 @@ class ContainersViewModel(
     }
 
     fun stockInSlot(container: StockContainer, slotNumber: Int) {
-        if (container.type != ContainerType.SMART_CHASSIS || slotNumber !in 1..25) {
-            return
-        }
-        val macAddress = container.macAddress ?: return
         viewModelScope.launch {
             message.value = null
-            if (smartChassisOperations.guideStockInSlot(macAddress, slotNumber)) {
+            if (physicalGuidance.guideStockIn(container, slotNumber)) {
                 activeLightSlot.value = slotNumber
                 message.value = "槽位 $slotNumber 已进入入库引导"
             }
@@ -364,6 +358,7 @@ class ContainersViewModel(
                     containerRepository = appContainer.containerRepository,
                     slotOperationRepository = appContainer.slotOperationRepository,
                     smartChassisOperations = appContainer.smartChassisOperations,
+                    physicalGuidance = appContainer.physicalGuidance,
                     smartChassisScanner = appContainer.smartChassisScanner
                 )
             }

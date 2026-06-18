@@ -8,7 +8,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.viberack.app.R
 import com.viberack.app.core.AppContainer
-import com.viberack.app.core.ble.smart.SmartChassisOperations
+import com.viberack.app.core.ble.smart.GuidanceTarget
+import com.viberack.app.core.ble.smart.PhysicalGuidance
+import com.viberack.app.core.ble.smart.PickGroup
 import com.viberack.app.core.datastore.UserPreferencesRepository
 import com.viberack.app.domain.model.ComponentDetail
 import com.viberack.app.domain.model.ContainerType
@@ -35,7 +37,7 @@ class SearchViewModel(
     private val containerRepository: ContainerRepository,
     private val slotOperationRepository: SlotOperationRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val smartChassisOperations: SmartChassisOperations,
+    private val physicalGuidance: PhysicalGuidance,
     private val appContext: Context
 ) : ViewModel() {
     private data class BomBindingContext(
@@ -321,9 +323,9 @@ class SearchViewModel(
         viewModelScope.launch {
             isBomPickBusy.value = true
             bomPickMessage.value = null
-            val failedGroup = session.groups.firstOrNull { group ->
-                !sendPickMask(group)
-            }
+            val failedGroup = physicalGuidance.pickGroups(
+                session.groups.map { group -> PickGroup(group.macAddress, group.slots) }
+            )
             isBomPickBusy.value = false
             if (failedGroup == null) {
                 bomPickSession.value = session
@@ -333,8 +335,11 @@ class SearchViewModel(
                     session.groups.size
                 )
             } else {
-                bomPickMessage.value = smartChassisOperations.lastOperationError.value?.message
-                    ?: appContext.getString(R.string.search_bom_pick_failed, failedGroup.containerCode)
+                bomPickMessage.value = physicalGuidance.lastOperationError.value?.message
+                    ?: appContext.getString(
+                        R.string.search_bom_pick_failed,
+                        session.groups.firstOrNull { it.macAddress == failedGroup.macAddress }?.containerCode.orEmpty()
+                    )
             }
         }
     }
@@ -344,7 +349,7 @@ class SearchViewModel(
         viewModelScope.launch {
             isBomPickBusy.value = true
             session.groups.forEach { group ->
-                smartChassisOperations.lightsOff(group.macAddress)
+                physicalGuidance.lightsOff(group.macAddress)
             }
             bomPickSession.value = null
             bomPickMessage.value = appContext.getString(R.string.search_bom_pick_cancelled)
@@ -365,9 +370,9 @@ class SearchViewModel(
         viewModelScope.launch {
             isSmartSlotInboundBusy.value = true
             smartSlotInboundMessage.value = null
-            val lit = smartChassisOperations.guideStockInSlot(target.macAddress, target.slotNumber)
+            val lit = physicalGuidance.guideStockIn(GuidanceTarget(target.macAddress, target.slotNumber))
             if (!lit) {
-                val message = smartChassisOperations.lastOperationError.value?.message
+                val message = physicalGuidance.lastOperationError.value?.message
                     ?: appContext.getString(R.string.search_smart_slot_inbound_light_failed)
                 smartSlotInboundMessage.value = message
                 isSmartSlotInboundBusy.value = false
@@ -407,30 +412,21 @@ class SearchViewModel(
         record: SearchInventoryRecord,
         onCompleted: (String?) -> Unit
     ) {
-        val slotNumber = record.slotNumber ?: 0
-        val macAddress = record.containerMacAddress?.trim()?.uppercase(Locale.ROOT)
-        if (record.containerType != ContainerType.SMART_CHASSIS ||
-            macAddress.isNullOrBlank() ||
-            slotNumber !in 1..25
-        ) {
+        if (!record.canFindByLight) {
             onCompleted(appContext.getString(R.string.search_find_light_unavailable))
             return
         }
 
         viewModelScope.launch {
             onCompleted(
-                if (!smartChassisOperations.findSlot(macAddress, slotNumber)) {
-                    smartChassisOperations.lastOperationError.value?.message
+                if (!physicalGuidance.findRecord(record)) {
+                    physicalGuidance.lastOperationError.value?.message
                         ?: appContext.getString(R.string.search_find_light_failed)
                 } else {
                     null
                 }
             )
         }
-    }
-
-    private suspend fun sendPickMask(group: BomPickGroupUiModel): Boolean {
-        return smartChassisOperations.pickSlots(group.macAddress, group.slots)
     }
 
     companion object {
@@ -443,7 +439,7 @@ class SearchViewModel(
                     containerRepository = appContainer.containerRepository,
                     slotOperationRepository = appContainer.slotOperationRepository,
                     userPreferencesRepository = appContainer.userPreferencesRepository,
-                    smartChassisOperations = appContainer.smartChassisOperations,
+                    physicalGuidance = appContainer.physicalGuidance,
                     appContext = appContainer.appContext
                 )
             }

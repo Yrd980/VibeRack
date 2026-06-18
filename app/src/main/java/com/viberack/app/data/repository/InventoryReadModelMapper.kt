@@ -2,10 +2,8 @@ package com.viberack.app.data.repository
 
 import com.viberack.app.core.database.model.DashboardSummaryProjection
 import com.viberack.app.core.database.model.SearchInventoryProjection
-import com.viberack.app.domain.model.ContainerType
 import com.viberack.app.domain.model.DashboardSummary
 import com.viberack.app.domain.model.SearchInventoryRecord
-import org.json.JSONObject
 
 internal object InventoryReadModelMapper {
     fun toDashboardSummary(projection: DashboardSummaryProjection): DashboardSummary {
@@ -19,7 +17,7 @@ internal object InventoryReadModelMapper {
     }
 
     fun toSearchInventoryRecord(projection: SearchInventoryProjection): SearchInventoryRecord {
-        val containerType = projection.containerType.toContainerType()
+        val containerType = with(ContainerReadModels) { projection.containerType.toContainerType() }
         return SearchInventoryRecord(
             inventoryItemId = projection.inventoryItemId,
             stockItemId = projection.stockItemId,
@@ -32,7 +30,7 @@ internal object InventoryReadModelMapper {
             category = projection.category,
             description = projection.description,
             sourceUrl = projection.sourceUrl,
-            specifications = parseSpecifications(projection.specJson),
+            specifications = ContainerReadModels.parseSpecifications(projection.specJson),
             imageLocalPath = projection.imageLocalPath,
             quantity = projection.quantity,
             locationId = projection.locationId,
@@ -48,23 +46,6 @@ internal object InventoryReadModelMapper {
         )
     }
 
-    fun parseSpecifications(specJson: String?): Map<String, String> {
-        if (specJson.isNullOrBlank()) {
-            return emptyMap()
-        }
-
-        return runCatching {
-            val json = JSONObject(specJson)
-            json.keys().asSequence().associateWith { key ->
-                json.optString(key)
-            }.filterValues { value ->
-                value.isNotBlank() && value != "null"
-            }
-        }.getOrDefault(emptyMap())
-    }
-
-    private fun String.toContainerType(): ContainerType {
-        return runCatching { ContainerType.valueOf(this) }
-            .getOrDefault(ContainerType.LEGACY_LOCATION)
-    }
+    fun parseSpecifications(specJson: String?): Map<String, String> =
+        ContainerReadModels.parseSpecifications(specJson)
 }

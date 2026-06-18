@@ -6,9 +6,7 @@ import com.viberack.app.core.database.dao.StockOperationDao
 import com.viberack.app.core.database.entity.StockItemEntity
 import com.viberack.app.core.database.entity.StockOperationEntity
 import com.viberack.app.core.database.model.ContainerSlotStockProjection
-import com.viberack.app.domain.model.ContainerSlot
 import com.viberack.app.domain.model.ContainerSlotStock
-import com.viberack.app.domain.model.ContainerType
 import com.viberack.app.domain.model.QuantityState
 import com.viberack.app.domain.model.SlotStockItem
 import com.viberack.app.domain.model.StockOperation
@@ -16,7 +14,6 @@ import com.viberack.app.domain.repository.StockPlacementRepository
 import com.viberack.app.domain.repository.StockPlacementWrite
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import org.json.JSONObject
 
 class StockPlacementRepositoryImpl(
     private val containerDao: ContainerDao,
@@ -124,73 +121,10 @@ class StockPlacementRepositoryImpl(
     }
 
     private fun toContainerSlotStock(projection: ContainerSlotStockProjection): ContainerSlotStock {
-        val slot = ContainerSlot(
-            id = projection.slotId,
-            containerId = projection.containerId,
-            containerCode = projection.containerCode,
-            containerType = projection.containerType.toContainerType(),
-            slotNumber = projection.slotNumber,
-            slotCode = projection.slotCode,
-            displayName = projection.slotDisplayName,
-            sortOrder = projection.sortOrder
-        )
-        return ContainerSlotStock(
-            slot = slot,
-            stockItem = toSlotStockItem(projection)
-        )
+        return ContainerReadModels.containerSlotStock(projection)
     }
 
     private fun toSlotStockItem(projection: ContainerSlotStockProjection): SlotStockItem? {
-        val stockItemId = projection.stockItemId ?: return null
-        val componentId = projection.componentId ?: return null
-        val partNumber = projection.partNumber ?: return null
-        val quantity = projection.quantity ?: return null
-        return SlotStockItem(
-            id = stockItemId,
-            componentId = componentId,
-            containerId = projection.containerId,
-            slotId = projection.slotId,
-            slotNumber = projection.slotNumber,
-            partNumber = partNumber,
-            protocolPartId = projection.protocolPartId ?: partNumber,
-            quantity = quantity,
-            quantityState = projection.quantityState.toQuantityState(),
-            safetyStockThreshold = projection.safetyStockThreshold,
-            mpn = projection.mpn,
-            name = projection.name,
-            brand = projection.brand,
-            packageName = projection.packageName,
-            category = projection.category,
-            description = projection.description,
-            sourceUrl = projection.sourceUrl,
-            specifications = parseSpecifications(projection.specJson),
-            imageLocalPath = projection.imageLocalPath,
-            updatedAt = projection.updatedAt ?: 0
-        )
-    }
-
-    private fun String.toContainerType(): ContainerType {
-        return runCatching { ContainerType.valueOf(this) }
-            .getOrDefault(ContainerType.LEGACY_LOCATION)
-    }
-
-    private fun String?.toQuantityState(): QuantityState {
-        return this
-            ?.let { value -> runCatching { QuantityState.valueOf(value) }.getOrNull() }
-            ?: QuantityState.KNOWN
-    }
-
-    private fun parseSpecifications(specJson: String?): Map<String, String> {
-        if (specJson.isNullOrBlank()) {
-            return emptyMap()
-        }
-        return runCatching {
-            val json = JSONObject(specJson)
-            json.keys().asSequence().associateWith { key ->
-                json.optString(key)
-            }.filterValues { value ->
-                value.isNotBlank() && value != "null"
-            }
-        }.getOrDefault(emptyMap())
+        return ContainerReadModels.slotStockItem(projection)
     }
 }

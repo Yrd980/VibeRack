@@ -26,7 +26,6 @@ import com.viberack.app.domain.repository.StockPlacementWrite
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import org.json.JSONObject
 
 class ContainerRepositoryImpl(
     private val database: AppDatabase,
@@ -281,92 +280,19 @@ class ContainerRepositoryImpl(
     }
 
     private fun toStockContainer(projection: ContainerSummaryProjection): StockContainer {
-        return StockContainer(
-            id = projection.id,
-            code = projection.code,
-            displayName = projection.displayName,
-            type = projection.type.toContainerType(),
-            slotCount = projection.slotCount,
-            colorHex = projection.colorHex,
-            sortMode = projection.sortMode,
-            remark = projection.remark,
-            createdAt = projection.createdAt,
-            updatedAt = projection.updatedAt,
-            macAddress = projection.macAddress,
-            batchId = projection.batchId,
-            protoVersion = projection.protoVersion,
-            firmwareVersion = projection.firmwareVersion,
-            hardwareVersion = projection.hardwareVersion,
-            batteryPct = projection.batteryPct,
-            statusFlags = projection.statusFlags,
-            tableSeq = projection.tableSeq,
-            tableCrc16 = projection.tableCrc16,
-            lastSeenAt = projection.lastSeenAt,
-            lastSyncedAt = projection.lastSyncedAt
-        )
+        return ContainerReadModels.stockContainer(projection)
     }
 
     private fun toStockContainer(entity: ContainerEntity): StockContainer {
-        return StockContainer(
-            id = entity.id,
-            code = entity.code,
-            displayName = entity.displayName,
-            type = entity.type.toContainerType(),
-            slotCount = entity.slotCount,
-            colorHex = entity.colorHex,
-            sortMode = entity.sortMode,
-            remark = entity.remark,
-            createdAt = entity.createdAt,
-            updatedAt = entity.updatedAt,
-            macAddress = entity.macAddress,
-            batchId = entity.batchId,
-            protoVersion = entity.protoVersion,
-            firmwareVersion = entity.firmwareVersion,
-            hardwareVersion = entity.hardwareVersion,
-            batteryPct = entity.batteryPct,
-            statusFlags = entity.statusFlags,
-            tableSeq = entity.tableSeq,
-            tableCrc16 = entity.tableCrc16,
-            lastSeenAt = entity.lastSeenAt,
-            lastSyncedAt = entity.lastSyncedAt
-        )
+        return ContainerReadModels.stockContainer(entity)
     }
 
     private fun toContainerSlot(container: ContainerEntity, slot: ContainerSlotEntity): ContainerSlot {
-        return ContainerSlot(
-            id = slot.id,
-            containerId = slot.containerId,
-            containerCode = container.code,
-            containerType = container.type.toContainerType(),
-            slotNumber = slot.slotNumber,
-            slotCode = slot.slotCode,
-            displayName = slot.displayName,
-            sortOrder = slot.sortOrder
-        )
+        return ContainerReadModels.containerSlot(container, slot)
     }
 
     private fun toComponentDetail(entity: ComponentEntity): ComponentDetail {
-        return ComponentDetail(
-            partNumber = entity.partNumber,
-            mpn = entity.mpn,
-            name = entity.name,
-            brand = entity.brand,
-            packageName = entity.packageName,
-            category = entity.category,
-            description = entity.description,
-            stockQuantity = null,
-            price = null,
-            productUrl = entity.sourceUrl,
-            datasheetUrl = null,
-            imageLocalPath = entity.imageLocalPath,
-            imageUrl = null,
-            specifications = parseSpecifications(entity.specJson)
-        )
-    }
-
-    private fun String.toContainerType(): ContainerType {
-        return runCatching { ContainerType.valueOf(this) }
-            .getOrDefault(ContainerType.LEGACY_LOCATION)
+        return ContainerReadModels.componentDetail(entity)
     }
 
     private fun smartChassisCode(macAddress: String, batchId: Int): String {
@@ -393,20 +319,6 @@ class ContainerRepositoryImpl(
             ?.trim()
             ?.uppercase(Locale.ROOT)
             ?.takeIf { it.matches(SMART_CHASSIS_NAME_REGEX) }
-    }
-
-    private fun parseSpecifications(specJson: String?): Map<String, String> {
-        if (specJson.isNullOrBlank()) {
-            return emptyMap()
-        }
-        return runCatching {
-            val json = JSONObject(specJson)
-            json.keys().asSequence().associateWith { key ->
-                json.optString(key)
-            }.filterValues { value ->
-                value.isNotBlank() && value != "null"
-            }
-        }.getOrDefault(emptyMap())
     }
 
     private companion object {

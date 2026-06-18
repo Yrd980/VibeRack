@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.viberack.app.core.ble.printer.P0BlePrinterClient
+import com.viberack.app.core.ble.smart.PhysicalGuidance
 import com.viberack.app.core.ble.smart.SmartChassisGattClient
 import com.viberack.app.core.ble.smart.SmartChassisManager
 import com.viberack.app.core.ble.smart.SmartChassisOperations
@@ -117,6 +118,7 @@ class AppContainer(context: Context) {
         containerRepository = containerRepository,
         protocolPartIdStrategy = protocolPartIdStrategy
     )
+    val physicalGuidance = PhysicalGuidance(smartChassisOperations)
     val smartChassisScanner = SmartChassisScanner(appContext)
     val p0BlePrinterClient = P0BlePrinterClient(
         appContext = appContext,
