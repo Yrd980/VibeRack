@@ -9,6 +9,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import com.viberack.app.core.ble.printer.P0BlePrinterClient
 import com.viberack.app.core.ble.smart.SmartChassisGattClient
 import com.viberack.app.core.ble.smart.SmartChassisManager
 import com.viberack.app.core.ble.smart.SmartChassisOperations
@@ -117,6 +118,10 @@ class AppContainer(context: Context) {
         protocolPartIdStrategy = protocolPartIdStrategy
     )
     val smartChassisScanner = SmartChassisScanner(appContext)
+    val p0BlePrinterClient = P0BlePrinterClient(
+        appContext = appContext,
+        hasBluetoothPermission = ::hasP0PrinterBluetoothPermission
+    )
 
     val slotOperationRepository: SlotOperationRepository = SlotOperationRepositoryImpl(
         database = database,
@@ -152,6 +157,15 @@ class AppContainer(context: Context) {
             ) == PackageManager.PERMISSION_GRANTED
         } else {
             true
+        }
+    }
+
+    private fun hasP0PrinterBluetoothPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(appContext, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(appContext, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         }
     }
 }

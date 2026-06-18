@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
@@ -37,6 +38,7 @@ import com.viberack.app.core.nfc.NfcScanResult
 import com.viberack.app.feature.containers.ContainersOpenRequest
 import com.viberack.app.feature.containers.ContainersRoute
 import com.viberack.app.feature.home.HomeRoute
+import com.viberack.app.feature.printer.PrinterRoute
 import com.viberack.app.feature.search.SearchRoute
 import com.viberack.app.feature.settings.SettingsRoute
 
@@ -159,6 +161,9 @@ fun VibeRackApp() {
             composable(Destination.Search.route) {
                 SearchRoute()
             }
+            composable(Destination.Printer.route) {
+                PrinterRoute()
+            }
             composable(Destination.Settings.route) {
                 SettingsRoute(
                     onOpenHardwareRestore = {
@@ -178,6 +183,7 @@ private sealed class Destination(
     data object Home : Destination("home", R.string.nav_home, Icons.Outlined.Home)
     data object Containers : Destination("containers", R.string.nav_containers, Icons.Outlined.Inventory2)
     data object Search : Destination("search", R.string.nav_search, Icons.Outlined.Search)
+    data object Printer : Destination("printer", R.string.nav_printer, Icons.Outlined.Print)
     data object Settings : Destination("settings", R.string.nav_settings, Icons.Outlined.Settings)
 }
 
@@ -185,5 +191,6 @@ private val topLevelDestinations = listOf(
     Destination.Home,
     Destination.Containers,
     Destination.Search,
+    Destination.Printer,
     Destination.Settings
 )
