@@ -42,3 +42,24 @@ uni-appX/
 /tmp/
 
 screen-*.png
+
+# Xcode / iOS local state
+DerivedData/
+**/DerivedData/
+xcuserdata/
+**/xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+*.xcarchive
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcresult
+*.resultbundle
+
+# Swift Package Manager local build state
+.build/
+.swiftpm/
+Package.resolved
+!ios/VibeRack.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
